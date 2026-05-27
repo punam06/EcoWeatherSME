@@ -1,0 +1,212 @@
+[
+  {
+    "date": "2026-06-01",
+    "base_demand": 120,
+    "adjusted_demand": 125,
+    "temperature": 30.5,
+    "annotation": "Normal seasonal temperature; baseline operations."
+  },
+  {
+    "date": "2026-06-02",
+    "base_demand": 122,
+    "adjusted_demand": 128,
+    "temperature": 31.0,
+    "annotation": null
+  },
+  {
+    "date": "2026-06-03",
+    "base_demand": 125,
+    "adjusted_demand": 130,
+    "temperature": 31.5,
+    "annotation": null
+  },
+  {
+    "date": "2026-06-04",
+    "base_demand": 130,
+    "adjusted_demand": 132,
+    "temperature": 32.0,
+    "annotation": "Mild temperature rising; moderate caution recommended."
+  },
+  {
+    "date": "2026-06-05",
+    "base_demand": 128,
+    "adjusted_demand": 118,
+    "temperature": 33.2,
+    "annotation": "Minor heat spike begins; transit DVS warning active."
+  },
+  {
+    "date": "2026-06-06",
+    "base_demand": 132,
+    "adjusted_demand": 110,
+    "temperature": 34.5,
+    "annotation": "Severe concrete corridor heating detected; shift schedules."
+  },
+  {
+    "date": "2026-06-07",
+    "base_demand": 135,
+    "adjusted_demand": 85,
+    "temperature": 36.8,
+    "annotation": "🔥 CRITICAL UHI HEATWAVE: Severe transit degradation hazard (Class A regions exceed TST)."
+  },
+  {
+    "date": "2026-06-08",
+    "base_demand": 138,
+    "adjusted_demand": 82,
+    "temperature": 37.2,
+    "annotation": "🔥 CRITICAL UHI HEATWAVE: Insulated packaging mandatory for all dispatches."
+  },
+  {
+    "date": "2026-06-09",
+    "base_demand": 134,
+    "adjusted_demand": 90,
+    "temperature": 36.0,
+    "annotation": "🔥 UHI Heatwave starts cooling; moderate exposure warning remains."
+  },
+  {
+    "date": "2026-06-10",
+    "base_demand": 128,
+    "adjusted_demand": 120,
+    "temperature": 32.5,
+    "annotation": "Temperatures returning to base levels; standard scheduling viable."
+  },
+  {
+    "date": "2026-06-11",
+    "base_demand": 126,
+    "adjusted_demand": 127,
+    "temperature": 31.0,
+    "annotation": null
+  },
+  {
+    "date": "2026-06-12",
+    "base_demand": 130,
+    "adjusted_demand": 132,
+    "temperature": 30.8,
+    "annotation": null
+  },
+  {
+    "date": "2026-06-13",
+    "base_demand": 135,
+    "adjusted_demand": 140,
+    "temperature": 30.2,
+    "annotation": "Cooler day; excellent dispatch viability index across all sectors."
+  },
+  {
+    "date": "2026-06-14",
+    "base_demand": 140,
+    "adjusted_demand": 145,
+    "temperature": 29.8,
+    "annotation": null
+  },
+  {
+    "date": "2026-06-15",
+    "base_demand": 142,
+    "adjusted_demand": 147,
+    "temperature": 29.5,
+    "annotation": "Mid-month demand optimization peak."
+  },
+  {
+    "date": "2026-06-16",
+    "base_demand": 138,
+    "adjusted_demand": 140,
+    "temperature": 30.0,
+    "annotation": null
+  },
+  {
+    "date": "2026-06-17",
+    "base_demand": 135,
+    "adjusted_demand": 132,
+    "temperature": 31.2,
+    "annotation": null
+  },
+  {
+    "date": "2026-06-18",
+    "base_demand": 132,
+    "adjusted_demand": 125,
+    "temperature": 32.4,
+    "annotation": null
+  },
+  {
+    "date": "2026-06-19",
+    "base_demand": 128,
+    "adjusted_demand": 115,
+    "temperature": 33.8,
+    "annotation": "Elevated thermal loading across Savar and Mirpur sub-sectors."
+  },
+  {
+    "date": "2026-06-20",
+    "base_demand": 130,
+    "adjusted_demand": 105,
+    "temperature": 35.2,
+    "annotation": "🔥 HEAT SPIKE: Class B and B+ zones face moderate solar multipliers."
+  },
+  {
+    "date": "2026-06-21",
+    "base_demand": 135,
+    "adjusted_demand": 95,
+    "temperature": 35.8,
+    "annotation": "🔥 HEAT SPIKE: Standard plastic bottle shipping is restricted."
+  },
+  {
+    "date": "2026-06-22",
+    "base_demand": 136,
+    "adjusted_demand": 100,
+    "temperature": 34.9,
+    "annotation": "Normalizing thermal offsets."
+  },
+  {
+    "date": "2026-06-23",
+    "base_demand": 132,
+    "adjusted_demand": 122,
+    "temperature": 33.0,
+    "annotation": null
+  },
+  {
+    "date": "2026-06-24",
+    "base_demand": 130,
+    "adjusted_demand": 128,
+    "temperature": 31.5,
+    "annotation": null
+  },
+  {
+    "date": "2026-06-25",
+    "base_demand": 128,
+    "adjusted_demand": 130,
+    "temperature": 30.5,
+    "annotation": null
+  },
+  {
+    "date": "2026-06-26",
+    "base_demand": 130,
+    "adjusted_demand": 134,
+    "temperature": 30.0,
+    "annotation": null
+  },
+  {
+    "date": "2026-06-27",
+    "base_demand": 135,
+    "adjusted_demand": 138,
+    "temperature": 30.2,
+    "annotation": null
+  },
+  {
+    "date": "2026-06-28",
+    "base_demand": 140,
+    "adjusted_demand": 142,
+    "temperature": 30.6,
+    "annotation": null
+  },
+  {
+    "date": "2026-06-29",
+    "base_demand": 145,
+    "adjusted_demand": 148,
+    "temperature": 30.9,
+    "annotation": "End-of-month demand surge."
+  },
+  {
+    "date": "2026-06-30",
+    "base_demand": 150,
+    "adjusted_demand": 153,
+    "temperature": 31.2,
+    "annotation": "Circular asset reporting cycle closes."
+  }
+]
