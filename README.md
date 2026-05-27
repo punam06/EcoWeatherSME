@@ -40,7 +40,7 @@ Bangladesh's organic fertilizer market is valued at **BDT 800 Crore annually**, 
 
 | Layer | Technologies / Tools |
 | :--- | :--- |
-| **Frontend Framework** | Next.js 14 (React), TypeScript, Tailwind CSS, Recharts |
+| **Frontend Framework** | React 18 (Standalone CDN), Vanilla CSS, Chart.js, Babel |
 | **Backend Framework** | Node.js, Express, TypeScript, ts-node |
 | **Database & Vector Store** | Supabase (PostgreSQL with `pgvector` & RLS Policies) |
 | **AI & LLM Services** | Claude 3.5 Sonnet (Anthropic API), Web Speech API |
@@ -55,10 +55,10 @@ Our team organized horizontally using strict branch lifecycles and logical inter
 
 | Name | Role | Core Contributions |
 | :--- | :--- | :--- |
-| **Umme Hani Punam** *(Team Lead)* | **Microclimate Data Architect & UI Developer** | Developed the core MERM/TST mathematical service libraries, engineered the TypeScript type interfaces, built the ESG calculator, created the test suites, and took over frontend dashboard development. |
-| **Zihad** | **Full-Stack AI & Backend Architect** | Built the Express microservice routes, implemented the Claude 3.5 Sonnet RAG prompt compiler, and set up LLM API connectors. |
+| **Umme Hani Punam** *(Team Lead)* | **Microclimate Data Architect & UI Developer** | Developed the core MERM/TST mathematical service libraries, engineered the TypeScript type interfaces, built the ESG calculator, created the test suites, and developed the standalone frontend dashboard. |
+| **Zihad** | **AI Integration & Backend Developer** | Integrated the Voice-to-Text Bangla LLM pipeline and structured the backend microservices. |
 | **Orce** | **UI/UX Designer** | Designed the circular SVG viability gauges, formulated responsive layout wires, and specified the voice recorder animations. |
-| **Sabbir** | **DevOps & DB Lead** | Setup Supabase cloud tables, wrote PostgreSQL security policies (RLS), and deployed CI/CD configurations. |
+| **Sabbir** | **Database Architect & Cloud Ops** | Configured the Supabase Vector Database, implemented RLS security policies, and managed cloud deployments. |
 
 ---
 
