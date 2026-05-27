@@ -814,8 +814,13 @@
        TAB 3: CLIMATE DEMAND INTELLIGENCE
        ═══════════════════════════════════════════════════════════════ */
     function DemandChart({ theme }) {
+      const [scenario, setScenario] = useState("heatwave");
       const canvasRef = useRef();
       const chartRef = useRef();
+
+      const normalData = [42,40,41,43,40,42,44,45,46,45,43,44,46,45,48,47,46,45,44,46,48,47,45,44,43,45,46,44,45,43];
+      const heatwaveData = [42,38,45,40,37,43,48,52,55,58,62,78,95,110,118,105,88,75,68,65,70,72,68,66,64,60,58,55,52,50];
+      const dataToUse = scenario === "heatwave" ? heatwaveData : normalData;
 
       useEffect(() => {
         if (!canvasRef.current || !window.Chart) return;
@@ -826,7 +831,6 @@
           const d = new Date(); d.setDate(d.getDate() + i);
           return `${d.getDate()}/${d.getMonth() + 1}`;
         });
-        const base = [42,38,45,40,37,43,48,52,55,58,62,78,95,110,118,105,88,75,68,65,70,72,68,66,64,60,58,55,52,50];
 
         const gridColor = theme === "dark" ? "#1E293B" : "#E2E8F0";
         const tickColor = theme === "dark" ? "#64748B" : "#94A3B8";
@@ -836,14 +840,14 @@
           data: {
             labels,
             datasets: [{
-              label: "Demand Forecast",
-              data: base,
-              borderColor: A.green,
-              backgroundColor: "rgba(16,185,129,0.06)",
+              label: "Predicted Demand",
+              data: dataToUse,
+              borderColor: scenario === "heatwave" ? A.amber : A.green,
+              backgroundColor: scenario === "heatwave" ? "rgba(245,158,11,0.06)" : "rgba(16,185,129,0.06)",
               borderWidth: 2, fill: true, tension: 0.4,
-              pointRadius: base.map((v,i) => i === 11 ? 7 : 0),
-              pointBackgroundColor: base.map((v,i) => i === 11 ? A.amber : A.green),
-              pointBorderColor: base.map((v,i) => i === 11 ? A.amber : A.green),
+              pointRadius: dataToUse.map((v,i) => (scenario === "heatwave" && i === 11) ? 7 : 0),
+              pointBackgroundColor: dataToUse.map((v,i) => (scenario === "heatwave" && i === 11) ? A.red : A.green),
+              pointBorderColor: dataToUse.map((v,i) => (scenario === "heatwave" && i === 11) ? A.red : A.green),
               pointBorderWidth: 2,
             }],
           },
@@ -854,48 +858,108 @@
               tooltip: {
                 callbacks: { label: ctx => ` ${ctx.parsed.y} units` },
                 backgroundColor: theme === "dark" ? "#111827" : "#FFFFFF",
-                titleColor: A.green, bodyColor: theme === "dark" ? "#F1F5F9" : "#0F172A",
+                titleColor: scenario === "heatwave" ? A.amber : A.green, 
+                bodyColor: theme === "dark" ? "#F1F5F9" : "#0F172A",
                 borderColor: theme === "dark" ? "#1E293B" : "#E2E8F0", borderWidth: 1,
                 cornerRadius: 8, padding: 10,
               },
             },
             scales: {
               x: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 9, family: "Inter" }, maxRotation: 45, autoSkip: true, maxTicksLimit: 8 } },
-              y: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 10, family: "Inter" } } },
+              y: { grid: { color: gridColor }, min: 20, max: 130, ticks: { color: tickColor, font: { size: 10, family: "Inter" } } },
             },
           },
         });
         return () => { if (chartRef.current) chartRef.current.destroy(); };
-      }, [theme]);
+      }, [theme, scenario]);
+
+      const upcomingWeather = [
+        { day: "Today", temp: 32, icon: "🌤️" },
+        { day: "Tom", temp: 34, icon: "☀️" },
+        { day: "Day 3", temp: 36, icon: "☀️" },
+        { day: "Day 4", temp: 38, icon: "🔥" },
+        { day: "Day 5", temp: 41, icon: "🌋" },
+      ];
 
       return (
         <div>
-          <div style={{ display: "flex", gap: 14, marginBottom: 16, flexWrap: "wrap" }}>
-            {[
-              [A.amber, "Heatwave event (+40% demand spike)"],
-              [A.green, "Demand forecast (Prophet ML)"],
-            ].map(([c,l]) => (
-              <span key={l} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-muted)" }}>
-                <span style={{ width: 10, height: 10, borderRadius: 3, background: c, flexShrink: 0 }}></span>{l}
-              </span>
-            ))}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16, flexWrap: "wrap", gap: 14 }}>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setScenario("normal")}
+                style={{
+                  padding: "6px 14px", borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.2s",
+                  background: scenario === "normal" ? A.greenBg : "var(--bg-input)",
+                  color: scenario === "normal" ? A.green : "var(--text-muted)",
+                  border: `1px solid ${scenario === "normal" ? A.greenBorder : "var(--border-primary)"}`
+                }}>Normal Baseline</button>
+              <button onClick={() => setScenario("heatwave")}
+                style={{
+                  padding: "6px 14px", borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.2s",
+                  background: scenario === "heatwave" ? A.amberBg : "var(--bg-input)",
+                  color: scenario === "heatwave" ? A.amber : "var(--text-muted)",
+                  border: `1px solid ${scenario === "heatwave" ? A.amberBorder : "var(--border-primary)"}`
+                }}>Heatwave Simulation</button>
+            </div>
+            
+            <div style={{ display: "flex", gap: 14 }}>
+              {[
+                [scenario === "heatwave" ? A.red : "transparent", scenario === "heatwave" ? "Heatwave event predicted" : ""],
+                [scenario === "heatwave" ? A.amber : A.green, "Demand forecast (Prophet ML)"],
+              ].map(([c,l]) => l && (
+                <span key={l} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-muted)" }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 3, background: c, flexShrink: 0 }}></span>{l}
+                </span>
+              ))}
+            </div>
           </div>
+          
           <div style={{ position: "relative", width: "100%", height: 210 }}>
             <canvas ref={canvasRef} role="img" aria-label="30-day demand forecast chart">30-day demand forecast</canvas>
           </div>
-          <div style={{
-            marginTop: 16, padding: 16, borderRadius: 12,
-            border: `1px solid ${A.amberBorder}`, background: A.amberBg,
-            display: "flex", gap: 14, alignItems: "flex-start",
-          }}>
-            <span style={{ fontSize: 22 }}>⚡</span>
-            <div>
-              <div style={{ fontSize: 12, color: A.amber, fontWeight: 700 }}>Climate Demand Alert</div>
-              <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 5, lineHeight: 1.7 }}>
-                Heatwave forecast in 5 days → expect +40% demand for cold-chain sensitive products (cosmetics, organic supplements, food, and medicines). Prepare additional inventory and upgrade packaging for perishable goods.
+
+          {scenario === "heatwave" && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 16, marginTop: 16, animation: "fadeSlideIn 0.3s ease" }}>
+              {/* Upcoming Weather Widget */}
+              <div style={{ padding: 16, borderRadius: 12, background: "var(--bg-input)", border: "1px solid var(--border-primary)" }}>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.05em" }}>Upcoming Forecast</div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  {upcomingWeather.map((w, i) => (
+                    <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                      <div style={{ fontSize: 9, color: "var(--text-dim)" }}>{w.day}</div>
+                      <div style={{ fontSize: 18 }}>{w.icon}</div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: w.temp >= 38 ? A.red : w.temp >= 35 ? A.amber : "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace" }}>{w.temp}°</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Demand Alert Widget */}
+              <div style={{
+                padding: 16, borderRadius: 12, border: `1px solid ${A.redBorder}`, background: "rgba(239, 68, 68, 0.05)",
+                display: "flex", gap: 14, alignItems: "flex-start",
+              }}>
+                <span style={{ fontSize: 22, animation: "pulseGlow 2s infinite" }}>⚠️</span>
+                <div>
+                  <div style={{ fontSize: 12, color: A.red, fontWeight: 700, letterSpacing: "0.03em" }}>CRITICAL HEATWAVE ALERT</div>
+                  <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 5, lineHeight: 1.6 }}>
+                    Severe microclimate heat spike predicted on Day 5 (41°C). The Prophet ML engine forecasts a <strong>+140% demand surge</strong> for cold-chain sensitive products. <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>Action required: Secure thermal-insulated packaging inventory immediately.</span>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
+          
+          {scenario === "normal" && (
+            <div style={{ marginTop: 16, padding: 16, borderRadius: 12, background: A.greenBg, border: `1px solid ${A.greenBorder}`, animation: "fadeSlideIn 0.3s ease", display: "flex", gap: 14, alignItems: "flex-start" }}>
+              <span style={{ fontSize: 22 }}>🌿</span>
+              <div>
+                <div style={{ fontSize: 12, color: A.green, fontWeight: 700 }}>Stable Demand Forecast</div>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 5, lineHeight: 1.6 }}>
+                  Microclimate conditions are stable for the next 30 days. No extreme demand spikes predicted. Continue standard dispatch protocols.
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
@@ -925,12 +989,140 @@
     }
 
     /* ═══════════════════════════════════════════════════════════════
+       TAB 5: VOICE-FIRST AI & MARKETPLACE
+       ═══════════════════════════════════════════════════════════════ */
+    function VoiceAIAssistant() {
+      const [isRecording, setIsRecording] = useState(false);
+      const [inputText, setInputText] = useState("");
+      const [messages, setMessages] = useState([
+        { role: "ai", text: "Hello! I am your EcoSortha AI Assistant. You can speak to me in Bangla or type your query. How can I help you find climate-resilient products today?" }
+      ]);
+      const chatEndRef = useRef(null);
+
+      useEffect(() => {
+        if (chatEndRef.current) {
+          chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+        }
+      }, [messages]);
+
+      const handleSend = (text) => {
+        if (!text.trim()) return;
+        setMessages(prev => [...prev, { role: "user", text }]);
+        setInputText("");
+        
+        // Simulate AI thinking and response
+        setTimeout(() => {
+          setMessages(prev => [...prev, {
+            role: "ai", 
+            text: "Based on the BARI guidelines and current microclimate data for your zone, I recommend these top-rated organic inputs. They are verified and have a high Delivery Viability Score (DVS) for safe transport today:",
+            products: [
+              { name: "Liquid Gold Bio-Slurry", producer: "Green Refineries Ltd.", dvs: 85, price: "৳ 450/L" },
+              { name: "Thermal-Safe EM-1", producer: "Agro Eco", dvs: 78, price: "৳ 320/Kg" },
+              { name: "Carbon-Neutral Biochar", producer: "SME Co-op", dvs: 92, price: "৳ 150/Kg" }
+            ]
+          }]);
+        }, 1200);
+      };
+
+      const toggleRecording = () => {
+        if (!isRecording) {
+          setIsRecording(true);
+          // Simulate voice input processing
+          setTimeout(() => {
+            setIsRecording(false);
+            handleSend("আমার নার্সারির জন্য কোন জৈব সার ভালো হবে?"); // "Which organic fertilizer is good for my nursery?"
+          }, 3000);
+        } else {
+          setIsRecording(false);
+        }
+      };
+
+      return (
+        <div style={{ display: "flex", flexDirection: "column", height: 500, background: "var(--bg-card)", borderRadius: 16, border: "1px solid var(--border-primary)", overflow: "hidden" }}>
+          {/* Chat History */}
+          <div style={{ flex: 1, padding: 20, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
+            {messages.map((msg, i) => (
+              <div key={i} style={{ alignSelf: msg.role === "user" ? "flex-end" : "flex-start", maxWidth: "85%" }}>
+                <div style={{ 
+                  background: msg.role === "user" ? A.green : "var(--bg-input)",
+                  color: msg.role === "user" ? "#fff" : "var(--text-primary)",
+                  padding: "12px 16px", borderRadius: 16,
+                  borderBottomRightRadius: msg.role === "user" ? 4 : 16,
+                  borderBottomLeftRadius: msg.role === "ai" ? 4 : 16,
+                  border: msg.role === "ai" ? "1px solid var(--border-primary)" : "none",
+                  fontSize: 13, lineHeight: 1.6, boxShadow: "var(--shadow-card)",
+                  fontFamily: msg.text.includes("আমার") ? "Inter, sans-serif" : "inherit"
+                }}>
+                  {msg.text}
+                </div>
+                {msg.products && (
+                  <div style={{ display: "flex", gap: 12, marginTop: 12, overflowX: "auto", paddingBottom: 8 }}>
+                    {msg.products.map((p, j) => (
+                      <div key={j} style={{ background: "var(--bg-input)", padding: 14, borderRadius: 12, border: "1px solid var(--border-hover)", minWidth: 170 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>{p.name}</div>
+                        <div style={{ fontSize: 10, color: "var(--text-dim)", marginBottom: 12 }}>{p.producer}</div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: 13, color: A.green, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>{p.price}</span>
+                          <StatusBadge value={p.dvs} type="dvs" />
+                        </div>
+                        <button style={{ width: "100%", marginTop: 12, padding: "8px 0", background: A.greenBg, color: A.green, border: `1px solid ${A.greenBorder}`, borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}
+                          onMouseEnter={e => e.target.style.background = A.green}
+                          onMouseLeave={e => e.target.style.background = A.greenBg}
+                          onMouseOver={e => e.target.style.color = "#fff"}
+                          onMouseOut={e => e.target.style.color = A.green}
+                        >🛒 Add to Cart</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+            {isRecording && (
+              <div style={{ alignSelf: "flex-end", padding: "10px 16px", background: "rgba(239, 68, 68, 0.1)", color: A.red, borderRadius: 16, borderBottomRightRadius: 4, fontSize: 13, display: "flex", alignItems: "center", gap: 8, animation: "pulseGlow 1.5s infinite" }}>
+                <span style={{ width: 10, height: 10, borderRadius: "50%", background: A.red }}></span> Listening (Speak in Bangla)...
+              </div>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+          
+          {/* Input Area */}
+          <div style={{ padding: 16, background: "var(--bg-header)", borderTop: "1px solid var(--border-primary)", display: "flex", gap: 12, alignItems: "center" }}>
+            <button 
+              onClick={toggleRecording}
+              style={{ width: 48, height: 48, borderRadius: "50%", background: isRecording ? A.red : A.blueBg, color: isRecording ? "#fff" : A.blue, border: isRecording ? "none" : `1px solid rgba(59, 130, 246, 0.3)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, cursor: "pointer", transition: "all 0.3s cubic-bezier(0.4,0,0.2,1)", boxShadow: isRecording ? "0 0 20px rgba(239,68,68,0.5)" : "none", transform: isRecording ? "scale(1.1)" : "scale(1)" }}
+              title="Voice Input (Bangla)"
+            >
+              🎙️
+            </button>
+            <input 
+              type="text" 
+              value={inputText}
+              onChange={e => setInputText(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleSend(inputText)}
+              placeholder="Type your query or use voice..."
+              style={{ flex: 1, padding: "14px 18px", borderRadius: 24, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", fontSize: 13, outline: "none", fontFamily: "inherit", transition: "border 0.3s" }}
+              onFocus={e => e.target.style.borderColor = A.green}
+              onBlur={e => e.target.style.borderColor = "var(--border-primary)"}
+            />
+            <button 
+              onClick={() => handleSend(inputText)}
+              style={{ width: 48, height: 48, borderRadius: "50%", background: A.greenBg, color: A.green, border: `1px solid ${A.greenBorder}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, cursor: "pointer", transition: "all 0.2s" }}
+            >
+              ➤
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
        MAIN APP
        ═══════════════════════════════════════════════════════════════ */
     const TABS = [
       { label: "Batch Verification", icon: "📡" },
       { label: "Microclimate Intelligence", icon: "🌡️" },
       { label: "Climate Demand", icon: "📊" },
+      { label: "AI Assistant", icon: "🎙️" },
       { label: "Impact & ESG", icon: "🌱" },
     ];
 
@@ -1065,6 +1257,13 @@
             )}
 
             {tab === 3 && (
+              <div style={{ animation: "fadeSlideIn 0.45s ease" }}>
+                <SectionLabel icon="🎙️" text="Voice-First Bangla RAG Marketplace" />
+                <VoiceAIAssistant />
+              </div>
+            )}
+
+            {tab === 4 && (
               <div style={{ animation: "fadeSlideIn 0.45s ease" }}>
                 <SectionLabel icon="🌱" text="Impact & ESG Ledger" />
                 <ESGCard trustScore={trustScore} dvs={dvs} />
