@@ -44,3 +44,12 @@ export interface ESGMetrics {
   plastic_offset_kg: number;
   carbon_sequestered_kg: number;
 }
+
+export interface IoTReadings {
+  pH: number;
+  EC: number;
+  temp: number;
+  em1_ratio: string;
+  fermentation_days: number;
+}
+

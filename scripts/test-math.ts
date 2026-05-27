@@ -102,6 +102,46 @@ function runTests() {
   }
 
   // ----------------------------------------------------
+  // TEST 4: Deterministic BARI Trust Score Penalties
+  // ----------------------------------------------------
+  try {
+    console.log('--- Test 4: BARI Trust Score Penality Calculation ---');
+    const { calculateTrustScore } = require('../lib/services/trustScore.service');
+    
+    // Ideal readings: pH=4.1, EC=3.4, temp=28.0, em1_ratio='1:1:20', fermentation_days=9
+    // Expected score: 100
+    const idealScore = calculateTrustScore({
+      pH: 4.1,
+      EC: 3.4,
+      temp: 28.0,
+      em1_ratio: '1:1:20',
+      fermentation_days: 9
+    });
+    console.log(`Ideal Readings Trust Score: ${idealScore} (Expected: 100)`);
+
+    // Faulty readings: pH=3.0 (loss of 15), fermentation_days=5 (loss of 20)
+    // Expected score: 100 - 15 - 20 = 65
+    const faultyScore = calculateTrustScore({
+      pH: 3.0,
+      EC: 3.4,
+      temp: 28.0,
+      em1_ratio: '1:1:20',
+      fermentation_days: 5
+    });
+    console.log(`Faulty Readings Trust Score: ${faultyScore} (Expected: 65)`);
+
+    if (idealScore === 100 && faultyScore === 65) {
+      console.log('✅ TEST 4 PASSED: Trust Score penalties matching BARI specification!\n');
+    } else {
+      console.error('❌ TEST 4 FAILED: Trust Score mismatch!\n');
+      passed = false;
+    }
+  } catch (error) {
+    console.error('❌ TEST 4 CRASHED:', error);
+    passed = false;
+  }
+
+  // ----------------------------------------------------
   // FINAL SCORE & SUMMARY
   // ----------------------------------------------------
   console.log('==================================================');
@@ -115,3 +155,4 @@ function runTests() {
 }
 
 runTests();
+
