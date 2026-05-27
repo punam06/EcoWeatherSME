@@ -39,7 +39,13 @@ export async function fetchRegionalWeather(): Promise<{ baseTemp: number; windSp
     if (!res.ok) {
       throw new Error(`Open-Meteo HTTP error: ${res.status}`);
     }
-    const data = await res.json() as any;
+    interface OpenMeteoResponse {
+      current: {
+        temperature_2m: number;
+        wind_speed_10m: number;
+      };
+    }
+    const data = await res.json() as OpenMeteoResponse;
     return {
       baseTemp: Number(data.current.temperature_2m),
       windSpeed: Number(data.current.wind_speed_10m)
