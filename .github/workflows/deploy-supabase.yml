@@ -25,10 +25,11 @@ jobs:
             echo "skip=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Install supabase CLI
+      - name: Setup Supabase CLI
         if: steps.check.outputs.skip == 'false'
-        run: |
-          npm install -g supabase
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
 
       - name: Supabase login
         if: steps.check.outputs.skip == 'false'
@@ -42,12 +43,12 @@ jobs:
         env:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
-          # Deploy all functions in supabase/functions (requires supabase CLI v1+)
+          echo "Deploying functions under supabase/functions/ to project: $SUPABASE_PROJECT_REF"
           for fn in supabase/functions/*; do
             if [ -d "$fn" ]; then
               fname=$(basename "$fn")
               echo "Deploying function: $fname"
-              supabase functions deploy "$fname" --project-ref "$SUPABASE_PROJECT_REF"
+              supabase functions deploy "$fname" --project-ref "$SUPABASE_PROJECT_REF" || { echo "deploy failed for $fname"; exit 1; }
             fi
           done
 
