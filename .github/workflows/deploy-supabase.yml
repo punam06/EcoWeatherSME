@@ -7,6 +7,7 @@ on:
       - 'supabase/**'
       - 'backend/**'
       - 'lib/**'
+  workflow_dispatch: {}
 
 jobs:
   deploy-supabase:
