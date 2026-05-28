@@ -1409,31 +1409,20 @@ function ChatbotView() {
     }, 1200);
   };
 
-  const primeMicrophoneAccess = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      return true;
-    }
-
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    stream.getTracks().forEach(track => track.stop());
-    return true;
-  };
-
-  const handleVoice = async () => {
+  const handleVoice = () => {
     if (isRecording) return;
     setVoiceError("");
 
+    if (navigator.mediaDevices?.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => stream.getTracks().forEach(track => track.stop()))
+        .catch(() => {});
+    }
+
     try {
-      await primeMicrophoneAccess();
-      try {
-        startSpeechRecognition(speechLang);
-      } catch (error) {
-        console.error("Speech recognition start error", error);
-        setVoiceError("Safari blocked speech input. Re-enable microphone and speech permissions for this site.");
-        setIsRecording(false);
-      }
+      startSpeechRecognition(speechLang);
     } catch (error) {
-      console.error("Microphone permission error", error);
+      console.error("Speech recognition start error", error);
       setVoiceError("Microphone access is blocked. Check Safari site permissions for this page.");
       setIsRecording(false);
     }

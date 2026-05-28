@@ -1305,6 +1305,11 @@ function ChatbotView() {
 
   const handleVoice = () => {
     if (isRecording) return;
+    if (navigator.mediaDevices?.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => stream.getTracks().forEach(track => track.stop()))
+        .catch(() => {});
+    }
     startSpeechRecognition(speechLang);
   };
 
