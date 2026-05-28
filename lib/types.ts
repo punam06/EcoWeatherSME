@@ -50,6 +50,7 @@ export interface IoTReadings {
   EC: number;
   temp: number;
   em1_ratio: string;
+  fermentation_days: number;
 }
 
 export type SMEType = 'Agro' | 'Retail' | 'Manufacturing';
