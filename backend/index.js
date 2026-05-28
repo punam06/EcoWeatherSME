@@ -1,9 +1,11 @@
 const path = require('path');
-const dotenv = require('dotenv');
-
-// Load local .env first, then fallback to repository root .env
-dotenv.config();
-dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
+// Load dotenv only in non-production to avoid overriding host env vars
+if (process.env.NODE_ENV !== 'production') {
+  const dotenv = require('dotenv');
+  // Load local .env first, then fallback to repository root .env
+  dotenv.config();
+  dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
+}
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
