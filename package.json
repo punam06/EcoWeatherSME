@@ -12,7 +12,7 @@
     "backend:install": "cd backend && npm install",
     "backend:start": "cd backend && npm start",
     "backend:dev": "cd backend && npm run dev",
-    "frontend:serve": "python3 -m http.server 3000 --directory 'Frontend and UI'",
+    "frontend:serve": "python3 -m http.server 3000 --directory \"Frontend and UI\"",
     "dev": "echo '🚀 Starting development environment...' && (cd backend && npm start &) && npm run frontend:serve",
     "setup": "npm install && npm run backend:install"
   },

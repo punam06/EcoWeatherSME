@@ -59,11 +59,10 @@ export type TrustScoreRequest = z.infer<typeof TrustScoreRequestSchema>;
 // ─── Climate DVS Schema ───────────────────────────────────────────────────────
 
 export const ClimateDVSRequestSchema = z.object({
-  /** Delivery zone — must match one of the 5 DHAKA_ZONES keys */
-  zone: z.enum(['Mirpur', 'Mohammadpur', 'Uttara', 'Motijheel', 'Dhanmondi'], {
-    required_error: 'zone is required',
-    invalid_type_error: 'zone must be one of: Mirpur, Mohammadpur, Uttara, Motijheel, Dhanmondi',
-  }),
+  /** Delivery zone — any valid Dhaka zone name */
+  zone: z
+    .string({ required_error: 'zone is required', invalid_type_error: 'zone must be a string' })
+    .min(1, 'zone must not be empty'),
 
   /** Regional ambient temperature in Celsius */
   ambientTemperature: z

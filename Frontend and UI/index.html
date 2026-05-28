@@ -462,30 +462,29 @@
         const fetchTrustScore = async () => {
           setIsLoading(true);
           try {
-            const response = await fetch(
-              "https://pdeskdcdyhbldwfgbowz.supabase.co/functions/v1/clever-responder",
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  action: "trust-score",
-                  pH,
-                  EC,
-                  temp,
-                  ratio,
-                  days,
-                }),
-              }
-            );
-            const data = await response.json();
-            setTs(data.trustScore || 0);
-            onResult(data.trustScore || 0);
+            // Map legacy slider values to the new BARI-aligned backend schema
+            const ratioMap = { "1:1:10": 0.002, "1:1:20": 0.001, "1:1:30": 0.0005, "1:1:40": 0.00025 };
+            const response = await fetch("http://localhost:5001/api/batch/trust-score", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                pH,
+                ec: EC,
+                temperatureCelsius: temp,
+                em1Ratio: ratioMap[ratio] ?? 0.001,
+                fermentationDays: days,
+              }),
+            });
+            const json = await response.json();
+            if (json.success) {
+              setTs(json.data.score || 0);
+              onResult(json.data.score || 0);
+            } else {
+              throw new Error(json.error || "Unknown backend error");
+            }
             setCertified(false);
           } catch (error) {
-            console.error("Failed to fetch trust score:", error);
-            // Fallback to local calculation on error
+            console.warn("Backend trust-score unavailable, using local fallback:", error);
             const fallbackScore = calcTrustScore({ pH, EC, temp, ratio, days });
             setTs(fallbackScore);
             onResult(fallbackScore);
@@ -493,7 +492,6 @@
             setIsLoading(false);
           }
         };
-        
         fetchTrustScore();
       }, [pH, EC, temp, ratio, days, onResult]);
 
@@ -643,32 +641,29 @@
         const fetchMicroclimateMetrics = async () => {
           setIsFetchingMetrics(true);
           try {
-            const response = await fetch(
-              "https://pdeskdcdyhbldwfgbowz.supabase.co/functions/v1/clever-responder",
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  action: "microclimate-metrics",
-                  trustScore,
-                  zone,
-                  packaging,
-                  hour,
-                  baseTemp,
-                  windSpeed,
-                }),
-              }
-            );
-            const data = await response.json();
-            setDvs(data.dvs || 0);
-            setTst(data.tst || 0);
-            setAdjustedTemp(data.adjustedTemp || baseTemp);
-            setThermalRisk(data.thermalRisk || { value: 0.1, label: "Low", color: ACCENT.green });
+            const response = await fetch("http://localhost:5001/api/climate/dvs", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                zone,
+                ambientTemperature: baseTemp,
+                solarHour: hour,
+                trustScore,
+              }),
+            });
+            const json = await response.json();
+            if (json.success) {
+              setDvs(Math.round(json.data.dvsScore || 0));
+              setTst(Math.round(json.data.tstMinutes || 0));
+              setAdjustedTemp(parseFloat((json.data.effectiveTemperature || baseTemp).toFixed(1)));
+              const riskLevel = json.data.exposureRiskLevel || "LOW";
+              const riskColor = riskLevel === "EXTREME" || riskLevel === "HIGH" ? ACCENT.red : riskLevel === "MEDIUM" ? ACCENT.amber : ACCENT.green;
+              setThermalRisk({ value: json.data.dvsScore / 100, label: riskLevel, color: riskColor });
+            } else {
+              throw new Error(json.error || "DVS backend error");
+            }
           } catch (error) {
-            console.error("Failed to fetch microclimate metrics:", error);
-            // Fallback to local calculation on error
+            console.warn("Backend DVS unavailable, using local fallback:", error);
             const adjTemp = calcAdjustedTemp(baseTemp, zone, hour, windSpeed);
             const risk = calcThermalRisk(adjTemp);
             const dvsScore = calcDVS(trustScore, adjTemp);
@@ -681,7 +676,6 @@
             setIsFetchingMetrics(false);
           }
         };
-        
         fetchMicroclimateMetrics();
       }, [baseTemp, zone, packaging, hour, windSpeed, trustScore]);
 
@@ -1231,37 +1225,67 @@
 
     function ChatbotView() {
       const [messages, setMessages] = useState([
-        { role: "system", content: "Hello! I am EcoSortha AI, your voice and text-based assistant. I can provide microclimate forecasts, smart dispatch suggestions, or analyze files and context. How can I help you today?", time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }
+        { role: "system", content: "Hello! I am EcoSortha AI, your BARI-grounded agricultural assistant. Ask me anything about bio-slurry fermentation, EM-1 ratios, delivery zones, or climate safety — in Bangla or English!", time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }
       ]);
       const [input, setInput] = useState("");
       const [isRecording, setIsRecording] = useState(false);
+      const [isThinking, setIsThinking] = useState(false);
       const fileInputRef = useRef(null);
+      const chatEndRef = useRef(null);
 
-      const handleSend = (text, attachedFileName = null) => {
+      // Auto-scroll to newest message
+      useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, [messages, isThinking]);
+
+      // Detect if text contains Bangla Unicode characters
+      const detectLanguage = (text) => {
+        const banglaRegex = /[\u0980-\u09FF]/;
+        const banglaRomanRegex = /(ami|amar|apnar|kono|ki|kothay|hobe|kore|diye|theke|jonno|ache|nei|hoy|koto|kisu|jodi|kintu|tahole|mone|hoi|tumi|apni|ektu|bolo|bolen)/i;
+        return banglaRegex.test(text) || banglaRomanRegex.test(text) ? "bn" : "en";
+      };
+
+      const handleSend = async (text, attachedFileName = null) => {
         if (!text.trim() && !attachedFileName) return;
-        const newMsg = { 
-          role: "user", 
-          content: text, 
+        const userMsg = {
+          role: "user",
+          content: text,
           attachment: attachedFileName,
-          time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) 
+          time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
         };
-        setMessages(prev => [...prev, newMsg]);
+        setMessages(prev => [...prev, userMsg]);
         setInput("");
-        
-        // Mock AI response
-        setTimeout(() => {
-          let reply = "I've recorded that for you.";
-          if (attachedFileName) {
-            reply = `I've analyzed the attached file: "${attachedFileName}". The context shows a sudden spike in ambient temperature. I suggest upgrading to thermal bins for this batch.`;
-          } else if (text.toLowerCase().includes("forecast")) {
-            reply = "Currently, the Mirpur zone is experiencing a moderate thermal hazard (38.7°C). I suggest delaying heat-sensitive dispatches until 5:00 PM when the solar factor drops.";
-          } else if (text.toLowerCase().includes("suggestion")) {
-            reply = "Based on your recent batches, upgrading to Thermal-Insulated packaging will extend your Thermal Survival Time (TST) by 4x, allowing safe midday deliveries.";
-          } else if (text.toLowerCase().includes("feedback")) {
-            reply = "Thank you for the feedback. I've logged this in the ESG ledger to improve our ML demand forecasting models.";
-          }
-          setMessages(prev => [...prev, { role: "system", content: reply, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }]);
-        }, 1200);
+        setIsThinking(true);
+
+        // Build the query — include file name context if a file was attached
+        const query = attachedFileName
+          ? `The user uploaded a file named "${attachedFileName}". They say: "${text || 'Please analyze this document.'}". Provide agricultural advice based on the file context and BARI standards.`
+          : text;
+
+        const language = detectLanguage(text);
+
+        try {
+          const response = await fetch("http://localhost:5001/api/ai/recommend", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query, language }),
+          });
+          const json = await response.json();
+          const reply = json.success ? json.data.answer : "Sorry, I could not connect to the AI service. Please make sure the backend is running on port 5001.";
+          setMessages(prev => [...prev, {
+            role: "system",
+            content: reply,
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+          }]);
+        } catch (err) {
+          setMessages(prev => [...prev, {
+            role: "system",
+            content: "⚠️ Could not reach the AI backend. Please ensure the server is running on port 5001 (`npm run dev` in the backend/ folder).",
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+          }]);
+        } finally {
+          setIsThinking(false);
+        }
       };
 
       const handleVoice = () => {
@@ -1324,6 +1348,18 @@
                   <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Listening...</span>
                 </div>
               )}
+              {isThinking && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 18px", background: "var(--bg-input)", borderRadius: "18px 18px 18px 0", width: "fit-content", border: "1px solid var(--border-primary)" }}>
+                  {[0, 1, 2].map(i => (
+                    <div key={i} style={{
+                      width: 7, height: 7, borderRadius: "50%", background: ACCENT.green,
+                      animation: `breathe 1.2s ${i * 0.2}s infinite`
+                    }}></div>
+                  ))}
+                  <span style={{ fontSize: 12, color: "var(--text-secondary)", marginLeft: 4 }}>EcoSortha AI is thinking...</span>
+                </div>
+              )}
+              <div ref={chatEndRef} />
             </div>
 
             {/* Quick Actions */}
@@ -1374,12 +1410,13 @@
                   background: "var(--bg-input)", color: "var(--text-primary)", outline: "none", fontSize: 14
                 }}
               />
-              <button onClick={() => handleSend(input)} style={{
-                width: 44, height: 44, borderRadius: "50%", border: "none", cursor: "pointer",
-                background: ACCENT.greenDark, color: "#fff",
-                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18
+              <button onClick={() => handleSend(input)} disabled={isThinking} style={{
+                width: 44, height: 44, borderRadius: "50%", border: "none", cursor: isThinking ? "not-allowed" : "pointer",
+                background: isThinking ? "var(--bg-input)" : ACCENT.greenDark, color: isThinking ? "var(--text-dim)" : "#fff",
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
+                transition: "all 0.2s ease"
               }}>
-                ↑
+                {isThinking ? "⏳" : "↑"}
               </button>
             </div>
           </Card>
