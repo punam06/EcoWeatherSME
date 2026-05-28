@@ -66,11 +66,72 @@ const ACCENT = {
    BUET-CALIBRATED ZONE DATA (from master prompt)
    ═══════════════════════════════════════════════════════════════ */
 const UHI_ZONES = {
-  "Mirpur":    { offset: 2.1, hazardClass: "B-", hazardMultiplier: 1.40, baseSurvival: 1.02, color: ACCENT.amber },
-  "Old Dhaka": { offset: 3.4, hazardClass: "A",  hazardMultiplier: 1.80, baseSurvival: 0.90, color: ACCENT.red },
-  "Gulshan":   { offset: 1.3, hazardClass: "C",  hazardMultiplier: 1.10, baseSurvival: 1.20, color: ACCENT.green },
-  "Savar":     { offset: 2.8, hazardClass: "B+", hazardMultiplier: 1.55, baseSurvival: 1.00, color: ACCENT.amber },
-  "Gazipur":   { offset: 2.4, hazardClass: "B",  hazardMultiplier: 1.50, baseSurvival: 1.05, color: ACCENT.amber },
+  // Dense Commercial / Old Dhaka (High UHI)
+  "Old Dhaka":      { offset: 3.4, hazardClass: "A",  hazardMultiplier: 1.80, baseSurvival: 0.90, color: ACCENT.red },
+  "Motijheel":      { offset: 3.1, hazardClass: "A",  hazardMultiplier: 1.70, baseSurvival: 0.92, color: ACCENT.red },
+  "Tejgaon":        { offset: 3.2, hazardClass: "A",  hazardMultiplier: 1.75, baseSurvival: 0.91, color: ACCENT.red },
+  "Hazaribagh":     { offset: 3.5, hazardClass: "A+", hazardMultiplier: 1.85, baseSurvival: 0.88, color: ACCENT.red },
+  "Kamrangirchar":  { offset: 3.3, hazardClass: "A",  hazardMultiplier: 1.78, baseSurvival: 0.90, color: ACCENT.red },
+  "Chowkbazar":     { offset: 3.4, hazardClass: "A",  hazardMultiplier: 1.80, baseSurvival: 0.90, color: ACCENT.red },
+  "Lalbagh":        { offset: 3.2, hazardClass: "A",  hazardMultiplier: 1.75, baseSurvival: 0.91, color: ACCENT.red },
+  "Jatrabari":      { offset: 3.3, hazardClass: "A",  hazardMultiplier: 1.78, baseSurvival: 0.90, color: ACCENT.red },
+  "Sutrapur":       { offset: 3.1, hazardClass: "A",  hazardMultiplier: 1.70, baseSurvival: 0.92, color: ACCENT.red },
+  "Bangshal":       { offset: 3.3, hazardClass: "A",  hazardMultiplier: 1.78, baseSurvival: 0.90, color: ACCENT.red },
+  "Kotwali":        { offset: 3.4, hazardClass: "A",  hazardMultiplier: 1.80, baseSurvival: 0.90, color: ACCENT.red },
+
+  // Dense Residential / Mixed (Medium-High UHI)
+  "Mirpur":         { offset: 2.1, hazardClass: "B-", hazardMultiplier: 1.40, baseSurvival: 1.02, color: ACCENT.amber },
+  "Mohammadpur":    { offset: 2.3, hazardClass: "B",  hazardMultiplier: 1.48, baseSurvival: 1.02, color: ACCENT.amber },
+  "Badda":          { offset: 2.5, hazardClass: "B+", hazardMultiplier: 1.52, baseSurvival: 1.00, color: ACCENT.amber },
+  "Rampura":        { offset: 2.6, hazardClass: "B+", hazardMultiplier: 1.55, baseSurvival: 0.99, color: ACCENT.amber },
+  "Malibagh":       { offset: 2.8, hazardClass: "B+", hazardMultiplier: 1.60, baseSurvival: 0.95, color: ACCENT.amber },
+  "Khilgaon":       { offset: 2.7, hazardClass: "B+", hazardMultiplier: 1.58, baseSurvival: 0.98, color: ACCENT.amber },
+  "Moghbazar":      { offset: 2.9, hazardClass: "A-", hazardMultiplier: 1.65, baseSurvival: 0.94, color: ACCENT.red },
+  "Azimpur":        { offset: 2.4, hazardClass: "B",  hazardMultiplier: 1.50, baseSurvival: 1.01, color: ACCENT.amber },
+  "Shantinagar":    { offset: 2.8, hazardClass: "B+", hazardMultiplier: 1.60, baseSurvival: 0.95, color: ACCENT.amber },
+  "Kakrail":        { offset: 2.7, hazardClass: "B+", hazardMultiplier: 1.58, baseSurvival: 0.98, color: ACCENT.amber },
+  "Paltan":         { offset: 3.0, hazardClass: "A-", hazardMultiplier: 1.68, baseSurvival: 0.93, color: ACCENT.red },
+  "Mugda":          { offset: 2.6, hazardClass: "B+", hazardMultiplier: 1.55, baseSurvival: 0.99, color: ACCENT.amber },
+  "Sabujbagh":      { offset: 2.5, hazardClass: "B+", hazardMultiplier: 1.52, baseSurvival: 1.00, color: ACCENT.amber },
+  "Demra":          { offset: 2.4, hazardClass: "B",  hazardMultiplier: 1.50, baseSurvival: 1.05, color: ACCENT.amber },
+  "Kadamtali":      { offset: 2.6, hazardClass: "B+", hazardMultiplier: 1.55, baseSurvival: 0.99, color: ACCENT.amber },
+  "Shyampur":       { offset: 2.7, hazardClass: "B+", hazardMultiplier: 1.58, baseSurvival: 0.98, color: ACCENT.amber },
+  "Gendaria":       { offset: 2.8, hazardClass: "B+", hazardMultiplier: 1.60, baseSurvival: 0.95, color: ACCENT.amber },
+  "Mohakhali":      { offset: 2.8, hazardClass: "B+", hazardMultiplier: 1.60, baseSurvival: 0.95, color: ACCENT.amber },
+  "Pallabi":        { offset: 2.0, hazardClass: "B-", hazardMultiplier: 1.35, baseSurvival: 1.05, color: ACCENT.amber },
+  "Rupnagar":       { offset: 2.1, hazardClass: "B-", hazardMultiplier: 1.40, baseSurvival: 1.02, color: ACCENT.amber },
+  "Shah Ali":       { offset: 2.2, hazardClass: "B",  hazardMultiplier: 1.45, baseSurvival: 1.00, color: ACCENT.amber },
+  "Darus Salam":    { offset: 2.3, hazardClass: "B",  hazardMultiplier: 1.48, baseSurvival: 1.02, color: ACCENT.amber },
+  "Adabor":         { offset: 2.2, hazardClass: "B",  hazardMultiplier: 1.45, baseSurvival: 1.00, color: ACCENT.amber },
+  "Kalabagan":      { offset: 2.5, hazardClass: "B+", hazardMultiplier: 1.52, baseSurvival: 1.00, color: ACCENT.amber },
+  "New Market":     { offset: 2.9, hazardClass: "A-", hazardMultiplier: 1.65, baseSurvival: 0.94, color: ACCENT.red },
+  "Shahbagh":       { offset: 2.6, hazardClass: "B+", hazardMultiplier: 1.55, baseSurvival: 0.99, color: ACCENT.amber },
+  "Ramna":          { offset: 2.5, hazardClass: "B+", hazardMultiplier: 1.52, baseSurvival: 1.00, color: ACCENT.amber },
+  "Shahjahanpur":   { offset: 2.7, hazardClass: "B+", hazardMultiplier: 1.58, baseSurvival: 0.98, color: ACCENT.amber },
+  "Bhatara":        { offset: 2.4, hazardClass: "B",  hazardMultiplier: 1.50, baseSurvival: 1.01, color: ACCENT.amber },
+  "Bhashantek":     { offset: 2.2, hazardClass: "B",  hazardMultiplier: 1.45, baseSurvival: 1.00, color: ACCENT.amber },
+  "Kafrul":         { offset: 2.3, hazardClass: "B",  hazardMultiplier: 1.48, baseSurvival: 1.02, color: ACCENT.amber },
+  "Sher-e-Bangla":  { offset: 2.0, hazardClass: "B-", hazardMultiplier: 1.35, baseSurvival: 1.05, color: ACCENT.amber },
+
+  // Planned Residential / Wealthy (Medium-Low UHI)
+  "Dhanmondi":      { offset: 2.2, hazardClass: "B",  hazardMultiplier: 1.45, baseSurvival: 1.00, color: ACCENT.amber },
+  "Gulshan":        { offset: 1.3, hazardClass: "C",  hazardMultiplier: 1.10, baseSurvival: 1.20, color: ACCENT.green },
+  "Banani":         { offset: 1.5, hazardClass: "C",  hazardMultiplier: 1.15, baseSurvival: 1.18, color: ACCENT.green },
+  "Baridhara":      { offset: 1.2, hazardClass: "C",  hazardMultiplier: 1.08, baseSurvival: 1.22, color: ACCENT.green },
+  "Niketan":        { offset: 1.6, hazardClass: "C",  hazardMultiplier: 1.18, baseSurvival: 1.15, color: ACCENT.green },
+  "Uttara":         { offset: 1.8, hazardClass: "B-", hazardMultiplier: 1.30, baseSurvival: 1.10, color: ACCENT.amber },
+  "Bashundhara RA": { offset: 1.4, hazardClass: "C",  hazardMultiplier: 1.12, baseSurvival: 1.19, color: ACCENT.green },
+
+  // Peripheral / Developing / Green (Low UHI)
+  "Purbachal":      { offset: 0.8, hazardClass: "C+", hazardMultiplier: 1.02, baseSurvival: 1.28, color: ACCENT.green },
+  "Cantonment":     { offset: 1.0, hazardClass: "C+", hazardMultiplier: 1.05, baseSurvival: 1.25, color: ACCENT.green },
+  "Turag":          { offset: 1.5, hazardClass: "C",  hazardMultiplier: 1.15, baseSurvival: 1.18, color: ACCENT.green },
+  "Khilkhet":       { offset: 1.7, hazardClass: "C",  hazardMultiplier: 1.20, baseSurvival: 1.14, color: ACCENT.green },
+  "Bimanbandar":    { offset: 1.6, hazardClass: "C",  hazardMultiplier: 1.18, baseSurvival: 1.15, color: ACCENT.green },
+  "Uttar Khan":     { offset: 1.4, hazardClass: "C",  hazardMultiplier: 1.12, baseSurvival: 1.19, color: ACCENT.green },
+  "Dakshinkhan":    { offset: 1.5, hazardClass: "C",  hazardMultiplier: 1.15, baseSurvival: 1.18, color: ACCENT.green },
+  "Savar":          { offset: 2.8, hazardClass: "B+", hazardMultiplier: 1.55, baseSurvival: 1.00, color: ACCENT.amber },
+  "Gazipur":        { offset: 2.4, hazardClass: "B",  hazardMultiplier: 1.50, baseSurvival: 1.05, color: ACCENT.amber },
 };
 
 /* ═══════════════════════════════════════════════════════════════
@@ -420,8 +481,10 @@ function MicroclimateSimulator({ trustScore }) {
   const [packaging, setPackaging] = useState("standard");
   const [hour, setHour] = useState(12);
   const [windSpeed, setWindSpeed] = useState(8);
+  const [zoneSearch, setZoneSearch] = useState("");
+  const [isFetchingWeather, setIsFetchingWeather] = useState(false);
 
-  const uhi = UHI_ZONES[zone];
+  const uhi = UHI_ZONES[zone] || UHI_ZONES["Mirpur"];
   const solarFactor = getSolarFactor(hour);
   const windCooling = windSpeed > 15 ? 1.0 : 0.0;
   const adjustedTemp = calcAdjustedTemp(baseTemp, zone, hour, windSpeed);
@@ -429,6 +492,24 @@ function MicroclimateSimulator({ trustScore }) {
   const dvs = calcDVS(trustScore, adjustedTemp);
   const tst = calcTST(trustScore, zone, packaging, hour);
   const dvsColor = dvs >= 75 ? ACCENT.green : dvs >= 55 ? ACCENT.amber : ACCENT.red;
+
+  const filteredZones = Object.keys(UHI_ZONES).filter(z => z.toLowerCase().includes(zoneSearch.toLowerCase()));
+
+  const fetchLiveWeather = async () => {
+    setIsFetchingWeather(true);
+    try {
+      // Dhaka coordinates
+      const res = await fetch("https://api.open-meteo.com/v1/forecast?latitude=23.8103&longitude=90.4125&current_weather=true");
+      const data = await res.json();
+      if (data && data.current_weather) {
+        setBaseTemp(data.current_weather.temperature);
+        setWindSpeed(data.current_weather.windspeed);
+      }
+    } catch (e) {
+      console.error("Failed to fetch live weather", e);
+    }
+    setIsFetchingWeather(false);
+  };
 
   const advice = dvs >= 75
     ? `${zone} zone — DVS ${dvs} is SAFE. Adjusted temp ${adjustedTemp.toFixed(1)}°C. Products can be dispatched safely. TST: ${tst} min.`
@@ -441,26 +522,61 @@ function MicroclimateSimulator({ trustScore }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
         {/* LEFT: Controls */}
         <div>
-          <SliderRow label="Base Temperature (Regional)" min={25} max={42} step={0.5} value={baseTemp} onChange={setBaseTemp} unit="°C" color={baseTemp > 35 ? ACCENT.red : ACCENT.amber} />
-          <SliderRow label="Wind Speed" min={0} max={30} step={1} value={windSpeed} onChange={setWindSpeed} unit=" km/h" color={ACCENT.blue} />
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 500 }}>Weather Conditions</div>
+            <button 
+              onClick={fetchLiveWeather}
+              disabled={isFetchingWeather}
+              style={{
+                padding: "6px 12px", borderRadius: 8, border: `1px solid ${ACCENT.blueBorder}`,
+                background: isFetchingWeather ? "var(--bg-input)" : ACCENT.blueBg,
+                color: ACCENT.blue, fontSize: 11, fontWeight: 600, cursor: isFetchingWeather ? "wait" : "pointer",
+                display: "flex", gap: 6, alignItems: "center"
+              }}>
+              {isFetchingWeather ? "⏳ Fetching..." : "📡 Auto-Detect (Live)"}
+            </button>
+          </div>
+          <div style={{ background: "var(--bg-input)", padding: 14, borderRadius: 10, border: "1px solid var(--border-primary)", marginBottom: 16 }}>
+            <SliderRow label="Base Temperature (Regional)" min={25} max={42} step={0.5} value={baseTemp} onChange={setBaseTemp} unit="°C" color={baseTemp > 35 ? ACCENT.red : ACCENT.amber} />
+            <div style={{ marginTop: 12 }}>
+              <SliderRow label="Wind Speed" min={0} max={30} step={1} value={windSpeed} onChange={setWindSpeed} unit=" km/h" color={ACCENT.blue} />
+            </div>
+          </div>
+
           <SliderRow label="Dispatch Hour" min={0} max={23} step={1} value={hour} onChange={setHour} unit={`:00 ${hour >= 11 && hour < 15 ? '(Peak Solar)' : hour >= 8 && hour < 18 ? '(Daylight)' : '(Night)'}`} color={hour >= 11 && hour < 15 ? ACCENT.red : hour >= 8 && hour < 18 ? ACCENT.amber : ACCENT.green} />
 
-          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, marginTop: 4, fontWeight: 500 }}>Delivery Zone</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 14 }}>
-            {Object.entries(UHI_ZONES).map(([z, d]) => (
-              <button key={z} onClick={() => setZone(z)}
-                style={{
-                  padding: "8px 8px", borderRadius: 8, textAlign: "left",
-                  border: `1px solid ${zone === z ? d.color : "var(--border-primary)"}`,
-                  background: zone === z ? d.color + "15" : "var(--bg-input)",
-                  color: zone === z ? d.color : "var(--text-muted)",
-                  fontSize: 11, cursor: "pointer",
-                  transition: "all 0.25s ease",
-                }}>
-                <div style={{ fontWeight: 600 }}>{z}</div>
-                <div style={{ fontSize: 9, opacity: 0.8, marginTop: 2 }}>+{d.offset}°C · Class {d.hazardClass}</div>
-              </button>
-            ))}
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, marginTop: 16, fontWeight: 500 }}>Delivery Zone (Dhaka)</div>
+          
+          <div style={{ position: "relative", marginBottom: 8 }}>
+            <span style={{ position: "absolute", left: 12, top: 9, fontSize: 13 }}>🔍</span>
+            <input 
+              type="text" 
+              placeholder="Search zones..." 
+              value={zoneSearch}
+              onChange={e => setZoneSearch(e.target.value)}
+              style={{ width: "100%", padding: "10px 12px 10px 34px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", outline: "none", fontSize: 13 }}
+            />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 16, maxHeight: "160px", overflowY: "auto", paddingRight: 4 }}>
+            {filteredZones.map(z => {
+              const d = UHI_ZONES[z];
+              return (
+                <button key={z} onClick={() => setZone(z)}
+                  style={{
+                    padding: "8px 8px", borderRadius: 8, textAlign: "left",
+                    border: `1px solid ${zone === z ? d.color : "var(--border-primary)"}`,
+                    background: zone === z ? d.color + "15" : "var(--bg-input)",
+                    color: zone === z ? d.color : "var(--text-muted)",
+                    fontSize: 11, cursor: "pointer",
+                    transition: "all 0.25s ease",
+                  }}>
+                  <div style={{ fontWeight: 600 }}>{z}</div>
+                  <div style={{ fontSize: 9, opacity: 0.8, marginTop: 2 }}>+{d.offset}°C · Class {d.hazardClass}</div>
+                </button>
+              )
+            })}
+            {filteredZones.length === 0 && <div style={{ fontSize: 11, color: "var(--text-dim)", gridColumn: "1/-1", padding: 8 }}>No zones match your search.</div>}
           </div>
 
           <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>Packaging Type</div>
@@ -481,60 +597,41 @@ function MicroclimateSimulator({ trustScore }) {
           </div>
         </div>
 
-        {/* RIGHT: Results */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", gap: 14 }}>
-          {/* DVS Gauge */}
-          <div style={{ position: "relative", marginBottom: 4 }}>
-            <svg width={170} height={105} viewBox="0 0 170 105">
-              <path d="M 14 95 A 71 71 0 0 1 156 95" fill="none" stroke="var(--gauge-track)" strokeWidth={13} strokeLinecap="round" />
-              <path d="M 14 95 A 71 71 0 0 1 156 95" fill="none" stroke={dvsColor} strokeWidth={13} strokeLinecap="round"
-                strokeDasharray={`${(dvs / 100) * Math.PI * 71} ${Math.PI * 71}`}
-                style={{ transition: "stroke-dasharray 0.6s cubic-bezier(0.4,0,0.2,1), stroke 0.4s ease" }} />
-              <text x="85" y="80" textAnchor="middle" fill={dvsColor} fontSize="28" fontWeight="700" fontFamily="'JetBrains Mono', monospace"
-                style={{ transition: "fill 0.4s" }}>{dvs}</text>
-              <text x="85" y="96" textAnchor="middle" fill="var(--text-dim)" fontSize="9" fontWeight="500">DELIVERY VIABILITY</text>
-            </svg>
-            <div style={{ position: "absolute", top: -6, right: -6 }}>
-              <StatusBadge value={dvs} type="dvs" />
+        {/* RIGHT COLUMN */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", alignItems: "center", background: "var(--bg-input)", borderRadius: 12, border: "1px solid var(--border-primary)" }}>
+            <div style={{ position: "relative", marginBottom: 24 }}>
+              <div style={{ background: "var(--bg-primary)", borderRadius: "50%", padding: 12 }}>
+                <CircleArc value={dvs} color={dvsColor} size={150} strokeWidth={14} />
+              </div>
+              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center" }}>
+                <div style={{ fontSize: 36, fontWeight: 700, color: dvsColor, lineHeight: 1, fontFamily: "'JetBrains Mono', monospace" }}>{dvs}</div>
+                <div style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 600, marginTop: 4 }}>DVS SCORE</div>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, width: "100%" }}>
+              <div style={{ background: "var(--bg-primary)", padding: "16px 0", borderRadius: 8, textAlign: "center", border: "1px solid var(--border-primary)" }}>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Thermal Survival</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{tst} min</div>
+              </div>
+              <div style={{ background: "var(--bg-primary)", padding: "16px 0", borderRadius: 8, textAlign: "center", border: "1px solid var(--border-primary)" }}>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Route Duration</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>90 min</div>
+              </div>
             </div>
           </div>
 
-          {/* MERM Pipeline Breakdown */}
-          <div style={{
-            width: "100%", padding: 14, borderRadius: 10,
-            background: "var(--bg-input)", border: "1px solid var(--border-primary)",
-          }}>
-            <div style={{ fontSize: 10, color: ACCENT.green, fontWeight: 600, marginBottom: 10, letterSpacing: "0.08em" }}>
-              MICROCLIMATE PIPELINE (MERM)
+          <div style={{ padding: "20px 24px", background: "var(--bg-input)", borderRadius: 12, border: "1px solid var(--border-primary)" }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 16, letterSpacing: "0.05em" }}>TST FORMULA (MERM)</div>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: "var(--text-primary)", lineHeight: 1.8 }}>
+              <div style={{ color: "var(--text-secondary)" }}>TST = (Trust × Insulation)</div>
+              <div style={{ color: "var(--text-secondary)", marginLeft: 24 }}>÷ (Hazard × Solar)</div>
+              <div style={{ borderBottom: "1px solid var(--border-primary)", margin: "12px 0" }}></div>
+              <div>= ({trustScore} × {(packaging==="thermal"?4:packaging==="insulated"?2:1).toFixed(1)})</div>
+              <div>÷ ({uhi.hazardMultiplier.toFixed(1)} × {solarFactor.toFixed(1)})</div>
+              <div style={{ color: ACCENT.green, fontWeight: 600 }}>≈ {tst} min</div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {[
-                ["Base Temp", `${baseTemp}°C`, "var(--text-primary)"],
-                ["+ UHI Offset × Solar", `+${(uhi.offset * solarFactor).toFixed(1)}°C`, ACCENT.amber],
-                ["− Wind Cooling", `−${windCooling.toFixed(1)}°C`, ACCENT.blue],
-                ["= Adjusted Temp", `${adjustedTemp.toFixed(1)}°C`, thermalRisk.color],
-                ["→ Thermal Risk", thermalRisk.label, thermalRisk.color],
-              ].map(([l, v, c], i) => (
-                <div key={l} style={{
-                  display: "flex", justifyContent: "space-between", alignItems: "center",
-                  padding: "4px 0",
-                  borderTop: i === 3 ? `1px solid var(--border-primary)` : "none",
-                  marginTop: i === 3 ? 2 : 0,
-                  paddingTop: i === 3 ? 8 : 4,
-                }}>
-                  <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{l}</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: c, fontFamily: "'JetBrains Mono', monospace" }}>{v}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Key Metrics */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, width: "100%" }}>
-            <MetricBox label="Thermal Survival" value={`${tst} min`} color={tst < 30 ? ACCENT.red : tst < 60 ? ACCENT.amber : ACCENT.green} icon="⏱" />
-            <MetricBox label="Hazard Multiplier" value={`×${uhi.hazardMultiplier}`} color={uhi.color} icon="⚡" />
-            <MetricBox label="Solar Factor" value={`×${solarFactor}`} color={solarFactor >= 1.0 ? ACCENT.red : solarFactor >= 0.6 ? ACCENT.amber : ACCENT.green} icon="☀" />
-            <MetricBox label="Zone Class" value={`Class ${uhi.hazardClass}`} color={uhi.color} icon="📍" />
           </div>
         </div>
       </div>
@@ -668,16 +765,540 @@ function ESGCard({ trustScore, dvs }) {
 /* ═══════════════════════════════════════════════════════════════
    MAIN APPLICATION
    ═══════════════════════════════════════════════════════════════ */
+
+function CircleArc({ value, max = 100, color, size = 140, strokeWidth = 12 }) {
+  const r = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * r;
+  const pct = Math.min(value / max, 1);
+  const dash = circumference * pct;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: "rotate(-90deg)" }}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--gauge-track)" strokeWidth={strokeWidth} />
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"
+        strokeDasharray={`${dash} ${circumference}`}
+        style={{ transition: "stroke-dasharray 0.6s cubic-bezier(0.4,0,0.2,1), stroke 0.4s ease" }}
+      />
+    </svg>
+  );
+}
+
+function PageHeader({ title, subtitle, action }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24, padding: "0 4px" }}>
+      <div>
+        <h1 style={{ fontSize: 24, fontWeight: 700, margin: "0 0 6px 0", color: "var(--text-primary)" }}>{title}</h1>
+        {subtitle && <div style={{ fontSize: 14, color: "var(--text-secondary)" }}>{subtitle}</div>}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function DashboardView({ onNewBatch }) {
+  const stats = [
+    { label: "TOTAL BATCHES", value: "142", sub: "9 active", icon: "📦" },
+    { label: "CERTIFIED BATCHES", value: "118", sub: "83% certification rate", icon: "🛡️" },
+    { label: "AVG TRUST SCORE", value: "82.4", sub: "BARI-certified standard", icon: "📈" },
+    { label: "TOTAL WEIGHT", value: "8.6 t", sub: "bio-resources processed", icon: "⚖️" },
+    { label: "PLASTIC BOTTLES SAVED", value: "34,560", sub: "via bulk refill model", icon: "♻️" },
+    { label: "CO2 SEQUESTERED", value: "2,180 kg", sub: "biochar carbon capture", icon: "🌿" },
+    { label: "REVENUE", value: "BDT 12.5L", sub: "this month", icon: "📈" },
+    { label: "DVS COMPLIANCE", value: "96.2%", sub: "dispatches within TST", icon: "✅" },
+  ];
+
+  const hazardMaps = [
+    { zone: "Old Dhaka", hazard: "Extreme", temp: "41.2°C", rh: "74%", desc: "Class A thermal accumulation zone. Narrow concrete corridors trap heat.", time: "11:00 AM – 4:00 PM" },
+    { zone: "Mirpur", hazard: "High", temp: "38.7°C", rh: "68%", desc: "Dense residential concrete with limited canopy cover.", time: "12:00 PM – 3:00 PM" },
+    { zone: "Savar", hazard: "Moderate", temp: "36.1°C", rh: "62%", desc: "Mixed urban with partial green canopy. Moderate risk window.", time: "1:00 PM – 3:00 PM" },
+    { zone: "Gulshan", hazard: "Safe", temp: "34.2°C", rh: "58%", desc: "High green canopy coverage and lake proximity reduce thermal load.", time: "N/A" }
+  ];
+
+  return (
+    <div style={{ animation: "fadeSlideIn 0.3s ease" }}>
+      <PageHeader 
+        title="Operations Dashboard" 
+        subtitle="Bangladesh Climate-Resilient Circular Commerce" 
+        action={
+          <button onClick={onNewBatch} style={{
+            background: ACCENT.greenDark, color: "#fff", border: "none", padding: "10px 18px",
+            borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 13, display: "flex", gap: 6, alignItems: "center"
+          }}><span>+</span> New Batch</button>
+        }
+      />
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 32 }}>
+        {stats.map((s, i) => (
+          <Card key={i} style={{ padding: "20px 24px" }} hover={false}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, letterSpacing: "0.05em" }}>{s.label}</div>
+              <div style={{ background: "var(--bg-input)", padding: 6, borderRadius: "50%", fontSize: 12 }}>{s.icon}</div>
+            </div>
+            <div style={{ fontSize: 26, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>{s.value}</div>
+            <div style={{ fontSize: 12, color: "var(--text-dim)" }}>{s.sub}</div>
+          </Card>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
+        <Card hover={false}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>Dhaka Thermal Hazard Map</div>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>Live MERM Classification</div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {hazardMaps.map(m => {
+              const hColor = m.hazard === "Extreme" ? ACCENT.red : m.hazard === "High" ? ACCENT.amber : m.hazard === "Moderate" ? ACCENT.amber : ACCENT.green;
+              return (
+                <div key={m.zone} style={{ border: "1px solid var(--border-primary)", borderRadius: 12, padding: "16px 20px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: hColor }}></span>
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>{m.zone}</span>
+                      <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 12, background: hColor+"15", color: hColor, fontWeight: 600 }}>{m.hazard}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{m.temp} · {m.rh}</div>
+                  </div>
+                  <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 4 }}>{m.desc}</div>
+                  {m.time !== "N/A" && <div style={{ fontSize: 12, color: ACCENT.amber }}>Peak: {m.time}</div>}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+
+        <Card hover={false}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>Recent Activity</div>
+            <a href="#" style={{ fontSize: 13, color: ACCENT.green, textDecoration: "none", fontWeight: 500 }}>View all →</a>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            {[
+              { icon: "🛡️", text: "Batch ECO-2025-142 certified — Trust Score 91", time: "2 min ago", bg: ACCENT.greenBg },
+              { icon: "📈", text: "DVS simulation for Old Dhaka route — Score 63 (Caution)", time: "18 min ago", bg: ACCENT.amberBg },
+              { icon: "🚚", text: "Batch ECO-2025-140 dispatched to Mirpur", time: "1 hr ago", bg: ACCENT.greenBg },
+              { icon: "⚠️", text: "High thermal hazard in Old Dhaka — delay dispatches until 5 PM", time: "2 hr ago", bg: ACCENT.redBg },
+              { icon: "📦", text: "New biochar batch ECO-2025-141 created (180 kg)", time: "3 hr ago", bg: ACCENT.blueBg },
+            ].map((a, i) => (
+              <div key={i} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                <div style={{ width: 36, height: 36, borderRadius: "50%", background: a.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{a.icon}</div>
+                <div>
+                  <div style={{ fontSize: 13, color: "var(--text-primary)", marginBottom: 4, lineHeight: 1.4 }}>{a.text}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-dim)" }}>{a.time}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function BatchRegistry({ onNewBatch }) {
+  const [activeTab, setActiveTab] = useState("All");
+  const tabs = ["All", "Pending", "Certified", "Dispatched", "Delivered"];
+  const batches = [
+    { id: "BCH-142", product: "Bio-Slurry", status: "Certified", trust: 91, dvs: null, dest: "—", weight: 180 },
+    { id: "BCH-141", product: "Biochar", status: "Active", trust: 85, dvs: null, dest: "—", weight: 100 }
+  ];
+
+  return (
+    <div style={{ animation: "fadeSlideIn 0.3s ease" }}>
+      <PageHeader title="Batch Registry" subtitle="All bio-resource batches with certification status" action={
+        <button onClick={onNewBatch} style={{
+          background: ACCENT.greenDark, color: "#fff", border: "none", padding: "10px 18px",
+          borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 13, display: "flex", gap: 6, alignItems: "center"
+        }}><span>+</span> New Batch</button>
+      } />
+      
+      <div style={{ display: "flex", gap: 4, background: "var(--bg-input)", padding: 4, borderRadius: 8, width: "max-content", marginBottom: 24 }}>
+        {tabs.map(t => (
+          <button key={t} onClick={() => setActiveTab(t)} style={{
+            padding: "8px 18px", borderRadius: 6, border: "none", fontSize: 13, cursor: "pointer",
+            background: activeTab === t ? "var(--bg-card)" : "transparent",
+            color: activeTab === t ? "var(--text-primary)" : "var(--text-secondary)",
+            boxShadow: activeTab === t ? "var(--shadow-card)" : "none", fontWeight: activeTab === t ? 600 : 400
+          }}>{t}</button>
+        ))}
+      </div>
+
+      <Card style={{ padding: 0, overflow: "hidden" }} hover={false}>
+        <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid var(--border-primary)", background: "var(--bg-input)" }}>
+              {["BATCH", "PRODUCT", "STATUS", "TRUST SCORE", "DVS SCORE", "DESTINATION", "WEIGHT"].map(h => (
+                <th key={h} style={{ padding: "14px 24px", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.05em" }}>{h}</th>
+              ))}
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {batches.map((b, i) => (
+              <tr key={i} style={{ borderBottom: "1px solid var(--border-primary)", cursor: "pointer", transition: "background 0.2s" }}
+                  onMouseEnter={e => e.currentTarget.style.background="var(--bg-input)"}
+                  onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                <td style={{ padding: "18px 24px", fontSize: 13, fontWeight: 500 }}>{b.id}</td>
+                <td style={{ padding: "18px 24px", fontSize: 13, color: "var(--text-secondary)" }}>{b.product}</td>
+                <td style={{ padding: "18px 24px" }}>
+                  <span style={{ border: `1px solid ${b.status==="Certified"?ACCENT.greenBorder:"var(--border-primary)"}`, color: b.status==="Certified"?ACCENT.green:"var(--text-secondary)", padding: "4px 12px", borderRadius: 20, fontSize: 11, background: b.status==="Certified"?ACCENT.greenBg:"transparent", fontWeight: 600 }}>
+                    {b.status}
+                  </span>
+                </td>
+                <td style={{ padding: "18px 24px", fontSize: 13, color: ACCENT.green, fontWeight: 600 }}>{b.trust ? `🛡️ ${b.trust}` : "—"}</td>
+                <td style={{ padding: "18px 24px", fontSize: 13, color: "var(--text-secondary)" }}>{b.dvs || "—"}</td>
+                <td style={{ padding: "18px 24px", fontSize: 13, color: "var(--text-secondary)" }}>{b.dest}</td>
+                <td style={{ padding: "18px 24px", fontSize: 13, color: "var(--text-secondary)" }}>{b.weight} kg</td>
+                <td style={{ padding: "18px 24px", color: "var(--text-muted)", fontSize: 16 }}>›</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+    </div>
+  );
+}
+
+function RegisterBatch({ onCancel }) {
+  return (
+    <div style={{ animation: "fadeSlideIn 0.3s ease" }}>
+      <button onClick={onCancel} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: 14, marginBottom: 24, display: "flex", gap: 8, alignItems: "center", padding: 0 }}>
+        <span>←</span> Back to Batches
+      </button>
+      <PageHeader title="Register New Batch" subtitle="Submit a new bio-resource batch for certification" />
+      
+      <Card style={{ maxWidth: 700 }} hover={false}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <div>
+            <label style={{ display: "block", fontSize: 13, marginBottom: 8, fontWeight: 500, color: "var(--text-primary)" }}>Product Name</label>
+            <input type="text" placeholder="e.g. Premium Bio-Slurry Concentrate" style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+            <div>
+              <label style={{ display: "block", fontSize: 13, marginBottom: 8, fontWeight: 500, color: "var(--text-primary)" }}>Product Type</label>
+              <select style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}>
+                <option>Bio-Slurry</option>
+                <option>Biochar</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: 13, marginBottom: 8, fontWeight: 500, color: "var(--text-primary)" }}>Weight (kg)</label>
+              <input type="number" defaultValue="100" style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }} />
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+            <div>
+              <label style={{ display: "block", fontSize: 13, marginBottom: 8, fontWeight: 500, color: "var(--text-primary)" }}>Packaging Type</label>
+              <select style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}>
+                <option>Standard</option>
+                <option>Insulated</option>
+                <option>Thermal Bin</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: 13, marginBottom: 8, fontWeight: 500, color: "var(--text-primary)" }}>Destination Zone</label>
+              <select style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}>
+                <option>Select zone</option>
+                {Object.keys(UHI_ZONES).map(z => <option key={z}>{z}</option>)}
+              </select>
+            </div>
+          </div>
+          
+          <div style={{ background: ACCENT.greenBg, padding: "20px", borderRadius: 8, border: `1px solid ${ACCENT.greenBorder}` }}>
+            <div style={{ color: ACCENT.green, fontWeight: 600, fontSize: 14, marginBottom: 8 }}>Next: IoT Certification</div>
+            <div style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.5 }}>After creating your batch, submit IoT sensor readings to generate a BARI-compliant Trust Score and cryptographic QR certificate.</div>
+          </div>
+
+          <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 8 }}>
+            <button onClick={onCancel} style={{ padding: "12px 24px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", cursor: "pointer", fontWeight: 500, fontSize: 14 }}>Cancel</button>
+            <button onClick={onCancel} style={{ padding: "12px 24px", borderRadius: 8, border: "none", background: ACCENT.greenDark, color: "#fff", cursor: "pointer", fontWeight: 500, fontSize: 14 }}>Create Batch</button>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+const MOCK_PRODUCTS = [
+  { id: 1, name: "Premium Bio-Slurry", category: "Agriculture", price: "৳ 450", unit: "L", seller: "Green Refineries Ltd.", dvs: 85, icon: "🌱", badge: "BARI Certified" },
+  { id: 2, name: "Thermal-Safe EM-1", category: "Agriculture", price: "৳ 320", unit: "Kg", seller: "Agro Eco SME", dvs: 78, icon: "🌾", badge: null },
+  { id: 3, name: "Insulin (Lantus 10ml)", category: "Pharmaceuticals", price: "৳ 1,250", unit: "Vial", seller: "PharmaCare BD", dvs: 94, icon: "⚕️", badge: "Cold-Chain verified" },
+  { id: 4, name: "Polio Vaccine (OPV)", category: "Pharmaceuticals", price: "৳ 4,800", unit: "Box", seller: "Health Line Inc.", dvs: 98, icon: "💉", badge: "Critical Priority" },
+  { id: 5, name: "Fresh Dairy Milk", category: "Food & Dairy", price: "৳ 90", unit: "L", seller: "Aarong Dairy", dvs: 82, icon: "🥛", badge: null },
+  { id: 6, name: "Premium Hilsha Fish", category: "Food & Seafood", price: "৳ 1,500", unit: "Kg", seller: "Padma Catch", dvs: 70, icon: "🐟", badge: null },
+  { id: 7, name: "Carbon-Neutral Biochar", category: "Agriculture", price: "৳ 150", unit: "Kg", seller: "SME Co-op", dvs: 92, icon: "🌿", badge: null },
+  { id: 8, name: "Temperature Reagents", category: "Chemicals", price: "৳ 3,500", unit: "Pack", seller: "ChemLab BD", dvs: 88, icon: "🧪", badge: "Hazard Risk" },
+];
+
+
+function ChatbotView() {
+  const [messages, setMessages] = useState([
+    { role: "system", content: "Hello! I am EcoSortha AI, your voice and text-based assistant. I can provide microclimate forecasts, smart dispatch suggestions, or analyze files and context. How can I help you today?", time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }
+  ]);
+  const [input, setInput] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const handleSend = (text, attachedFileName = null) => {
+    if (!text.trim() && !attachedFileName) return;
+    const newMsg = { 
+      role: "user", 
+      content: text, 
+      attachment: attachedFileName,
+      time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) 
+    };
+    setMessages(prev => [...prev, newMsg]);
+    setInput("");
+    
+    // Mock AI response
+    setTimeout(() => {
+      let reply = "I've recorded that for you.";
+      if (attachedFileName) {
+        reply = `I've analyzed the attached file: "${attachedFileName}". The context shows a sudden spike in ambient temperature. I suggest upgrading to thermal bins for this batch.`;
+      } else if (text.toLowerCase().includes("forecast")) {
+        reply = "Currently, the Mirpur zone is experiencing a moderate thermal hazard (38.7°C). I suggest delaying heat-sensitive dispatches until 5:00 PM when the solar factor drops.";
+      } else if (text.toLowerCase().includes("suggestion")) {
+        reply = "Based on your recent batches, upgrading to Thermal-Insulated packaging will extend your Thermal Survival Time (TST) by 4x, allowing safe midday deliveries.";
+      } else if (text.toLowerCase().includes("feedback")) {
+        reply = "Thank you for the feedback. I've logged this in the ESG ledger to improve our ML demand forecasting models.";
+      }
+      setMessages(prev => [...prev, { role: "system", content: reply, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }]);
+    }, 1200);
+  };
+
+  const handleVoice = () => {
+    setIsRecording(!isRecording);
+    if (!isRecording) {
+      setTimeout(() => {
+        setIsRecording(false);
+        handleSend("Can you give me a dispatch forecast for today?");
+      }, 3000);
+    }
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      handleSend("Please analyze this document context.", file.name);
+    }
+    // reset input
+    e.target.value = null;
+  };
+
+  return (
+    <div style={{ animation: "fadeSlideIn 0.3s ease", height: "calc(100vh - 200px)", display: "flex", flexDirection: "column" }}>
+      <PageHeader title="EcoSortha AI Assistant" subtitle="Voice, Text & Context-Aware Microclimate Chatbot" />
+      
+      <Card hover={false} style={{ flex: 1, display: "flex", flexDirection: "column", padding: 0, overflow: "hidden" }}>
+        
+        {/* Chat History */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "24px", display: "flex", flexDirection: "column", gap: 16 }}>
+          {messages.map((m, i) => (
+            <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: m.role === "user" ? "flex-end" : "flex-start" }}>
+              <div style={{
+                maxWidth: "70%",
+                padding: "12px 18px",
+                borderRadius: m.role === "user" ? "18px 18px 0 18px" : "18px 18px 18px 0",
+                background: m.role === "user" ? ACCENT.greenDark : "var(--bg-input)",
+                color: m.role === "user" ? "#fff" : "var(--text-primary)",
+                border: m.role === "user" ? "none" : "1px solid var(--border-primary)",
+                fontSize: 14, lineHeight: 1.5
+              }}>
+                {m.attachment && (
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 8, padding: "8px 12px",
+                    background: "rgba(255,255,255,0.15)", borderRadius: 8, marginBottom: 8,
+                    fontSize: 12, fontWeight: 600
+                  }}>
+                    <span>📎</span> {m.attachment}
+                  </div>
+                )}
+                {m.content}
+              </div>
+              <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 6, padding: "0 4px" }}>
+                {m.role === "user" ? "You" : "EcoSortha AI"} • {m.time}
+              </div>
+            </div>
+          ))}
+          {isRecording && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 18px", background: "var(--bg-input)", borderRadius: "18px 18px 18px 0", width: "fit-content", border: "1px solid var(--border-primary)" }}>
+              <div style={{ width: 8, height: 8, background: ACCENT.red, borderRadius: "50%", animation: "breathe 1s infinite" }}></div>
+              <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Listening...</span>
+            </div>
+          )}
+        </div>
+
+        {/* Quick Actions */}
+        <div style={{ padding: "12px 24px", display: "flex", gap: 12, borderTop: "1px solid var(--border-primary)", background: "var(--bg-input)" }}>
+          {["Climate Forecast", "Dispatch Suggestions", "Submit Feedback"].map(action => (
+            <button key={action} onClick={() => handleSend(`Show me ${action.toLowerCase()}`)} style={{
+              padding: "6px 14px", borderRadius: 20, background: "var(--bg-primary)", border: `1px solid ${ACCENT.greenBorder}`,
+              color: ACCENT.green, fontSize: 12, cursor: "pointer", fontWeight: 500, transition: "background 0.2s"
+            }} onMouseEnter={e => e.currentTarget.style.background=ACCENT.greenBg} onMouseLeave={e => e.currentTarget.style.background="var(--bg-primary)"}>
+              {action}
+            </button>
+          ))}
+        </div>
+
+        {/* Input Area */}
+        <div style={{ padding: "16px 24px", display: "flex", gap: 12, alignItems: "center", background: "var(--bg-secondary)" }}>
+          <button onClick={() => fileInputRef.current?.click()} style={{
+            width: 44, height: 44, borderRadius: "50%", border: "none", cursor: "pointer",
+            background: "var(--bg-input)", color: "var(--text-secondary)",
+            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
+            transition: "all 0.3s ease", position: "relative"
+          }} title="Attach file or context">
+            📎
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleFileUpload} 
+              style={{ display: "none" }} 
+            />
+          </button>
+          <button onClick={handleVoice} style={{
+            width: 44, height: 44, borderRadius: "50%", border: "none", cursor: "pointer",
+            background: isRecording ? ACCENT.redBg : "var(--bg-input)",
+            color: isRecording ? ACCENT.red : "var(--text-secondary)",
+            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
+            transition: "all 0.3s ease"
+          }} title="Voice Input">
+            🎙️
+          </button>
+          <input 
+            type="text" 
+            placeholder="Type your message..." 
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleSend(input)}
+            style={{
+              flex: 1, padding: "14px 20px", borderRadius: 24, border: "1px solid var(--border-primary)",
+              background: "var(--bg-input)", color: "var(--text-primary)", outline: "none", fontSize: 14
+            }}
+          />
+          <button onClick={() => handleSend(input)} style={{
+            width: 44, height: 44, borderRadius: "50%", border: "none", cursor: "pointer",
+            background: ACCENT.greenDark, color: "#fff",
+            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18
+          }}>
+            ↑
+          </button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function MarketplaceView() {
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("All");
+  const [minDvs, setMinDvs] = useState(0);
+
+  const categories = ["All", "Agriculture", "Pharmaceuticals", "Food & Dairy", "Food & Seafood", "Chemicals"];
+
+  const filteredProducts = MOCK_PRODUCTS.filter(p => {
+    if (category !== "All" && p.category !== category) return false;
+    if (p.dvs < minDvs) return false;
+    if (search && !p.name.toLowerCase().includes(search.toLowerCase()) && !p.seller.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  return (
+    <div style={{ animation: "fadeSlideIn 0.3s ease", position: "relative" }}>
+      <PageHeader title="Climate-Resilient Marketplace" subtitle="Source verified heat-sensitive products optimized for DVS delivery" />
+      
+      {/* Filters Bar */}
+      <Card style={{ padding: "16px 24px", marginBottom: 24 }} hover={false}>
+        <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 250px", position: "relative" }}>
+            <span style={{ position: "absolute", left: 14, top: 12, fontSize: 16 }}>🔍</span>
+            <input 
+              type="text" 
+              placeholder="Search products or sellers..." 
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ width: "100%", padding: "12px 16px 12px 42px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", outline: "none", fontSize: 14 }}
+            />
+          </div>
+          
+          <div style={{ flex: "0 0 180px" }}>
+            <select value={category} onChange={e => setCategory(e.target.value)} style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", outline: "none", fontSize: 14, cursor: "pointer" }}>
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
+          <div style={{ flex: "0 0 200px" }}>
+            <select value={minDvs} onChange={e => setMinDvs(Number(e.target.value))} style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", outline: "none", fontSize: 14, cursor: "pointer" }}>
+              <option value={0}>Any DVS Score</option>
+              <option value={75}>DVS 75+ (High Reliability)</option>
+              <option value={90}>DVS 90+ (Critical Transit)</option>
+            </select>
+          </div>
+        </div>
+      </Card>
+
+      {/* Product Grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 20, marginBottom: 80 }}>
+        {filteredProducts.map(p => (
+          <Card key={p.id} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}>
+            {p.badge && (
+              <div style={{ position: "absolute", top: 16, right: 16, background: p.badge.includes("Critical") ? ACCENT.redBg : ACCENT.blueBg, color: p.badge.includes("Critical") ? ACCENT.red : ACCENT.blue, padding: "4px 10px", borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", border: `1px solid ${p.badge.includes("Critical") ? ACCENT.redBorder : "var(--border-primary)"}` }}>
+                {p.badge.toUpperCase()}
+              </div>
+            )}
+            
+            <div style={{ fontSize: 36, marginBottom: 16 }}>{p.icon}</div>
+            
+            <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 4 }}>{p.category}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4, lineHeight: 1.3 }}>{p.name}</div>
+            <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 16 }}>{p.seller}</div>
+            
+            <div style={{ marginTop: "auto" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border-primary)" }}>
+                <div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: ACCENT.green, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>{p.price}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 4 }}>per {p.unit}</div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: p.dvs >= 90 ? ACCENT.green : p.dvs >= 75 ? ACCENT.blue : ACCENT.amber, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>{p.dvs}</div>
+                  <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 4, fontWeight: 600 }}>DVS SCORE</div>
+                </div>
+              </div>
+              
+              <button style={{ width: "100%", padding: "10px 0", background: "var(--bg-input)", border: "1px solid var(--border-primary)", borderRadius: 8, color: "var(--text-primary)", fontWeight: 600, cursor: "pointer", fontSize: 13, transition: "background 0.2s" }}
+                      onMouseEnter={e => e.currentTarget.style.background = ACCENT.greenBg}
+                      onMouseLeave={e => e.currentTarget.style.background = "var(--bg-input)"}>
+                Add to Cart
+              </button>
+            </div>
+          </Card>
+        ))}
+        {filteredProducts.length === 0 && (
+          <div style={{ gridColumn: "1 / -1", padding: 60, textAlign: "center", color: "var(--text-secondary)" }}>
+            <div style={{ fontSize: 40, marginBottom: 16 }}>🔍</div>
+            <div style={{ fontSize: 16, fontWeight: 500 }}>No products match your filters.</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 const TABS = [
+  { label: "Overall Dashboard", icon: "⊞" },
+  { label: "Batches", icon: "📦" },
   { label: "Batch Verification", icon: "📡" },
   { label: "Microclimate Intelligence", icon: "🌡️" },
   { label: "Climate Demand", icon: "📊" },
   { label: "Impact & ESG", icon: "🌱" },
+  { label: "Marketplace", icon: "🛒" },
+  { label: "Chatbot", icon: "💬" }
 ];
 
 export default function EcoSorthaApp() {
   const [tab, setTab] = useState(0);
   const [trustScore, setTrustScore] = useState(84);
+  const [isRegisteringBatch, setIsRegisteringBatch] = useState(false);
   const [theme, setTheme] = useState("dark");
 
   const adjustedTemp = calcAdjustedTemp(31, "Mirpur", 12, 8);
@@ -696,7 +1317,7 @@ export default function EcoSorthaApp() {
       transition: "background 0.5s cubic-bezier(0.4,0,0.2,1), color 0.4s ease",
     }}>
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
-      <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+      
 
       <style>{`
         @keyframes fadeSlideIn {
@@ -753,6 +1374,17 @@ export default function EcoSorthaApp() {
             <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>EcoSortha AI</div>
             <div style={{ fontSize: 9, color: "var(--text-dim)", letterSpacing: "0.14em", fontWeight: 500 }}>CLIMATESHIELD · SME DASHBOARD</div>
           </div>
+          {/* New SME Dropdown */}
+          <div style={{ marginLeft: 24, display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-secondary)" }}>
+            <span style={{ fontSize: 18 }}>⭐</span>
+            <select style={{
+              background: "transparent", color: "var(--text-primary)", border: "none",
+              outline: "none", cursor: "pointer", fontSize: 14, fontWeight: 500
+            }}>
+              <option>Green Refineries Ltd. (SME)</option>
+              <option>Agro Eco SME</option>
+            </select>
+          </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ display: "flex", gap: 10 }}>
@@ -792,90 +1424,67 @@ export default function EcoSorthaApp() {
       </nav>
 
       {/* ── CONTENT ───────────────────────────────────────────── */}
-      <main style={{ padding: "24px 28px", maxWidth: 1000, margin: "0 auto" }}>
-
-        {tab === 0 && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, animation: "fadeSlideIn 0.4s ease" }}>
-            <div>
-              <SectionLabel icon="📡" text="Batch Sensor Verification" />
-              <Card><IoTForm onResult={setTrustScore} /></Card>
-            </div>
-            <div>
-              <SectionLabel icon="🔒" text="Trust Score Engine" />
-              <Card>
-                <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
-                  <div style={{ textAlign: "center" }}>
-                    <GaugeArc value={trustScore} color={trustScore >= 75 ? ACCENT.green : trustScore >= 55 ? ACCENT.amber : ACCENT.red} size={200} strokeWidth={14} />
-                    <div style={{
-                      fontSize: 44, fontWeight: 700,
-                      color: trustScore >= 75 ? ACCENT.green : trustScore >= 55 ? ACCENT.amber : ACCENT.red,
-                      fontFamily: "'JetBrains Mono', monospace", marginTop: -6,
-                      transition: "color 0.4s ease",
-                    }}>
-                      {trustScore}
-                    </div>
-                    <div style={{ fontSize: 11, color: "var(--text-dim)", fontWeight: 500 }}>/ 100 TRUST SCORE</div>
-                    <div style={{ marginTop: 10 }}><StatusBadge value={trustScore} type="trust" /></div>
-                  </div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  {[
-                    ["Batch ID", `BCH-${(trustScore * 847).toString().slice(-5)}`],
-                    ["Processor", "#07 (anon)"],
-                    ["Product Type", "Heat-Sensitive Goods"],
-                    ["Certified At", new Date().toLocaleTimeString()],
-                  ].map(([l, v]) => (
-                    <MetricBox key={l} label={l} value={v} color="var(--text-secondary)" />
-                  ))}
-                </div>
-              </Card>
-            </div>
-          </div>
-        )}
-
+      <main style={{ padding: "32px 48px", width: "100%", margin: "0 auto" }}>
+        {tab === 0 && <DashboardView onNewBatch={() => { setTab(1); setIsRegisteringBatch(true); }} />}
+        
         {tab === 1 && (
-          <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
-            <SectionLabel icon="🌡️" text="Microclimate Exposure Risk Model (MERM)" />
-            <Card><MicroclimateSimulator trustScore={trustScore} /></Card>
-          </div>
+          isRegisteringBatch 
+            ? <RegisterBatch onCancel={() => setIsRegisteringBatch(false)} />
+            : <BatchRegistry onNewBatch={() => setIsRegisteringBatch(true)} />
         )}
 
         {tab === 2 && (
-          <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
-            <SectionLabel icon="📊" text="Climate Demand Intelligence (Prophet ML)" />
-            <Card><DemandChart /></Card>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, animation: "fadeSlideIn 0.4s ease" }}>
+            <div>
+              <SectionLabel icon="📡" text="Batch Sensor Verification" />
+              <Card>
+                <IoTForm onResult={setTrustScore} />
+              </Card>
+            </div>
+            <div>
+              <SectionLabel icon="🛡️" text="Certification Pipeline" />
+              <Card>
+                <div style={{ textAlign: "center", padding: "12px 0 24px 0" }}>
+                  <ScoreGauge value={trustScore} label="Global Trust Score" size={160} />
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.6, textAlign: "center", marginTop: 12 }}>
+                  Adjust IoT parameters on the left to simulate a batch. A score of 60+ is required for BARI certification and cryptographic signing.
+                </div>
+              </Card>
+            </div>
           </div>
         )}
 
         {tab === 3 && (
           <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
-            <SectionLabel icon="🌱" text="Impact & ESG Ledger" />
-            <ESGCard trustScore={trustScore} dvs={dvs} />
-            <div style={{ marginTop: 18 }}>
-              <Card>
-                <div style={{ fontSize: 12, color: ACCENT.green, marginBottom: 12, fontWeight: 600 }}>Monthly Impact Summary</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  {[
-                    ["SMEs Served", "500+"],
-                    ["Batches Certified", `${trustScore * 3}`],
-                    ["Dispatch Alerts Issued", `${Math.round(dvs * 0.4)}`],
-                    ["Circular Economy Value", "BDT 6.3L ARR"],
-                  ].map(([l, v]) => (
-                    <div key={l} style={{
-                      display: "flex", justifyContent: "space-between", padding: "8px 0",
-                      borderBottom: "1px solid var(--border-primary)",
-                    }}>
-                      <span style={{ fontSize: 11, color: "var(--text-dim)" }}>{l}</span>
-                      <span style={{ fontSize: 12, color: ACCENT.green, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>{v}</span>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            </div>
+            <SectionLabel icon="🌡️" text="Delivery Viability Simulator" />
+            <Card>
+              <MicroclimateSimulator trustScore={trustScore} />
+            </Card>
           </div>
         )}
 
+        {tab === 4 && (
+          <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
+            <SectionLabel icon="📊" text="Market Intelligence" />
+            <Card>
+              <DemandChart />
+            </Card>
+          </div>
+        )}
+
+        {tab === 5 && (
+          <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
+            <SectionLabel icon="🌱" text="ESG Ledger" />
+            <ESGCard trustScore={trustScore} dvs={dvs} />
+          </div>
+        )}
+
+        {tab === 6 && <MarketplaceView />}
+        {tab === 7 && <ChatbotView />}
       </main>
+
+
 
       {/* ── FOOTER ────────────────────────────────────────────── */}
       <footer style={{
