@@ -1,0 +1,57 @@
+name: Deploy Backend to Supabase
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'supabase/**'
+      - 'backend/**'
+      - 'lib/**'
+
+jobs:
+  deploy-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for Supabase secrets
+        id: check
+        run: |
+          if [ -z "${{ secrets.SUPABASE_ACCESS_TOKEN }}" ] || [ -z "${{ secrets.SUPABASE_PROJECT_REF }}" ]; then
+            echo "SUPABASE_ACCESS_TOKEN or SUPABASE_PROJECT_REF missing. Skipping Supabase deploy.";
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install supabase CLI
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          npm install -g supabase
+
+      - name: Supabase login
+        if: steps.check.outputs.skip == 'false'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase login --token "$SUPABASE_ACCESS_TOKEN"
+
+      - name: Deploy Supabase Edge Functions
+        if: steps.check.outputs.skip == 'false'
+        env:
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          # Deploy all functions in supabase/functions (requires supabase CLI v1+)
+          for fn in supabase/functions/*; do
+            if [ -d "$fn" ]; then
+              fname=$(basename "$fn")
+              echo "Deploying function: $fname"
+              supabase functions deploy "$fname" --project-ref "$SUPABASE_PROJECT_REF"
+            fi
+          done
+
+      - name: Note when skipped
+        if: steps.check.outputs.skip == 'true'
+        run: |
+          echo "Supabase deploy skipped because required GitHub secrets are not configured. See DEPLOYMENT_NOTES.md for details."
