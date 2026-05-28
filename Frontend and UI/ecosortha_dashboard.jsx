@@ -349,10 +349,47 @@ function IoTForm({ onResult }) {
   const [ratio, setRatio] = useState("1:1:20");
   const [days, setDays] = useState(9);
   const [certified, setCertified] = useState(false);
+  const [ts, setTs] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const ts = calcTrustScore({ pH, EC, temp, ratio, days });
-
-  useEffect(() => { onResult(ts); setCertified(false); }, [pH, EC, temp, ratio, days]);
+  useEffect(() => {
+    const fetchTrustScore = async () => {
+      setIsLoading(true);
+      try {
+        const response = await fetch(
+          "https://pdeskdcdyhbldwfgbowz.supabase.co/functions/v1/clever-responder",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              action: "trust-score",
+              pH,
+              EC,
+              temp,
+              ratio,
+              days,
+            }),
+          }
+        );
+        const data = await response.json();
+        setTs(data.trustScore || 0);
+        onResult(data.trustScore || 0);
+        setCertified(false);
+      } catch (error) {
+        console.error("Failed to fetch trust score:", error);
+        // Fallback to local calculation on error
+        const fallbackScore = calcTrustScore({ pH, EC, temp, ratio, days });
+        setTs(fallbackScore);
+        onResult(fallbackScore);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchTrustScore();
+  }, [pH, EC, temp, ratio, days, onResult]);
 
   return (
     <div>
@@ -394,18 +431,19 @@ function IoTForm({ onResult }) {
         </div>
       </div>
       <button onClick={() => { if (ts >= 60) setCertified(true); }}
-        disabled={ts < 60}
+        disabled={ts < 60 || isLoading}
         style={{
           width: "100%", padding: "12px", borderRadius: 10,
           border: `1px solid ${ts >= 60 ? ACCENT.green : "var(--border-primary)"}`,
           background: ts >= 60 ? ACCENT.greenBg : "var(--bg-input)",
           color: ts >= 60 ? ACCENT.green : "var(--text-dim)",
-          cursor: ts >= 60 ? "pointer" : "not-allowed",
+          cursor: ts >= 60 && !isLoading ? "pointer" : "not-allowed",
           fontSize: 13, fontWeight: 600, letterSpacing: "0.05em",
           transition: "all 0.3s ease",
           boxShadow: ts >= 60 ? ACCENT.greenBg : "none",
+          opacity: isLoading ? 0.7 : 1,
         }}>
-        {ts >= 60 ? "✦ Certify Batch & Generate QR Certificate" : "Trust Score too low to certify"}
+        {isLoading ? "⏳ Calculating..." : ts >= 60 ? "✦ Certify Batch & Generate QR Certificate" : "Trust Score too low to certify"}
       </button>
       {certified && (
         <div style={{
@@ -483,17 +521,63 @@ function MicroclimateSimulator({ trustScore }) {
   const [windSpeed, setWindSpeed] = useState(8);
   const [zoneSearch, setZoneSearch] = useState("");
   const [isFetchingWeather, setIsFetchingWeather] = useState(false);
+  const [isFetchingMetrics, setIsFetchingMetrics] = useState(false);
+  const [dvs, setDvs] = useState(0);
+  const [tst, setTst] = useState(0);
+  const [adjustedTemp, setAdjustedTemp] = useState(31);
+  const [thermalRisk, setThermalRisk] = useState({ value: 0.1, label: "Low", color: ACCENT.green });
 
   const uhi = UHI_ZONES[zone] || UHI_ZONES["Mirpur"];
-  const solarFactor = getSolarFactor(hour);
-  const windCooling = windSpeed > 15 ? 1.0 : 0.0;
-  const adjustedTemp = calcAdjustedTemp(baseTemp, zone, hour, windSpeed);
-  const thermalRisk = calcThermalRisk(adjustedTemp);
-  const dvs = calcDVS(trustScore, adjustedTemp);
-  const tst = calcTST(trustScore, zone, packaging, hour);
   const dvsColor = dvs >= 75 ? ACCENT.green : dvs >= 55 ? ACCENT.amber : ACCENT.red;
 
   const filteredZones = Object.keys(UHI_ZONES).filter(z => z.toLowerCase().includes(zoneSearch.toLowerCase()));
+
+  // Fetch microclimate metrics when inputs change
+  useEffect(() => {
+    const fetchMicroclimateMetrics = async () => {
+      setIsFetchingMetrics(true);
+      try {
+        const response = await fetch(
+          "https://pdeskdcdyhbldwfgbowz.supabase.co/functions/v1/clever-responder",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              action: "microclimate-metrics",
+              trustScore,
+              zone,
+              packaging,
+              hour,
+              baseTemp,
+              windSpeed,
+            }),
+          }
+        );
+        const data = await response.json();
+        setDvs(data.dvs || 0);
+        setTst(data.tst || 0);
+        setAdjustedTemp(data.adjustedTemp || baseTemp);
+        setThermalRisk(data.thermalRisk || { value: 0.1, label: "Low", color: ACCENT.green });
+      } catch (error) {
+        console.error("Failed to fetch microclimate metrics:", error);
+        // Fallback to local calculation on error
+        const adjTemp = calcAdjustedTemp(baseTemp, zone, hour, windSpeed);
+        const risk = calcThermalRisk(adjTemp);
+        const dvsScore = calcDVS(trustScore, adjTemp);
+        const tstScore = calcTST(trustScore, zone, packaging, hour);
+        setAdjustedTemp(adjTemp);
+        setThermalRisk(risk);
+        setDvs(dvsScore);
+        setTst(tstScore);
+      } finally {
+        setIsFetchingMetrics(false);
+      }
+    };
+    
+    fetchMicroclimateMetrics();
+  }, [baseTemp, zone, packaging, hour, windSpeed, trustScore]);
 
   const fetchLiveWeather = async () => {
     setIsFetchingWeather(true);
@@ -599,27 +683,36 @@ function MicroclimateSimulator({ trustScore }) {
 
         {/* RIGHT COLUMN */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", alignItems: "center", background: "var(--bg-input)", borderRadius: 12, border: "1px solid var(--border-primary)" }}>
-            <div style={{ position: "relative", marginBottom: 24 }}>
-              <div style={{ background: "var(--bg-primary)", borderRadius: "50%", padding: 12 }}>
-                <CircleArc value={dvs} color={dvsColor} size={150} strokeWidth={14} />
+          <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", alignItems: "center", background: "var(--bg-input)", borderRadius: 12, border: "1px solid var(--border-primary)", minHeight: 250 }}>
+            {isFetchingMetrics ? (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 250 }}>
+                <div style={{ fontSize: 24, marginBottom: 12 }}>⏳</div>
+                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>Analyzing microclimate...</div>
               </div>
-              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center" }}>
-                <div style={{ fontSize: 36, fontWeight: 700, color: dvsColor, lineHeight: 1, fontFamily: "'JetBrains Mono', monospace" }}>{dvs}</div>
-                <div style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 600, marginTop: 4 }}>DVS SCORE</div>
-              </div>
-            </div>
+            ) : (
+              <>
+                <div style={{ position: "relative", marginBottom: 24 }}>
+                  <div style={{ background: "var(--bg-primary)", borderRadius: "50%", padding: 12 }}>
+                    <CircleArc value={dvs} color={dvsColor} size={150} strokeWidth={14} />
+                  </div>
+                  <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center" }}>
+                    <div style={{ fontSize: 36, fontWeight: 700, color: dvsColor, lineHeight: 1, fontFamily: "'JetBrains Mono', monospace" }}>{dvs}</div>
+                    <div style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 600, marginTop: 4 }}>DVS SCORE</div>
+                  </div>
+                </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, width: "100%" }}>
-              <div style={{ background: "var(--bg-primary)", padding: "16px 0", borderRadius: 8, textAlign: "center", border: "1px solid var(--border-primary)" }}>
-                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Thermal Survival</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{tst} min</div>
-              </div>
-              <div style={{ background: "var(--bg-primary)", padding: "16px 0", borderRadius: 8, textAlign: "center", border: "1px solid var(--border-primary)" }}>
-                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Route Duration</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>90 min</div>
-              </div>
-            </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, width: "100%" }}>
+                  <div style={{ background: "var(--bg-primary)", padding: "16px 0", borderRadius: 8, textAlign: "center", border: "1px solid var(--border-primary)" }}>
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Thermal Survival</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{tst} min</div>
+                  </div>
+                  <div style={{ background: "var(--bg-primary)", padding: "16px 0", borderRadius: 8, textAlign: "center", border: "1px solid var(--border-primary)" }}>
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Route Duration</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>90 min</div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           <div style={{ padding: "20px 24px", background: "var(--bg-input)", borderRadius: 12, border: "1px solid var(--border-primary)" }}>
