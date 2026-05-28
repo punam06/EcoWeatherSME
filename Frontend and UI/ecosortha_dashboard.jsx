@@ -526,6 +526,9 @@ function MicroclimateSimulator({ trustScore }) {
   const [tst, setTst] = useState(0);
   const [adjustedTemp, setAdjustedTemp] = useState(31);
   const [thermalRisk, setThermalRisk] = useState({ value: 0.1, label: "Low", color: ACCENT.green });
+  const [isListening, setIsListening] = useState(false);
+  const [speechLang, setSpeechLang] = useState("en-US");
+  const [speechSupported, setSpeechSupported] = useState(true);
 
   const uhi = UHI_ZONES[zone] || UHI_ZONES["Mirpur"];
   const dvsColor = dvs >= 75 ? ACCENT.green : dvs >= 55 ? ACCENT.amber : ACCENT.red;
@@ -579,18 +582,95 @@ function MicroclimateSimulator({ trustScore }) {
     fetchMicroclimateMetrics();
   }, [baseTemp, zone, packaging, hour, windSpeed, trustScore]);
 
-  const fetchLiveWeather = async () => {
+  useEffect(() => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      setSpeechSupported(false);
+    } else {
+      const locale = (navigator.languages && navigator.languages[0]) || navigator.language || "en-US";
+      if (locale.toLowerCase().startsWith("bn")) {
+        setSpeechLang("bn-BD");
+      }
+
+      // Pre-detect language based on location
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          try {
+            const { latitude, longitude } = position.coords;
+            const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`);
+            const data = await res.json();
+            if (data.countryCode === "BD") {
+              setSpeechLang("bn-BD");
+            } else if (!locale.toLowerCase().startsWith("bn")) {
+              setSpeechLang("en-US");
+            }
+          } catch (e) {
+            console.error("Failed to detect language from location", e);
+          }
+        },
+        () => console.warn("Geolocation denied/failed. Defaulting to en-US.")
+      );
+    }
+  }, []);
+
+  const handleListen = () => {
+    if (isListening) return;
+    startSpeechRecognition(speechLang);
+  };
+
+  const startSpeechRecognition = (lang) => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setSpeechSupported(false);
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = lang;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+    };
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setZoneSearch(transcript);
+      // Auto-select zone if matched
+      const matchedZone = Object.keys(UHI_ZONES).find(z => z.toLowerCase().includes(transcript.toLowerCase()));
+      if (matchedZone) {
+        setZone(matchedZone);
+      }
+      // Auto-fetch weather for spoken location
+      fetchLiveWeather(matchedZone || transcript);
+    };
+
+    recognition.onerror = (event) => {
+      console.error("Speech recognition error", event.error);
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.start();
+  };
+
+  const fetchLiveWeather = async (locationQuery = null) => {
     setIsFetchingWeather(true);
+    const targetLocation = typeof locationQuery === "string" ? locationQuery : (zoneSearch || zone || "Dhaka");
     try {
-      // Dhaka coordinates
-      const res = await fetch("https://api.open-meteo.com/v1/forecast?latitude=23.8103&longitude=90.4125&current_weather=true");
-      const data = await res.json();
-      if (data && data.current_weather) {
-        setBaseTemp(data.current_weather.temperature);
-        setWindSpeed(data.current_weather.windspeed);
+      const geoRes = await window.APIClient.geocode(targetLocation);
+      if (geoRes.success && geoRes.data) {
+        const { lat, lon } = geoRes.data;
+        const weatherRes = await window.APIClient.getWeather(lat, lon);
+        if (weatherRes.success && weatherRes.data) {
+          setBaseTemp(Math.round(weatherRes.data.temperature * 10) / 10);
+          setWindSpeed(Math.round(weatherRes.data.windspeed_kmh));
+        }
       }
     } catch (e) {
-      console.error("Failed to fetch live weather", e);
+      console.error("Failed to fetch live weather via backend", e);
     }
     setIsFetchingWeather(false);
   };
@@ -631,16 +711,57 @@ function MicroclimateSimulator({ trustScore }) {
 
           <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, marginTop: 16, fontWeight: 500 }}>Delivery Zone (Dhaka)</div>
           
-          <div style={{ position: "relative", marginBottom: 8 }}>
-            <span style={{ position: "absolute", left: 12, top: 9, fontSize: 13 }}>🔍</span>
-            <input 
-              type="text" 
-              placeholder="Search zones..." 
-              value={zoneSearch}
-              onChange={e => setZoneSearch(e.target.value)}
-              style={{ width: "100%", padding: "10px 12px 10px 34px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", outline: "none", fontSize: 13 }}
-            />
+          <div style={{ position: "relative", marginBottom: 8, display: "flex", gap: 8 }}>
+            <div style={{ position: "relative", flex: 1 }}>
+              <span style={{ position: "absolute", left: 12, top: 9, fontSize: 13 }}>🔍</span>
+              <input 
+                type="text" 
+                placeholder="Search zones..." 
+                value={zoneSearch}
+                onChange={e => setZoneSearch(e.target.value)}
+                style={{ width: "100%", padding: "10px 12px 10px 34px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", outline: "none", fontSize: 13 }}
+              />
+            </div>
+            {speechSupported && (
+              <>
+                <select 
+                  value={speechLang} 
+                  onChange={e => setSpeechLang(e.target.value)}
+                  style={{
+                    padding: "0 8px", borderRadius: 8, border: "1px solid var(--border-primary)",
+                    background: "var(--bg-input)", color: "var(--text-secondary)", fontSize: 11, outline: "none"
+                  }}
+                  title="Override Speech Language"
+                >
+                  <option value="en-US">EN</option>
+                  <option value="bn-BD">BN</option>
+                </select>
+                <button 
+                  onClick={handleListen}
+                  title={isListening ? "Listening..." : "Speak location"}
+                  style={{
+                    width: 40, height: 40, borderRadius: 8, border: `1px solid ${isListening ? ACCENT.red : ACCENT.blueBorder}`,
+                    background: isListening ? ACCENT.redBg : "var(--bg-input)",
+                    color: isListening ? ACCENT.red : ACCENT.blue,
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, cursor: "pointer",
+                    transition: "all 0.2s ease"
+                  }}
+                >
+                  {isListening ? "🔴" : "🎤"}
+                </button>
+              </>
+            )}
           </div>
+          {speechSupported && isListening && (
+            <div style={{ fontSize: 10, color: ACCENT.red, marginBottom: 8, marginTop: -4 }}>
+              Listening ({speechLang})... Please speak a zone name.
+            </div>
+          )}
+          {!speechSupported && (
+             <div style={{ fontSize: 10, color: "var(--text-dim)", marginBottom: 8, marginTop: -4 }}>
+              Microphone not supported in this browser.
+            </div>
+          )}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 16, maxHeight: "160px", overflowY: "auto", paddingRight: 4 }}>
             {filteredZones.map(z => {
@@ -1129,7 +1250,31 @@ function ChatbotView() {
   ]);
   const [input, setInput] = useState("");
   const [isRecording, setIsRecording] = useState(false);
+  const [speechLang, setSpeechLang] = useState("en-US");
+  const [speechSupported, setSpeechSupported] = useState(true);
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      setSpeechSupported(false);
+    } else {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          try {
+            const { latitude, longitude } = position.coords;
+            const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`);
+            const data = await res.json();
+            if (data.countryCode === "BD") {
+              setSpeechLang("bn-BD");
+            }
+          } catch (e) {
+            console.error("Failed to detect language from location", e);
+          }
+        },
+        () => console.warn("Geolocation denied/failed. Defaulting to en-US.")
+      );
+    }
+  }, []);
 
   const handleSend = (text, attachedFileName = null) => {
     if (!text.trim() && !attachedFileName) return;
@@ -1159,13 +1304,41 @@ function ChatbotView() {
   };
 
   const handleVoice = () => {
-    setIsRecording(!isRecording);
-    if (!isRecording) {
-      setTimeout(() => {
-        setIsRecording(false);
-        handleSend("Can you give me a dispatch forecast for today?");
-      }, 3000);
+    if (isRecording) return;
+    startSpeechRecognition(speechLang);
+  };
+
+  const startSpeechRecognition = (lang) => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setSpeechSupported(false);
+      return;
     }
+    const recognition = new SpeechRecognition();
+    recognition.lang = lang;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setIsRecording(true);
+    };
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setInput(transcript);
+      handleSend(transcript);
+    };
+
+    recognition.onerror = (event) => {
+      console.error("Speech recognition error", event.error);
+      setIsRecording(false);
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    recognition.start();
   };
 
   const handleFileUpload = (e) => {
@@ -1215,7 +1388,12 @@ function ChatbotView() {
           {isRecording && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 18px", background: "var(--bg-input)", borderRadius: "18px 18px 18px 0", width: "fit-content", border: "1px solid var(--border-primary)" }}>
               <div style={{ width: 8, height: 8, background: ACCENT.red, borderRadius: "50%", animation: "breathe 1s infinite" }}></div>
-              <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Listening...</span>
+              <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Listening ({speechLang})...</span>
+            </div>
+          )}
+          {!speechSupported && (
+            <div style={{ padding: "12px 18px", fontSize: 12, color: ACCENT.amber, background: "var(--bg-input)", borderRadius: "18px 18px 18px 0", width: "fit-content", border: `1px solid ${ACCENT.amberBorder}` }}>
+              Microphone not supported in this browser.
             </div>
           )}
         </div>
@@ -1248,15 +1426,31 @@ function ChatbotView() {
               style={{ display: "none" }} 
             />
           </button>
-          <button onClick={handleVoice} style={{
-            width: 44, height: 44, borderRadius: "50%", border: "none", cursor: "pointer",
-            background: isRecording ? ACCENT.redBg : "var(--bg-input)",
-            color: isRecording ? ACCENT.red : "var(--text-secondary)",
-            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
-            transition: "all 0.3s ease"
-          }} title="Voice Input">
-            🎙️
-          </button>
+          {speechSupported && (
+            <>
+              <select 
+                value={speechLang} 
+                onChange={e => setSpeechLang(e.target.value)}
+                style={{
+                  padding: "0 10px", borderRadius: 24, border: "1px solid var(--border-primary)",
+                  background: "var(--bg-input)", color: "var(--text-secondary)", fontSize: 12, outline: "none", height: 44
+                }}
+                title="Language"
+              >
+                <option value="en-US">EN</option>
+                <option value="bn-BD">BN</option>
+              </select>
+              <button onClick={handleVoice} disabled={isRecording} style={{
+                width: 44, height: 44, borderRadius: "50%", border: "none", cursor: isRecording ? "not-allowed" : "pointer",
+                background: isRecording ? ACCENT.redBg : "var(--bg-input)",
+                color: isRecording ? ACCENT.red : "var(--text-secondary)",
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
+                transition: "all 0.3s ease", opacity: isRecording ? 0.8 : 1
+              }} title="Voice Input">
+                🎙️
+              </button>
+            </>
+          )}
           <input 
             type="text" 
             placeholder="Type your message..." 

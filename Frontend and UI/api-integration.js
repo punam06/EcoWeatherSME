@@ -5,7 +5,8 @@
  */
 
 // API Client - Simple fetch wrapper for backend communication
-const API_BASE_URL = window.location.hostname === 'localhost' 
+const IS_STATIC_FILE = window.location.protocol === 'file:';
+const API_BASE_URL = !IS_STATIC_FILE && window.location.hostname === 'localhost' 
   ? 'http://localhost:5001' 
   : '';
 
@@ -70,10 +71,19 @@ const APIClient = {
   // Users
   getUsers: () => APIClient.request('/users'),
   createUser: (data) => APIClient.request('/users', { method: 'POST', body: JSON.stringify(data) }),
+
+  // External APIs (Weather & Geocoding)
+  geocode: (query) => APIClient.request(`/geocode?q=${encodeURIComponent(query)}`),
+  getWeather: (lat, lon) => APIClient.request(`/weather?lat=${lat}&lon=${lon}`),
 };
 
 // Utility function to initialize database connections on page load
 async function initializeConnections() {
+  if (IS_STATIC_FILE) {
+    console.log('ℹ️ Static file mode detected, skipping backend initialization');
+    return false;
+  }
+
   console.log('🔄 Initializing connections...');
   
   try {
@@ -107,8 +117,10 @@ window.APIClient = APIClient;
 window.initializeConnections = initializeConnections;
 
 // Auto-initialize on load
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initializeConnections);
-} else {
-  initializeConnections();
+if (!IS_STATIC_FILE) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeConnections);
+  } else {
+    initializeConnections();
+  }
 }
