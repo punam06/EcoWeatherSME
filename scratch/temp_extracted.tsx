@@ -1,172 +1,16 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="EcoSortha AI ClimateShield — SME Dashboard for climate-resilient dispatch of heat-sensitive products" />
-  <title>EcoSortha AI · ClimateShield Dashboard</title>
-  
-  <script>
-    // Global Error Diagnostic Boundary
-    window.onerror = function(message, source, lineno, colno, error) {
-      showErrorDiagnostic({
-        type: 'Runtime Error / Compilation Error',
-        message: message,
-        source: source,
-        line: lineno,
-        column: colno,
-        stack: error ? error.stack : 'N/A'
-      });
-      return false;
-    };
 
-    window.addEventListener('unhandledrejection', function(event) {
-      showErrorDiagnostic({
-        type: 'Unhandled Promise Rejection',
-        message: event.reason ? event.reason.message || event.reason : 'Unknown Promise Rejection',
-        source: 'Promise',
-        line: 'N/A',
-        column: 'N/A',
-        stack: event.reason && event.reason.stack ? event.reason.stack : 'N/A'
-      });
-    });
+declare var React: any;
+declare var ReactDOM: any;
+declare var ACCENT: any;
+declare var UHI_ZONES: any;
+declare var calcBARIDVS: any;
+declare var getSolarHourMultiplier: any;
+declare var API_BASE_URL: any;
 
-    function showErrorDiagnostic(details) {
-      // Ensure document body exists or wait for it
-      if (!document.body) {
-        window.addEventListener('DOMContentLoaded', () => showErrorDiagnostic(details));
-        return;
-      }
-      
-      let errorDiv = document.getElementById('error-diagnostic-overlay');
-      if (!errorDiv) {
-        errorDiv = document.createElement('div');
-        errorDiv.id = 'error-diagnostic-overlay';
-        errorDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#0F172A;color:#F87171;padding:40px;font-family:monospace;z-index:99999;overflow:auto;box-sizing:border-box;';
-        document.body.appendChild(errorDiv);
-      }
-      
-      errorDiv.innerHTML = `
-        <div style="max-width:900px;margin:0 auto;background:#1E293B;border:2px solid #EF4444;border-radius:12px;padding:30px;box-shadow:0 10px 30px rgba(0,0,0,0.5)">
-          <h1 style="color:#EF4444;font-size:24px;margin-bottom:20px;border-bottom:1px solid #334155;padding-bottom:10px;">⚠️ EcoSortha ClimateShield - Diagnostic Error Alert</h1>
-          <p style="font-size:16px;color:#F1F5F9;margin-bottom:15px;">An error occurred while loading or compiling the frontend application. Below are the diagnostic details:</p>
-          <table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:14px;color:#CBD5E1;">
-            <tr><td style="padding:8px;font-weight:bold;color:#F87171;width:120px;border-bottom:1px solid #334155;">Type:</td><td style="padding:8px;border-bottom:1px solid #334155;">${details.type}</td></tr>
-            <tr><td style="padding:8px;font-weight:bold;color:#F87171;border-bottom:1px solid #334155;">Message:</td><td style="padding:8px;border-bottom:1px solid #334155;color:#F1F5F9;">${details.message}</td></tr>
-            <tr><td style="padding:8px;font-weight:bold;color:#F87171;border-bottom:1px solid #334155;">File:</td><td style="padding:8px;border-bottom:1px solid #334155;">${details.source}</td></tr>
-            <tr><td style="padding:8px;font-weight:bold;color:#F87171;border-bottom:1px solid #334155;">Line / Col:</td><td style="padding:8px;border-bottom:1px solid #334155;">${details.line} : ${details.column}</td></tr>
-          </table>
-          <h3 style="color:#F1F5F9;margin-bottom:10px;">Stack Trace / Context:</h3>
-          <pre style="background:#0F172A;color:#94A3B8;padding:15px;border-radius:6px;overflow:auto;max-height:350px;white-space:pre-wrap;font-size:12px;border:1px solid #334155;">${details.stack}</pre>
-          <div style="margin-top:20px;text-align:right;">
-            <button onclick="window.location.reload()" style="background:#EF4444;color:#FFF;border:none;padding:10px 20px;border-radius:6px;font-weight:bold;cursor:pointer;font-family:inherit;">🔄 Reload Page</button>
-          </div>
-        </div>
-      `;
-    }
-  </script>
-
-  <!-- Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
-
-  <!-- Chart.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-  
-  <!-- API Integration Layer -->
-  <script src="./api-integration.js"></script>
-
-  <!-- React + Babel (browser) -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { scroll-behavior: smooth; }
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
-    ::selection { background: rgba(16,185,129,0.3); color: #fff; }
-
-    /* ── Scrollbar ── */
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(100,116,139,0.3); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,0.5); }
-
-    /* ── Range Sliders ── */
-    input[type="range"] {
-      -webkit-appearance: none;
-      appearance: none;
-      background: var(--gauge-track);
-      border-radius: 6px;
-      outline: none;
-      height: 5px;
-      cursor: pointer;
-      transition: background 0.3s ease;
-    }
-    input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 16px; height: 16px;
-      border-radius: 50%;
-      border: 2px solid rgba(255,255,255,0.15);
-      cursor: pointer;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-    input[type="range"]::-webkit-slider-thumb:hover {
-      transform: scale(1.25);
-      box-shadow: 0 0 10px rgba(16,185,129,0.4);
-    }
-    input[type="range"]::-moz-range-thumb {
-      width: 16px; height: 16px;
-      border-radius: 50%;
-      border: 2px solid rgba(255,255,255,0.15);
-      cursor: pointer;
-    }
-
-    /* ── Animations ── */
-    @keyframes fadeSlideIn {
-      from { opacity: 0; transform: translateY(12px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes pulseGlow {
-      0%, 100% { box-shadow: 0 0 8px rgba(16,185,129,0.25); }
-      50% { box-shadow: 0 0 20px rgba(16,185,129,0.5); }
-    }
-    @keyframes shimmer {
-      0% { background-position: -200% 0; }
-      100% { background-position: 200% 0; }
-    }
-    @keyframes breathe {
-      0%, 100% { opacity: 0.6; }
-      50% { opacity: 1; }
-    }
-
-    /* ── Buttons Reset ── */
-    button {
-      font-family: inherit;
-      border: none;
-      outline: none;
-    }
-    button:focus-visible {
-      outline: 2px solid #10B981;
-      outline-offset: 2px;
-    }
-  </style>
-</head>
-<body>
-  <div id="root"></div>
-
-  <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-    const IS_STATIC_FILE_HTML = window.location.protocol === 'file:';
-    const API_BASE_URL_HTML = !IS_STATIC_FILE_HTML && window.location.hostname === 'localhost' 
+    const IS_STATIC_FILE = window.location.protocol === 'file:';
+    const API_BASE_URL = !IS_STATIC_FILE && window.location.hostname === 'localhost' 
       ? 'http://localhost:5001' 
       : '';
 
@@ -354,36 +198,28 @@ function calcTST(trustScore, zone, packaging, hour) {
   const uhi = UHI_ZONES[zone];
   const pkgFactor = packaging === "thermal" ? 4.0 : packaging === "insulated" ? 2.0 : 1.0;
   const solarMulti = getSolarHourMultiplier(hour);
-  const raw = (trustScore * pkgFactor * uhi.baseSurvival) / (uhi.hazardMultiplier * solarMulti);
+  const raw = (trustScore * pkgFactor * uhi.baseSurvival) / (uhi.hazardMultiplier * solarMulti) * 60;
   return Math.max(10, Math.round(raw));
 }
 
-function calcBARIDVS({ trustScore, zone, packaging, hour, baseTemp, windSpeed, routeDuration }) {
+function calcBARIDVS({ trustScore, zone, packaging, hour, baseTemp, windSpeed }) {
   const uhi = UHI_ZONES[zone] || UHI_ZONES["Mirpur"];
   const pkgFactor = packaging === "thermal" ? 4.0 : packaging === "insulated" ? 2.0 : 1.0;
   const solarFactor = getSolarFactor(hour);
-  const windCooling = windSpeed * 0.08;
+  const windCooling = windSpeed > 15 ? 1.0 : 0.0;
   const adjTemp = baseTemp + (uhi.offset * solarFactor) - windCooling;
 
-  const trf = Math.max(0.05, Math.min(1.0, (adjTemp - 22) / 18));
-  const dvsBase = Math.round(trustScore * (1 - trf * 0.42));
+  const trf = adjTemp > 38 ? 1.0 : adjTemp > 35 ? 0.5 : 0.1;
+  const dvsScore = Math.round(trustScore * (1 - trf * 0.42));
 
   const solarMulti = getSolarHourMultiplier(hour);
-  const tempFactor = Math.max(0.3, (adjTemp - 18) / 10);
-  const rawTST = (trustScore * pkgFactor * uhi.baseSurvival * 1.8) / (uhi.hazardMultiplier * solarMulti * tempFactor);
+  const rawTST = (trustScore * pkgFactor * uhi.baseSurvival) / (uhi.hazardMultiplier * solarMulti) * 60;
   const tst = Math.max(10, Math.round(rawTST));
 
-  const duration = routeDuration ?? 0;
-  const penalty = Math.round((duration / tst) * 12 + (duration > tst ? (duration - tst) * 0.4 : 0));
-  
-  const dvs = Math.max(0, Math.min(100, dvsBase - penalty));
-  const deliveryTrustScore = Math.max(0, Math.min(100, Math.round(trustScore * (1 - trf * 0.25) - (duration > tst ? (duration - tst) * 0.15 : 0))));
-
   return {
-    dvs,
+    dvs: Math.max(0, Math.min(100, dvsScore)),
     tst,
-    adjustedTemp: adjTemp,
-    trustScore: deliveryTrustScore
+    adjustedTemp: adjTemp
   };
 }
 
@@ -550,16 +386,13 @@ function IoTForm({ onResult }) {
   const [certified, setCertified] = useState(false);
   const [ts, setTs] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [qrCodeImg, setQrCodeImg] = useState(null);
-  const [isCertifying, setIsCertifying] = useState(false);
-  const [batchNum, setBatchNum] = useState("");
 
   useEffect(() => {
     const fetchTrustScore = async () => {
       setIsLoading(true);
       try {
         const response = await fetch(
-          `${API_BASE_URL_HTML}/api/clever-responder`,
+          `${API_BASE_URL}/api/clever-responder`,
           {
             method: "POST",
             headers: {
@@ -579,17 +412,12 @@ function IoTForm({ onResult }) {
         setTs(data.trustScore || 0);
         onResult(data.trustScore || 0);
         setCertified(false);
-        setQrCodeImg(null);
-        setBatchNum("");
       } catch (error) {
         console.error("Failed to fetch trust score:", error);
         // Fallback to local calculation on error
         const fallbackScore = calcTrustScore({ pH, EC, temp, ratio, days });
         setTs(fallbackScore);
         onResult(fallbackScore);
-        setCertified(false);
-        setQrCodeImg(null);
-        setBatchNum("");
       } finally {
         setIsLoading(false);
       }
@@ -637,39 +465,22 @@ function IoTForm({ onResult }) {
           <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: 7–14 days</div>
         </div>
       </div>
-      <button 
-        onClick={async () => { 
-          if (ts >= 60) {
-            setIsCertifying(true);
-            try {
-              const res = await window.APIClient.certifyBatch({ batchId: `BCH-${Date.now().toString().slice(-6)}` });
-              if (res.success) {
-                setQrCodeImg(res.data.qrCodeDataUrl);
-                setBatchNum(res.data.batchId);
-                setCertified(true);
-              }
-            } catch (err) {
-              console.error("Batch certification failed:", err);
-            } finally {
-              setIsCertifying(false);
-            }
-          } 
-        }}
-        disabled={ts < 60 || isLoading || isCertifying}
+      <button onClick={() => { if (ts >= 60) setCertified(true); }}
+        disabled={ts < 60 || isLoading}
         style={{
           width: "100%", padding: "12px", borderRadius: 10,
           border: `1px solid ${ts >= 60 ? ACCENT.green : "var(--border-primary)"}`,
           background: ts >= 60 ? ACCENT.greenBg : "var(--bg-input)",
           color: ts >= 60 ? ACCENT.green : "var(--text-dim)",
-          cursor: ts >= 60 && !isLoading && !isCertifying ? "pointer" : "not-allowed",
+          cursor: ts >= 60 && !isLoading ? "pointer" : "not-allowed",
           fontSize: 13, fontWeight: 600, letterSpacing: "0.05em",
           transition: "all 0.3s ease",
           boxShadow: ts >= 60 ? ACCENT.greenBg : "none",
-          opacity: isLoading || isCertifying ? 0.7 : 1,
+          opacity: isLoading ? 0.7 : 1,
         }}>
-        {isCertifying ? "⏳ Generating Cryptographic QR..." : (isLoading ? "⏳ Calculating..." : ts >= 60 ? "✦ Certify Batch & Generate QR Certificate" : "Trust Score too low to certify")}
+        {isLoading ? "⏳ Calculating..." : ts >= 60 ? "✦ Certify Batch & Generate QR Certificate" : "Trust Score too low to certify"}
       </button>
-      {certified && qrCodeImg && (
+      {certified && (
         <div style={{
           marginTop: 14, padding: 14, borderRadius: 10,
           border: `1px solid ${ACCENT.greenBorder}`, background: ACCENT.greenBg,
@@ -678,18 +489,14 @@ function IoTForm({ onResult }) {
           <div style={{ fontSize: 11, color: ACCENT.green, fontWeight: 700, marginBottom: 10 }}>✓ BATCH CERTIFIED — Certificate Generated</div>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
             <div style={{
-              width: 100, height: 100, background: "var(--bg-primary)", borderRadius: 8,
+              width: 56, height: 56, background: "var(--bg-input)", borderRadius: 8,
               display: "flex", alignItems: "center", justifyContent: "center",
-              border: `1px solid ${ACCENT.greenBorder}`, flexShrink: 0, overflow: "hidden"
+              fontSize: 8, color: ACCENT.green, border: `1px solid ${ACCENT.greenBorder}`, flexShrink: 0,
             }}>
-              <img 
-                src={qrCodeImg} 
-                alt="Cryptographic QR Code" 
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              />
+              <div style={{ textAlign: "center", lineHeight: 1.4 }}>QR<br/>CODE<br/>▦</div>
             </div>
             <div style={{ fontSize: 10, color: "var(--text-secondary)", lineHeight: 1.9 }}>
-              <div><span style={{ color: ACCENT.green }}>Batch #:</span> {batchNum}</div>
+              <div><span style={{ color: ACCENT.green }}>Batch #:</span> BCH-{Date.now().toString().slice(-6)}</div>
               <div><span style={{ color: ACCENT.green }}>Trust Score:</span> {ts}/100</div>
               <div><span style={{ color: ACCENT.green }}>pH / EC / Temp:</span> {pH} / {EC} / {temp}°C</div>
               <div><span style={{ color: ACCENT.green }}>Ratio / Days:</span> {ratio} / {days}</div>
@@ -707,7 +514,7 @@ function IoTForm({ onResult }) {
    ═══════════════════════════════════════════════════════════════ */
 function DispatchCalendar({ baseTemp, zone, trustScore, windSpeed, packaging }) {
   const hours = Array.from({ length: 24 }, (_, h) => {
-    const { dvs } = calcBARIDVS({ trustScore, zone, packaging, hour: h, baseTemp, windSpeed, routeDuration: 0 });
+    const { dvs } = calcBARIDVS({ trustScore, zone, packaging, hour: h, baseTemp, windSpeed });
     return { h, dvs };
   });
   return (
@@ -746,7 +553,6 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
   const [packaging, setPackaging] = useState("standard");
   const [hour, setHour] = useState(new Date().getHours());
   const [windSpeed, setWindSpeed] = useState(8);
-  const [routeDuration, setRouteDuration] = useState(90);
   const [zoneSearch, setZoneSearch] = useState("");
   const [isFetchingWeather, setIsFetchingWeather] = useState(false);
   const [isFetchingMetrics, setIsFetchingMetrics] = useState(false);
@@ -770,25 +576,20 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
 
   const filteredZones = Object.keys(UHI_ZONES).filter(z => z.toLowerCase().includes(zoneSearch.toLowerCase()));
 
-  // Auto-fetch weather whenever the selected zone changes
-  useEffect(() => {
-    fetchLiveWeather(zone);
-  }, [zone]);
-
   // Reset scores and prepare for a recalculation when inputs change
   useEffect(() => {
     setDisplayDvs(0);
     setDisplayTrustScore(0);
     setDisplayTst(0);
     setHasCalculated(false);
-  }, [baseTemp, zone, packaging, hour, windSpeed, trustScore, routeDuration]);
+  }, [baseTemp, zone, packaging, hour, windSpeed, trustScore]);
 
   const calculateViability = async () => {
     setIsFetchingMetrics(true);
     setHasCalculated(true);
     try {
       const response = await fetch(
-        `${API_BASE_URL_HTML}/api/clever-responder`,
+        `${API_BASE_URL}/api/clever-responder`,
         {
           method: "POST",
           headers: {
@@ -802,14 +603,12 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
             hour,
             baseTemp,
             windSpeed,
-            routeDuration,
           }),
         }
       );
       const data = await response.json();
       const targetDvs = data.dvs || 0;
       const targetTst = data.tst || 0;
-      const targetTS = data.trustScore || trustScore;
 
       setAdjustedTemp(data.adjustedTemp || baseTemp);
       setThermalRisk(data.thermalRisk || { value: 0.1, label: "Low", color: ACCENT.green });
@@ -832,11 +631,11 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
 
       // Animate Trust Score
       let currentTS = 0;
-      const tsStep = Math.max(1, Math.ceil(targetTS / 30));
+      const tsStep = Math.max(1, Math.ceil(trustScore / 30));
       const tsInterval = setInterval(() => {
         currentTS += tsStep;
-        if (currentTS >= targetTS) {
-          setDisplayTrustScore(targetTS);
+        if (currentTS >= trustScore) {
+          setDisplayTrustScore(trustScore);
           clearInterval(tsInterval);
         } else {
           setDisplayTrustScore(currentTS);
@@ -859,14 +658,13 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
     } catch (error) {
       console.error("Failed to fetch microclimate metrics:", error);
       // Local fallback using dynamic calculation
-      const { dvs: dvsScore, tst: tstScore, adjustedTemp: adjTemp, trustScore: deliveryTS } = calcBARIDVS({
+      const { dvs: dvsScore, tst: tstScore, adjustedTemp: adjTemp } = calcBARIDVS({
         trustScore,
         zone,
         packaging,
         hour,
         baseTemp,
-        windSpeed,
-        routeDuration
+        windSpeed
       });
       const risk = calcThermalRisk(adjTemp);
 
@@ -889,11 +687,11 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
       }, 15);
 
       let currentTS = 0;
-      const tsStep = Math.max(1, Math.ceil(deliveryTS / 30));
+      const tsStep = Math.max(1, Math.ceil(trustScore / 30));
       const tsInterval = setInterval(() => {
         currentTS += tsStep;
-        if (currentTS >= deliveryTS) {
-          setDisplayTrustScore(deliveryTS);
+        if (currentTS >= trustScore) {
+          setDisplayTrustScore(trustScore);
           clearInterval(tsInterval);
         } else {
           setDisplayTrustScore(currentTS);
@@ -1128,11 +926,6 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
             ))}
           </div>
 
-          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>Route Duration</div>
-          <div style={{ background: "var(--bg-input)", padding: 14, borderRadius: 10, border: "1px solid var(--border-primary)", marginBottom: 16 }}>
-            <SliderRow label="Delivery Route Duration" min={15} max={300} step={5} value={routeDuration} onChange={setRouteDuration} unit=" min" color={ACCENT.blue} />
-          </div>
-
           <button
             onClick={calculateViability}
             disabled={isFetchingMetrics}
@@ -1206,8 +999,8 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
                     <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{displayTst} min</div>
                   </div>
                   <div style={{ background: "var(--bg-primary)", padding: "16px 0", borderRadius: 8, textAlign: "center", border: "1px solid var(--border-primary)" }}>
-                    <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Adjusted Temp</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{adjustedTemp.toFixed(1)}°C</div>
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Route Duration</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>90 min</div>
                   </div>
                 </div>
               </>
@@ -1622,9 +1415,6 @@ const MOCK_PRODUCTS = [
 ];
 
 
-const IS_LOCAL_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const BACKEND_URL = IS_LOCAL_DEV ? 'http://localhost:5001' : 'https://backsme.onrender.com';
-
 function ChatbotView({ setTab }) {
   const [messages, setMessages] = useState([
     { role: "system", content: "Hello! I am EcoSortha AI, your voice and text-based assistant. I can provide microclimate forecasts, smart dispatch suggestions, or analyze files and context. How can I help you today?", time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }
@@ -1689,7 +1479,7 @@ function ChatbotView({ setTab }) {
         const userStr = localStorage.getItem("user") || localStorage.getItem("farmer");
         const user = userStr ? JSON.parse(userStr) : null;
         
-        const voiceRes = await fetch(`${BACKEND_URL}/api/orders/voice`, {
+        const voiceRes = await fetch("http://localhost:5001/api/orders/voice", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1718,7 +1508,7 @@ function ChatbotView({ setTab }) {
       const userStr = localStorage.getItem("user") || localStorage.getItem("farmer");
       const user = userStr ? JSON.parse(userStr) : null;
       
-      const res = await fetch(`${BACKEND_URL}/api/agent/message`, {
+      const res = await fetch("http://localhost:5001/api/agent/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1769,17 +1559,21 @@ function ChatbotView({ setTab }) {
         throw new Error(data.error || "Failed");
       }
     } catch (err) {
-      console.error("Backend agent call failed:", err);
-      // Show a real error message instead of a silent fake response
-      const isbn = speechLang.startsWith("bn");
-      const errorMsg = isbn
-        ? "⚠️ দুঃখিত, সার্ভারের সাথে সংযোগ স্থাপন করা যাচ্ছে না। অনুগ্রহ করে একটু পরে আবার চেষ্টা করুন।"
-        : "⚠️ Sorry, unable to reach the server. Please try again in a moment.";
-      setMessages(prev => [...prev, {
-        role: "system",
-        content: errorMsg,
-        time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
-      }]);
+      console.warn("Failed to get response from backend agent, falling back to mock reply:", err);
+      // Fallback mock responses
+      setTimeout(() => {
+        let reply = "I've recorded that for you.";
+        if (attachedFileName) {
+          reply = `I've analyzed the attached file: "${attachedFileName}". The context shows a sudden spike in ambient temperature. I suggest upgrading to thermal bins for this batch.`;
+        } else if (text.toLowerCase().includes("forecast")) {
+          reply = "Currently, the Mirpur zone is experiencing a moderate thermal hazard (38.7°C). I suggest delaying heat-sensitive dispatches until 5:00 PM when the solar factor drops.";
+        } else if (text.toLowerCase().includes("suggestion")) {
+          reply = "Based on your recent batches, upgrading to Thermal-Insulated packaging will extend your Thermal Survival Time (TST) by 4x, allowing safe midday deliveries.";
+        } else if (text.toLowerCase().includes("feedback")) {
+          reply = "Thank you for the feedback. I've logged this in the ESG ledger to improve our ML demand forecasting models.";
+        }
+        setMessages(prev => [...prev, { role: "system", content: reply, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }]);
+      }, 1000);
     }
   };
 
@@ -2145,7 +1939,7 @@ function AgentPanel({ setTab }) {
       const userStr = localStorage.getItem("user") || localStorage.getItem("farmer");
       const user = userStr ? JSON.parse(userStr) : null;
       
-      const response = await fetch(`${BACKEND_URL}/api/ai/chat/start`, {
+      const response = await fetch("http://localhost:5001/api/ai/chat/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ farmerId: user ? user.id : undefined })
@@ -2163,7 +1957,7 @@ function AgentPanel({ setTab }) {
   const endSession = async () => {
     if (!sessionId) return;
     try {
-      await fetch(`${BACKEND_URL}/api/ai/chat/end`, {
+      await fetch("http://localhost:5001/api/ai/chat/end", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId })
@@ -2199,7 +1993,7 @@ function AgentPanel({ setTab }) {
       const userStr = localStorage.getItem("user") || localStorage.getItem("farmer");
       const user = userStr ? JSON.parse(userStr) : null;
 
-      const response = await fetch(`${BACKEND_URL}/api/agent/message`, {
+      const response = await fetch("http://localhost:5001/api/agent/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2959,6 +2753,4 @@ window.EcoSorthaApp = EcoSorthaApp;
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(<EcoSorthaApp />);
-  </script>
-</body>
-</html>
+  
