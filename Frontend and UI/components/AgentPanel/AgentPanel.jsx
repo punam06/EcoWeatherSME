@@ -1,7 +1,7 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — AGENT PANEL COMPONENT (React / TypeScript)
- * File: Frontend and UI/components/AgentPanel/AgentPanel.tsx
+ * ECOSORTHA AI — AGENT PANEL COMPONENT (React / JavaScript)
+ * File: Frontend and UI/components/AgentPanel/AgentPanel.jsx
  *
  * Fully modular self-contained component for Next.js / Vite.
  * Uses exact standard CSS colors and animations matching dashboard.
@@ -13,23 +13,9 @@ import React, { useState, useEffect, useRef } from 'react';
 const IS_LOCAL_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 const BACKEND_URL = IS_LOCAL_DEV ? 'http://localhost:5001' : 'https://backsme.onrender.com';
 
-export interface ChatMessage {
-  role: 'user' | 'assistant';
-  type?: string;
-  content: string;
-  products?: any[];
-  pendingOrder?: any;
-  orderResult?: any;
-  navigationTarget?: string;
-}
-
-interface AgentPanelProps {
-  setTab: (tabIndex: number) => void;
-}
-
-export default function AgentPanel({ setTab }: AgentPanelProps) {
+export default function AgentPanel({ setTab }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+  const [messages, setMessages] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = sessionStorage.getItem('ecosortha_agent_panel_messages');
       if (saved) return JSON.parse(saved);
@@ -51,11 +37,11 @@ export default function AgentPanel({ setTab }: AgentPanelProps) {
   });
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [language, setLanguage] = useState<'en' | 'bn'>('bn');
+  const [language, setLanguage] = useState('bn');
   const [voiceSupported, setVoiceSupported] = useState(true);
 
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const recognitionRef = useRef<any>(null);
+  const messagesEndRef = useRef(null);
+  const recognitionRef = useRef(null);
 
   // Auto-scroll to bottom of chat
   useEffect(() => {
@@ -84,7 +70,7 @@ export default function AgentPanel({ setTab }: AgentPanelProps) {
 
   // Check Web Speech API support
   useEffect(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setVoiceSupported(false);
     }
@@ -141,7 +127,7 @@ export default function AgentPanel({ setTab }: AgentPanelProps) {
   };
 
   // Send message to agent backend
-  const handleSendMessage = async (textToSend?: string) => {
+  const handleSendMessage = async (textToSend) => {
     const text = textToSend || inputValue;
     if (!text.trim()) return;
 
@@ -224,7 +210,7 @@ export default function AgentPanel({ setTab }: AgentPanelProps) {
       return;
     }
 
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return;
 
     recognitionRef.current = new SpeechRecognition();
@@ -237,7 +223,7 @@ export default function AgentPanel({ setTab }: AgentPanelProps) {
       setIsRecording(true);
     };
 
-    recognition.onresult = (event: any) => {
+    recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
       handleSendMessage(transcript);
     };
