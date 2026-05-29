@@ -586,11 +586,12 @@ function MicroclimateSimulator({ trustScore }) {
       return;
     }
     
-    // Safari Bug Fix: Reuse the same instance, creating multiple instances causes 'not-allowed'
-    if (!recognitionRef.current) {
-      recognitionRef.current = new SpeechRecognition();
+    // Always abort old instance before creating new one to free up Safari mic lock
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch(e) {}
     }
-    const recognition = recognitionRef.current;
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
     
     recognition.lang = lang;
     recognition.interimResults = false;

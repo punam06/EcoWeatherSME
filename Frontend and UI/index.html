@@ -691,11 +691,12 @@ function MicroclimateSimulator({ trustScore }) {
       return;
     }
     
-    // Safari Bug Fix: Reuse the same instance, creating multiple instances causes 'not-allowed'
-    if (!recognitionRef.current) {
-      recognitionRef.current = new SpeechRecognition();
+    // Always abort old instance before creating new one to free up Safari mic lock
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch(e) {}
     }
-    const recognition = recognitionRef.current;
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
     
     recognition.lang = lang;
     recognition.interimResults = false;
@@ -1520,11 +1521,12 @@ function ChatbotView() {
       return;
     }
     
-    // Safari Bug Fix: Reuse the same instance, creating multiple instances causes 'not-allowed'
-    if (!recognitionRef.current) {
-      recognitionRef.current = new SpeechRecognition();
+    // Always abort old instance before creating new one to free up Safari mic lock
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch(e) {}
     }
-    const recognition = recognitionRef.current;
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
     
     recognition.lang = lang;
     recognition.interimResults = false;
@@ -1661,14 +1663,14 @@ function ChatbotView() {
                 <option value="en-US">EN</option>
                 <option value="bn-BD">BN</option>
               </select>
-              <button onClick={handleVoice} disabled={isRecording} style={{
-                width: 44, height: 44, borderRadius: "50%", border: "none", cursor: isRecording ? "not-allowed" : "pointer",
+              <button onClick={handleVoice} style={{
+                width: 44, height: 44, borderRadius: "50%", border: "none", cursor: "pointer",
                 background: isRecording ? ACCENT.redBg : "var(--bg-input)",
                 color: isRecording ? ACCENT.red : "var(--text-secondary)",
                 display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
-                transition: "all 0.3s ease", opacity: isRecording ? 0.8 : 1
-              }} title="Voice Input">
-                🎙️
+                transition: "all 0.3s ease"
+              }} title={isRecording ? "Stop Listening" : "Voice Input"}>
+                {isRecording ? "🛑" : "🎙️"}
               </button>
             </React.Fragment>
           )}
