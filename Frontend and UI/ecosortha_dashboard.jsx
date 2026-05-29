@@ -585,8 +585,13 @@ function MicroclimateSimulator({ trustScore }) {
       setSpeechSupported(false);
       return;
     }
-    const recognition = new SpeechRecognition();
-    recognitionRef.current = recognition;
+    
+    // Safari Bug Fix: Reuse the same instance, creating multiple instances causes 'not-allowed'
+    if (!recognitionRef.current) {
+      recognitionRef.current = new SpeechRecognition();
+    }
+    const recognition = recognitionRef.current;
+    
     recognition.lang = lang;
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
