@@ -54,6 +54,7 @@ const APIClient = {
   getBatch: (id) => APIClient.request(`/batches/${id}`),
   createBatch: (data) => APIClient.request('/batches', { method: 'POST', body: JSON.stringify(data) }),
   updateBatch: (id, data) => APIClient.request(`/batches/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  certifyBatch: (data) => APIClient.request('/batches/certify', { method: 'POST', body: JSON.stringify(data) }),
 
   // IoT readings
   getReadings: (batchId) => APIClient.request(`/batches/${batchId}/readings`),
@@ -67,6 +68,9 @@ const APIClient = {
     method: 'POST',
     body: JSON.stringify(params),
   }),
+
+  // ESG Metrics
+  getESGMetrics: () => APIClient.request('/esg'),
 
   // Forecast
   getDemandForecast: () => APIClient.request('/demand-forecast'),

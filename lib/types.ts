@@ -43,6 +43,14 @@ export interface ESGMetrics {
   spoilage_prevented_bdt: number;
   plastic_offset_kg: number;
   carbon_sequestered_kg: number;
+  water_saved_l: number;
+  waste_reduced_kg: number;
+  e_score: number;
+  s_score: number;
+  g_score: number;
+  esg_score: number;
+  trust_score: number;
+  dvs_score: number;
 }
 
 export interface IoTReadings {
