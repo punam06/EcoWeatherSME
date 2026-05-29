@@ -1864,7 +1864,7 @@ function MicroclimateSimulator({ trustScore }) {
                 )
               </div>
               <div>
-                ÷ ({uhi.hazardMultiplier.toFixed(1)} × {solarFactor.toFixed(1)})
+                ÷ ({uhi.hazardMultiplier.toFixed(1)} × {getSolarHourMultiplier(hour).toFixed(1)})
               </div>
               <div style={{ color: ACCENT.green, fontWeight: 600 }}>
                 ≈ {tst} min
