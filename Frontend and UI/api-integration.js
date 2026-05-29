@@ -89,6 +89,13 @@ const APIClient = {
   geocode: (query) =>
     APIClient.request(`/geocode?q=${encodeURIComponent(query)}`),
   getWeather: (lat, lon) => APIClient.request(`/weather?lat=${lat}&lon=${lon}`),
+
+  // Chatbot
+  chat: (message) =>
+    APIClient.request("/chat", {
+      method: "POST",
+      body: JSON.stringify({ message }),
+    }),
 };
 
 // Utility function to initialize database connections on page load

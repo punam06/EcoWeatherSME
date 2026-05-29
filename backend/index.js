@@ -15,7 +15,7 @@ const argon2 = require('argon2');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { z } = require('zod');
-
+const OpenAI = require('openai');
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -770,6 +770,45 @@ app.post('/api/users', requireAuth, requireRole('admin'), asyncHandler(async (re
       return res.status(409).json({ success: false, error: 'Email already exists' });
     }
     throw error;
+  }
+}));
+
+/* ═══════════════════════════════════════════════════════════════
+   GROK AI CHATBOT (xAI via OpenAI SDK)
+   ═══════════════════════════════════════════════════════════════ */
+const grokClient = new OpenAI({
+  apiKey: process.env.GROK_API_KEY || process.env.GORK_API_KEY || process.env.GROQ_API_KEY,
+  baseURL: 'https://api.x.ai/v1' // Grok (xAI) Base URL
+});
+
+app.post('/api/chat', asyncHandler(async (req, res) => {
+  const { message } = req.body;
+  if (!message) {
+    return res.status(400).json({ success: false, error: 'Message is required' });
+  }
+
+  try {
+    const completion = await grokClient.chat.completions.create({
+      model: 'grok-2-latest',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are the EcoSortha AI Agricultural Assistant for Bangladesh. You provide concise, practical, and highly relevant advice regarding climate demand intelligence, microclimate simulations, organic farming guidelines, and supply chain optimizations.'
+        },
+        {
+          role: 'user',
+          content: message
+        }
+      ],
+      max_tokens: 300,
+      temperature: 0.3
+    });
+
+    const reply = completion.choices[0].message.content;
+    res.json({ success: true, reply });
+  } catch (error) {
+    console.error('Grok API Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to communicate with AI service' });
   }
 }));
 

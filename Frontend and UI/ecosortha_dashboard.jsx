@@ -3228,33 +3228,38 @@ function ChatbotView() {
     setMessages((prev) => [...prev, newMsg]);
     setInput("");
 
-    // Mock AI response
-    setTimeout(() => {
-      let reply = "I've recorded that for you.";
-      if (attachedFileName) {
-        reply = `I've analyzed the attached file: "${attachedFileName}". The context shows a sudden spike in ambient temperature. I suggest upgrading to thermal bins for this batch.`;
-      } else if (text.toLowerCase().includes("forecast")) {
-        reply =
-          "Currently, the Mirpur zone is experiencing a moderate thermal hazard (38.7°C). I suggest delaying heat-sensitive dispatches until 5:00 PM when the solar factor drops.";
-      } else if (text.toLowerCase().includes("suggestion")) {
-        reply =
-          "Based on your recent batches, upgrading to Thermal-Insulated packaging will extend your Thermal Survival Time (TST) by 4x, allowing safe midday deliveries.";
-      } else if (text.toLowerCase().includes("feedback")) {
-        reply =
-          "Thank you for the feedback. I've logged this in the ESG ledger to improve our ML demand forecasting models.";
+    // Call actual backend API
+    const fetchReply = async () => {
+      try {
+        const response = await window.APIClient.chat(text);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "system",
+            content: response.reply || "I couldn't generate a response.",
+            time: new Date().toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          },
+        ]);
+      } catch (error) {
+        console.error("Chat API error:", error);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "system",
+            content: "Sorry, I am having trouble connecting to the AI server.",
+            time: new Date().toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          },
+        ]);
       }
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "system",
-          content: reply,
-          time: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-        },
-      ]);
-    }, 1200);
+    };
+    
+    fetchReply();
   };
 
   const handleVoice = () => {
