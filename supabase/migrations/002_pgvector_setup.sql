@@ -19,8 +19,7 @@ CREATE TABLE IF NOT EXISTS bari_knowledge_chunks (
 );
 
 COMMENT ON TABLE bari_knowledge_chunks IS
-  'pgvector store for BARI agricultural knowledge chunks. ' ||
-  'Embeddings are 1536-dim OpenAI/Groq compatible vectors for cosine similarity search.';
+  'pgvector store for BARI agricultural knowledge chunks. Embeddings are 1536-dim OpenAI/Groq compatible vectors for cosine similarity search.';
 
 COMMENT ON COLUMN bari_knowledge_chunks.content IS
   'Raw text content of the BARI knowledge chunk';
@@ -71,8 +70,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION match_bari_chunks IS
-  'Vector similarity search over BARI knowledge chunks. ' ||
-  'Returns chunks with cosine similarity above match_threshold, ordered by relevance.';
+  'Vector similarity search over BARI knowledge chunks. Returns chunks with cosine similarity above match_threshold, ordered by relevance.';
 
 -- ─── Seed: Initial BARI Knowledge Chunks (text only, embeddings to be computed) ─
 
