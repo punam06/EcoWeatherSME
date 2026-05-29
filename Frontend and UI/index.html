@@ -644,8 +644,8 @@ function MicroclimateSimulator({ trustScore }) {
 
   const filteredZones = Object.keys(UHI_ZONES).filter(z => z.toLowerCase().includes(zoneSearch.toLowerCase()));
 
-  // Recalculate DVS/TST locally — route duration now penalises DVS if route > TST
-  useEffect(() => {
+  // Calculate scores only when the button is clicked or on initial mount
+  const handleCalculate = () => {
     const adjTemp = calcAdjustedTemp(baseTemp, zone, hour, windSpeed);
     const risk = calcThermalRisk(adjTemp);
     const tstScore = calcTST(trustScore, zone, packaging, hour);
@@ -657,7 +657,13 @@ function MicroclimateSimulator({ trustScore }) {
     setThermalRisk(risk);
     setDvs(finalDvs);
     setTst(tstScore);
-  }, [baseTemp, zone, packaging, hour, windSpeed, trustScore, routeDuration]);
+  };
+
+  // Run calculation once on mount to populate initial UI
+  useEffect(() => {
+    handleCalculate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // On mount: detect speech language from browser locale
   useEffect(() => {
@@ -908,7 +914,7 @@ function MicroclimateSimulator({ trustScore }) {
           </div>
 
           <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>Packaging Type</div>
-          <div style={{ display: "flex", gap: 6 }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
             {[["standard", "Standard"], ["insulated", "Insulated"], ["thermal", "Thermal Bin"]].map(([v, l]) => (
               <button key={v} onClick={() => setPackaging(v)}
                 style={{
@@ -923,6 +929,20 @@ function MicroclimateSimulator({ trustScore }) {
               </button>
             ))}
           </div>
+
+          <button
+            onClick={handleCalculate}
+            style={{
+              width: "100%", padding: "12px", borderRadius: 10, border: "none",
+              background: ACCENT.blue, color: "#fff", fontSize: 14, fontWeight: 700,
+              cursor: "pointer", transition: "all 0.2s ease",
+              boxShadow: "0 4px 14px rgba(59, 130, 246, 0.3)"
+            }}
+            onMouseOver={(e) => e.currentTarget.style.opacity = 0.9}
+            onMouseOut={(e) => e.currentTarget.style.opacity = 1}
+          >
+            📊 Calculate Viability Scores
+          </button>
         </div>
 
         {/* RIGHT COLUMN */}
