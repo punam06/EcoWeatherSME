@@ -34,8 +34,9 @@ jobs:
 
       - name: Supabase login
         if: steps.check.outputs.skip == 'false'
-        run: |
-          supabase login
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase login
           
       - name: Link Supabase project
         if: steps.check.outputs.skip == 'false'
