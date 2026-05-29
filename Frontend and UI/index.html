@@ -635,6 +635,7 @@ function MicroclimateSimulator({ trustScore }) {
   const [speechLang, setSpeechLang] = useState("en-US");
   const [speechSupported, setSpeechSupported] = useState(true);
   const [weatherStatus, setWeatherStatus] = useState("");
+  const recognitionRef = useRef(null);
 
   const uhi = UHI_ZONES[zone] || UHI_ZONES["Mirpur"];
   const solarFactor = getSolarFactor(hour);
@@ -669,7 +670,11 @@ function MicroclimateSimulator({ trustScore }) {
   }, []);
 
   const handleListen = () => {
-    if (isListening) return;
+    if (isListening) {
+      if (recognitionRef.current) recognitionRef.current.stop();
+      setIsListening(false);
+      return;
+    }
     startSpeechRecognition(speechLang);
   };
 
@@ -680,6 +685,7 @@ function MicroclimateSimulator({ trustScore }) {
       return;
     }
     const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
     recognition.lang = lang;
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
@@ -1387,7 +1393,9 @@ function ChatbotView() {
   const [speechLang, setSpeechLang] = useState("en-US");
   const [speechSupported, setSpeechSupported] = useState(true);
   const [voiceError, setVoiceError] = useState("");
+  const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const recognitionRef = useRef(null);
 
   useEffect(() => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
@@ -1464,14 +1472,12 @@ function ChatbotView() {
   };
 
   const handleVoice = () => {
-    if (isRecording) return;
-    setVoiceError("");
-
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({ audio: true })
-        .then(stream => stream.getTracks().forEach(track => track.stop()))
-        .catch(() => {});
+    if (isRecording) {
+      if (recognitionRef.current) recognitionRef.current.stop();
+      setIsRecording(false);
+      return;
     }
+    setVoiceError("");
 
     try {
       startSpeechRecognition(speechLang);
@@ -1489,6 +1495,7 @@ function ChatbotView() {
       return;
     }
     const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
     recognition.lang = lang;
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
