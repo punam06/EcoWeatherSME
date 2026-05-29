@@ -711,7 +711,7 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
 
   // Auto-detect: use browser GPS -> /api/weather by lat/lon (no Google Maps key needed)
   // Also auto-sets dispatch hour to current local time
-  const fetchLiveWeather = async (locationQuery) => {
+  async function fetchLiveWeather(locationQuery) {
     setIsFetchingWeather(true);
     setWeatherStatus("Detecting...");
     setHour(new Date().getHours());
@@ -772,7 +772,7 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
       },
       { timeout: 3000, maximumAge: 60000 }
     );
-  };
+  }
 
   const advice = dvs >= 75
     ? `${zone} zone — DVS ${dvs} is SAFE. Adjusted temp ${adjustedTemp.toFixed(1)}°C. Products can be dispatched safely. TST: ${tst} min.`
