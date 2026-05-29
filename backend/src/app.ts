@@ -51,8 +51,8 @@ app.use(express.urlencoded({ extended: true }));
 // CORS — allow frontend origins
 const FRONTEND_ORIGINS = [
   process.env.FRONTEND_URL,
-  'https://ecoweathersme.onrender.com',
-  'https://backsme.onrender.com',
+  'https://eco-sortha.vercel.app',
+  'https://ecosortha.onrender.com',
   'http://localhost:3000',
   'http://localhost:5173',
   'http://localhost:5001',

@@ -1801,8 +1801,8 @@ function ChatbotView() {
     }
   }, []);
 
-  const IS_LOCAL_DEV_DASH = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  const BACKEND_URL_DASH = IS_LOCAL_DEV_DASH ? 'http://localhost:5001' : 'https://backsme.onrender.com';
+  const IS_LOCAL_DEV_DASH = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
+  const BACKEND_URL_DASH = IS_LOCAL_DEV_DASH ? 'http://localhost:5001' : 'https://ecosortha.onrender.com';
 
   const handleSend = async (text, attachedFileName = null) => {
     if (!text.trim() && !attachedFileName) return;

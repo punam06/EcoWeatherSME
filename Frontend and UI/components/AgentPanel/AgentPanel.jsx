@@ -10,8 +10,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 
-const IS_LOCAL_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const BACKEND_URL = IS_LOCAL_DEV ? 'http://localhost:5001' : 'https://backsme.onrender.com';
+const IS_LOCAL_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
+const BACKEND_URL = IS_LOCAL_DEV ? 'http://localhost:5001' : 'https://ecosortha.onrender.com';
 
 export default function AgentPanel({ setTab }) {
   const [isOpen, setIsOpen] = useState(false);

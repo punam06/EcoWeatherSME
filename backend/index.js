@@ -22,7 +22,7 @@ app.use(express.json());
 // CORS Configuration — allow both local dev and Render production frontend
 const corsOptions = {
   origin: [
-    'https://ecoweathersme.onrender.com',
+    'https://eco-sortha.vercel.app',
     process.env.FRONTEND_URL,
     'http://localhost:3000',
     'http://localhost:5173',
