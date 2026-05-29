@@ -44,12 +44,11 @@ jobs:
         env:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
-          echo "Deploying functions under supabase/functions/ to project: $SUPABASE_PROJECT_REF"
           for fn in supabase/functions/*; do
             if [ -d "$fn" ]; then
               fname=$(basename "$fn")
               if [[ "$fname" == _* ]]; then
-                echo "Skipping shared folder: $fname"
+                echo "Skipping helper/shared folder: $fname"
                 continue
               fi
               echo "Deploying function: $fname"
