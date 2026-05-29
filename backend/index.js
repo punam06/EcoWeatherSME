@@ -12,6 +12,7 @@ const argon2 = require('argon2');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { z } = require('zod');
+const Groq = require('groq-sdk');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -294,6 +295,8 @@ app.get('/api/health', (req, res) => {
     status: 'ok', 
     message: 'Backend server is running.',
     environment: process.env.NODE_ENV,
+    groqConfigured: Boolean(process.env.GROQ_API_KEY),
+    dbConfigured: Boolean(process.env.DATABASE_URL),
     timestamp: new Date().toISOString()
   });
 });
@@ -766,30 +769,27 @@ Rules:
 - Never say "I cannot help with that"
 - IMPORTANT: Respond ONLY with valid JSON. No markdown, no backticks.`;
 
-async function callGroq(messages) {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) throw new Error('GROQ_API_KEY not set');
-
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      messages,
-      temperature: 0.3,
-      response_format: { type: 'json_object' },
-      max_tokens: 1024,
-    }),
-  });
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Groq API error ${response.status}: ${err}`);
+// Groq client — uses official SDK so auth works reliably on all environments
+let groqClient = null;
+function getGroqClient() {
+  if (!groqClient) {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) throw new Error('GROQ_API_KEY environment variable is not set');
+    groqClient = new Groq({ apiKey });
   }
-  const data = await response.json();
-  return data.choices[0]?.message?.content || '';
+  return groqClient;
+}
+
+async function callGroq(messages) {
+  const groq = getGroqClient();
+  const completion = await groq.chat.completions.create({
+    model: GROQ_MODEL,
+    messages,
+    temperature: 0.3,
+    response_format: { type: 'json_object' },
+    max_tokens: 1024,
+  });
+  return completion.choices[0]?.message?.content || '';
 }
 
 async function getWeather(city, lang) {
@@ -880,9 +880,10 @@ app.post('/api/agent/message', async (req, res) => {
       if (parsed.intent === 'navigate') responseType = 'NAVIGATION';
       if (parsed.intent === 'order') responseType = 'ORDER_CONFIRM_PROMPT';
     } else {
+      // Groq parsed OK but returned no replyMessage — use a safe fallback
       responseMessage = lang === 'bn'
         ? 'দুঃখিত, আমি বুঝতে পারিনি। অনুগ্রহ করে আবার বলুন।'
-        : 'Sorry, I could not understand. Please try again.';
+        : 'Sorry, I could not understand that. Could you rephrase your question?';
     }
 
     session.history.push({ role: 'assistant', content: responseMessage });
