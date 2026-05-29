@@ -4,11 +4,11 @@
   "description": "EcoSortha AI (ClimateShield) — TypeScript Express Backend",
   "main": "dist/app.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc --ignoreDeprecations 6.0",
     "start": "node dist/app.js",
     "dev": "ts-node --transpile-only src/app.ts",
     "dev:watch": "ts-node-dev --respawn --transpile-only src/app.ts",
-    "lint": "tsc --noEmit",
+    "lint": "tsc --noEmit --ignoreDeprecations 6.0",
     "legacy": "node index.js"
   },
   "dependencies": {
