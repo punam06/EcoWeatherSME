@@ -874,36 +874,31 @@ function IoTForm({ onResult }) {
     const fetchTrustScore = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch(
-          "https://pdeskdcdyhbldwfgbowz.supabase.co/functions/v1/clever-responder",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              action: "trust-score",
-              pH,
-              EC,
-              temp,
-              ratio,
-              days,
-            }),
-          },
-        );
-        const data = await response.json();
-        setTs(data.trustScore || 0);
-        onResult(data.trustScore || 0);
-        setCertified(false);
+        if (window.APIClient) {
+          const response = await window.APIClient.calculateTrustScore({
+            pH,
+            EC,
+            temperature: temp,
+            ratio,
+            days
+          });
+          if (response.success) {
+            setTs(response.data.trust_score || 0);
+            onResult(response.data.trust_score || 0);
+            setCertified(false);
+            setIsLoading(false);
+            return;
+          }
+        }
       } catch (error) {
-        console.error("Failed to fetch trust score:", error);
-        // Fallback to local calculation on error
-        const fallbackScore = calcTrustScore({ pH, EC, temp, ratio, days });
-        setTs(fallbackScore);
-        onResult(fallbackScore);
-      } finally {
-        setIsLoading(false);
+        console.error("Failed to fetch trust score via API:", error);
       }
+      
+      // Fallback to local calculation on error or missing API
+      const fallbackScore = calcTrustScore({ pH, EC, temp, ratio, days });
+      setTs(fallbackScore);
+      onResult(fallbackScore);
+      setIsLoading(false);
     };
 
     fetchTrustScore();
@@ -1240,46 +1235,25 @@ function MicroclimateSimulator({ trustScore }) {
   useEffect(() => {
     const fetchMicroclimateMetrics = async () => {
       setIsFetchingMetrics(true);
-      try {
-        const response = await fetch(
-          "https://pdeskdcdyhbldwfgbowz.supabase.co/functions/v1/clever-responder",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              action: "microclimate-metrics",
-              trustScore,
-              zone,
-              packaging,
-              hour,
-              baseTemp,
-              windSpeed,
-            }),
-          },
-        );
-        const data = await response.json();
-        setDvs(data.dvs || 0);
-        setTst(data.tst || 0);
-        setAdjustedTemp(data.adjustedTemp || baseTemp);
-        setThermalRisk(
-          data.thermalRisk || { value: 0.1, label: "Low", color: ACCENT.green },
-        );
-      } catch (error) {
-        console.error("Failed to fetch microclimate metrics:", error);
-        // Fallback to local calculation on error
-        const adjTemp = calcAdjustedTemp(baseTemp, zone, hour, windSpeed);
-        const risk = calcThermalRisk(adjTemp);
-        const dvsScore = calcDVS(trustScore, adjTemp);
-        const tstScore = calcTST(trustScore, zone, packaging, hour);
-        setAdjustedTemp(adjTemp);
-        setThermalRisk(risk);
-        setDvs(dvsScore);
-        setTst(tstScore);
-      } finally {
-        setIsFetchingMetrics(false);
-      }
+      // We are directly using local math because the edge function is obsolete
+      // and causes the page to hang on missing/failed responses.
+      setTimeout(() => {
+        try {
+          const adjTemp = calcAdjustedTemp(baseTemp, zone, hour, windSpeed);
+          const risk = calcThermalRisk(adjTemp);
+          const dvsScore = calcDVS(trustScore, adjTemp);
+          const tstScore = calcTST(trustScore, zone, packaging, hour);
+          
+          setAdjustedTemp(adjTemp);
+          setThermalRisk(risk);
+          setDvs(dvsScore);
+          setTst(tstScore);
+        } catch (error) {
+          console.error("Failed to calculate microclimate metrics:", error);
+        } finally {
+          setIsFetchingMetrics(false);
+        }
+      }, 50); // slight delay to show loading state if needed
     };
 
     fetchMicroclimateMetrics();
@@ -1951,18 +1925,44 @@ function MicroclimateSimulator({ trustScore }) {
    ═══════════════════════════════════════════════════════════════ */
 function DemandChart() {
   const canvasRef = useRef();
+  const [forecastData, setForecastData] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
   useEffect(() => {
-    if (!canvasRef.current || !window.Chart) return;
+    const fetchForecast = async () => {
+      try {
+        if (window.APIClient) {
+          // You could pass lat/lon here if you have them in state,
+          // otherwise it will fall back to the mock data smoothly!
+          const response = await window.APIClient.getDemandForecast();
+          if (response.success && response.data) {
+            setForecastData(response.data);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch demand forecast:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchForecast();
+  }, []);
+
+  useEffect(() => {
+    if (!canvasRef.current || !window.Chart || isLoading || forecastData.length === 0) return;
+    
     const ctx = canvasRef.current.getContext("2d");
-    const labels = Array.from({ length: 30 }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() + i);
-      return `${d.getDate()}/${d.getMonth() + 1}`;
+    
+    // Extract dynamic data from the backend forecast
+    const labels = forecastData.map(d => {
+      const parts = d.date.split('-');
+      return parts.length === 3 ? `${parts[2]}/${parts[1]}` : d.date;
     });
-    const base = [
-      42, 38, 45, 40, 37, 43, 48, 52, 55, 58, 62, 78, 95, 110, 118, 105, 88, 75,
-      68, 65, 70, 72, 68, 66, 64, 60, 58, 55, 52, 50,
-    ];
+    const base = forecastData.map(d => d.adjusted_demand || d.base_demand);
+    
+    // Highlight points if there is an annotation/alert
+    const pointColors = forecastData.map(d => d.annotation ? ACCENT.amber : ACCENT.green);
+    const pointRadii = forecastData.map(d => d.annotation ? 6 : 0);
 
     const rootStyles = getComputedStyle(document.documentElement);
     const gridColor =
@@ -1983,10 +1983,8 @@ function DemandChart() {
             borderWidth: 2,
             fill: true,
             tension: 0.4,
-            pointRadius: base.map((v, i) => (i === 11 ? 6 : 0)),
-            pointBackgroundColor: base.map((v, i) =>
-              i === 11 ? ACCENT.amber : ACCENT.green,
-            ),
+            pointRadius: pointRadii,
+            pointBackgroundColor: pointColors,
           },
         ],
       },
@@ -2023,7 +2021,7 @@ function DemandChart() {
       },
     });
     return () => chart.destroy();
-  }, []);
+  }, [isLoading, forecastData]);
 
   return (
     <div>

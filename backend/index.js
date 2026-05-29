@@ -701,8 +701,9 @@ app.get('/api/demand-forecast', asyncHandler(async (req, res) => {
     const forecastResults = Object.keys(dailyData).slice(0, 5).map(date => {
       const temperature = parseFloat(dailyData[date].maxTemp.toFixed(1));
       
-      // Base demand calculation to match the original mock data structure
-      let base_demand = Math.round(130 + (Math.random() * 10 - 5));
+      // Base demand calculation to match the original mock data structure (deterministic pseudo-random)
+      const dateSeed = date.charCodeAt(date.length - 1) + date.charCodeAt(date.length - 2);
+      let base_demand = Math.round(130 + ((dateSeed % 10) - 5));
       let adjusted_demand = base_demand;
       let annotation = null;
       
