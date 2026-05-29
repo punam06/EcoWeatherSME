@@ -29,15 +29,26 @@ interface AgentPanelProps {
 
 export default function AgentPanel({ setTab }: AgentPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: 'assistant',
-      type: 'TEXT',
-      content: 'Hello! I am your EcoSortha AI Agricultural Assistant. How can I help you with BARI compliance, product catalog searches, or order dispatches today?'
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('ecosortha_agent_panel_messages');
+      if (saved) return JSON.parse(saved);
     }
-  ]);
+    return [
+      {
+        role: 'assistant',
+        type: 'TEXT',
+        content: 'Hello! I am your EcoSortha AI Agricultural Assistant. How can I help you with BARI compliance, product catalog searches, or order dispatches today?'
+      }
+    ];
+  });
   const [inputValue, setInputValue] = useState('');
-  const [sessionId, setSessionId] = useState('');
+  const [sessionId, setSessionId] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('ecosortha_agent_panel_session_id') || '';
+    }
+    return '';
+  });
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [language, setLanguage] = useState<'en' | 'bn'>('bn');
@@ -53,6 +64,24 @@ export default function AgentPanel({ setTab }: AgentPanelProps) {
     }
   }, [messages]);
 
+  // Persist messages
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('ecosortha_agent_panel_messages', JSON.stringify(messages));
+    }
+  }, [messages]);
+
+  // Persist session ID
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (sessionId) {
+        sessionStorage.setItem('ecosortha_agent_panel_session_id', sessionId);
+      } else {
+        sessionStorage.removeItem('ecosortha_agent_panel_session_id');
+      }
+    }
+  }, [sessionId]);
+
   // Check Web Speech API support
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -63,6 +92,10 @@ export default function AgentPanel({ setTab }: AgentPanelProps) {
 
   // Initialize Session
   const initSession = async () => {
+    if (typeof window !== 'undefined' && sessionStorage.getItem('ecosortha_agent_panel_session_id')) {
+      console.log("[AgentPanel] Restoring existing session:", sessionStorage.getItem('ecosortha_agent_panel_session_id'));
+      return;
+    }
     try {
       const userStr = localStorage.getItem('user') || localStorage.getItem('farmer');
       const user = userStr ? JSON.parse(userStr) : null;

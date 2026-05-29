@@ -1941,9 +1941,12 @@ const IS_LOCAL_DEV = window.location.hostname === 'localhost' || window.location
 const BACKEND_URL = IS_LOCAL_DEV ? 'http://localhost:5001' : 'https://backsme.onrender.com';
 
 function ChatbotView({ setTab }) {
-  const [messages, setMessages] = useState([
-    { role: "system", content: "Hello! I am EcoSortha AI, your voice and text-based assistant. I can provide microclimate forecasts, smart dispatch suggestions, or analyze files and context. How can I help you today?", time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }
-  ]);
+  const [messages, setMessages] = useState(() => {
+    const saved = sessionStorage.getItem("ecosortha_chatbot_view_messages");
+    return saved ? JSON.parse(saved) : [
+      { role: "system", content: "Hello! I am EcoSortha AI, your voice and text-based assistant. I can provide microclimate forecasts, smart dispatch suggestions, or analyze files and context. How can I help you today?", time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }
+    ];
+  });
   const [input, setInput] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [speechLang, setSpeechLang] = useState("en-US");
@@ -1952,12 +1955,40 @@ function ChatbotView({ setTab }) {
   const [hasAttemptedVoice, setHasAttemptedVoice] = useState(false);
   const [orderContext, setOrderContext] = useState(null);
   // ── Session memory: persists across all messages in this tab ──
-  const [chatSessionId, setChatSessionId] = useState(null);
+  const [chatSessionId, setChatSessionId] = useState(() => {
+    return sessionStorage.getItem("ecosortha_chatbot_view_session_id") || null;
+  });
   const fileInputRef = useRef(null);
+  const messagesEndRef = useRef(null);
+
+  // Auto-scroll to bottom of chat
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
+
+  // Persist messages
+  useEffect(() => {
+    sessionStorage.setItem("ecosortha_chatbot_view_messages", JSON.stringify(messages));
+  }, [messages]);
+
+  // Persist session ID
+  useEffect(() => {
+    if (chatSessionId) {
+      sessionStorage.setItem("ecosortha_chatbot_view_session_id", chatSessionId);
+    } else {
+      sessionStorage.removeItem("ecosortha_chatbot_view_session_id");
+    }
+  }, [chatSessionId]);
 
   // Initialize a backend session when the chatbot page mounts
   useEffect(() => {
     const initChatSession = async () => {
+      if (sessionStorage.getItem("ecosortha_chatbot_view_session_id")) {
+        console.log("[ChatbotView] Restoring existing session:", sessionStorage.getItem("ecosortha_chatbot_view_session_id"));
+        return;
+      }
       try {
         const userStr = localStorage.getItem("user") || localStorage.getItem("farmer");
         const user = userStr ? JSON.parse(userStr) : null;
@@ -2276,6 +2307,7 @@ function ChatbotView({ setTab }) {
               {voiceError}
             </div>
           )}
+          <div ref={messagesEndRef} />
         </div>
 
         {/* Quick Actions */}
@@ -2455,15 +2487,20 @@ function MarketplaceView() {
 
 function AgentPanel({ setTab }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState([
-    {
-      role: "assistant",
-      type: "TEXT",
-      content: "Hello! I am your EcoSortha AI Agricultural Assistant. How can I help you with BARI compliance, product catalog searches, or order dispatches today?"
-    }
-  ]);
+  const [messages, setMessages] = useState(() => {
+    const saved = sessionStorage.getItem("ecosortha_agent_panel_messages");
+    return saved ? JSON.parse(saved) : [
+      {
+        role: "assistant",
+        type: "TEXT",
+        content: "Hello! I am your EcoSortha AI Agricultural Assistant. How can I help you with BARI compliance, product catalog searches, or order dispatches today?"
+      }
+    ];
+  });
   const [inputValue, setInputValue] = useState("");
-  const [sessionId, setSessionId] = useState("");
+  const [sessionId, setSessionId] = useState(() => {
+    return sessionStorage.getItem("ecosortha_agent_panel_session_id") || "";
+  });
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [language, setLanguage] = useState("bn");
@@ -2479,6 +2516,20 @@ function AgentPanel({ setTab }) {
     }
   }, [messages]);
 
+  // Persist messages
+  useEffect(() => {
+    sessionStorage.setItem("ecosortha_agent_panel_messages", JSON.stringify(messages));
+  }, [messages]);
+
+  // Persist session ID
+  useEffect(() => {
+    if (sessionId) {
+      sessionStorage.setItem("ecosortha_agent_panel_session_id", sessionId);
+    } else {
+      sessionStorage.removeItem("ecosortha_agent_panel_session_id");
+    }
+  }, [sessionId]);
+
   // Check Web Speech API support
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -2489,6 +2540,10 @@ function AgentPanel({ setTab }) {
 
   // Initialize Session
   const initSession = async () => {
+    if (sessionStorage.getItem("ecosortha_agent_panel_session_id")) {
+      console.log("[AgentPanel] Restoring existing session:", sessionStorage.getItem("ecosortha_agent_panel_session_id"));
+      return;
+    }
     try {
       const userStr = localStorage.getItem("user") || localStorage.getItem("farmer");
       const user = userStr ? JSON.parse(userStr) : null;
