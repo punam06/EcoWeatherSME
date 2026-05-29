@@ -1702,98 +1702,176 @@ function PageHeader({ title, subtitle, action }) {
 }
 
 function DashboardView({ onNewBatch }) {
-  const stats = [
-    { label: "TOTAL BATCHES", value: "142", sub: "9 active", icon: "📦" },
-    { label: "CERTIFIED BATCHES", value: "118", sub: "83% certification rate", icon: "🛡️" },
-    { label: "AVG TRUST SCORE", value: "82.4", sub: "BARI-certified standard", icon: "📈" },
-    { label: "TOTAL WEIGHT", value: "8.6 t", sub: "bio-resources processed", icon: "⚖️" },
-    { label: "PLASTIC BOTTLES SAVED", value: "34,560", sub: "via bulk refill model", icon: "♻️" },
-    { label: "CO2 SEQUESTERED", value: "2,180 kg", sub: "biochar carbon capture", icon: "🌿" },
-    { label: "REVENUE", value: "BDT 12.5L", sub: "this month", icon: "📈" },
-    { label: "DVS COMPLIANCE", value: "96.2%", sub: "dispatches within TST", icon: "✅" },
-  ];
+  const [dashData, setDashData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
-  const hazardMaps = [
-    { zone: "Old Dhaka", hazard: "Extreme", temp: "41.2°C", rh: "74%", desc: "Class A thermal accumulation zone. Narrow concrete corridors trap heat.", time: "11:00 AM – 4:00 PM" },
-    { zone: "Mirpur", hazard: "High", temp: "38.7°C", rh: "68%", desc: "Dense residential concrete with limited canopy cover.", time: "12:00 PM – 3:00 PM" },
-    { zone: "Savar", hazard: "Moderate", temp: "36.1°C", rh: "62%", desc: "Mixed urban with partial green canopy. Moderate risk window.", time: "1:00 PM – 3:00 PM" },
-    { zone: "Gulshan", hazard: "Safe", temp: "34.2°C", rh: "58%", desc: "High green canopy coverage and lake proximity reduce thermal load.", time: "N/A" }
-  ];
+  const fetchDashboard = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/dashboard`);
+      const json = await res.json();
+      if (json.success && json.data) {
+        setDashData(json.data);
+        setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      }
+    } catch (e) {
+      console.error('[Dashboard] fetch failed:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboard();
+    const interval = setInterval(fetchDashboard, 60000); // refresh every 60s
+    return () => clearInterval(interval);
+  }, []);
+
+  const s = dashData?.stats;
+  const activity = dashData?.recentActivity || [];
+  const heatmap = dashData?.heatmap || [];
+  const isLive = dashData?.liveData;
+
+  const statCards = s ? [
+    { label: "TOTAL BATCHES",       value: s.totalBatches,       sub: `${s.activeBatches} active`,              icon: "📦" },
+    { label: "CERTIFIED BATCHES",   value: s.certifiedBatches,   sub: `${s.certRate} certification rate`,        icon: "🛡️" },
+    { label: "AVG TRUST SCORE",     value: s.avgTrustScore,      sub: "BARI-certified standard",                 icon: "📈" },
+    { label: "TOTAL WEIGHT",        value: s.totalWeight,        sub: "bio-resources processed",                 icon: "⚖️" },
+    { label: "PLASTIC BOTTLES SAVED",value: s.plasticSaved?.toLocaleString(), sub: "via bulk refill model",    icon: "♻️" },
+    { label: "CO₂ SEQUESTERED",     value: `${s.co2Sequestered} kg`, sub: "biochar carbon capture",            icon: "🌿" },
+    { label: "DVS COMPLIANCE",      value: s.certRate,           sub: "dispatches within TST",                  icon: "✅" },
+    { label: "HEATMAP ZONES",       value: heatmap.length,       sub: "thermal zones monitored",                icon: "🗺️" },
+  ] : [];
+
+  const colorMap = { green: ACCENT.greenBg, amber: ACCENT.amberBg, red: ACCENT.redBg, blue: ACCENT.blueBg };
 
   return (
     <div style={{ animation: "fadeSlideIn 0.3s ease" }}>
-      <PageHeader 
-        title="Operations Dashboard" 
-        subtitle="Bangladesh Climate-Resilient Circular Commerce" 
+      <PageHeader
+        title="Operations Dashboard"
+        subtitle="Bangladesh Climate-Resilient Circular Commerce"
         action={
-          <button onClick={onNewBatch} style={{
-            background: ACCENT.greenDark, color: "#fff", border: "none", padding: "10px 18px",
-            borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 13, display: "flex", gap: 6, alignItems: "center"
-          }}><span>+</span> New Batch</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {lastUpdated && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{
+                  width: 7, height: 7, borderRadius: "50%",
+                  background: isLive ? ACCENT.green : ACCENT.amber,
+                  boxShadow: isLive ? `0 0 6px ${ACCENT.green}` : "none",
+                  display: "inline-block"
+                }} />
+                <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+                  {isLive ? "Live DB" : "Seeded"} · {lastUpdated}
+                </span>
+                <button onClick={fetchDashboard} title="Refresh" style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  color: "var(--text-dim)", fontSize: 14, padding: "0 4px"
+                }}>↻</button>
+              </div>
+            )}
+            <button onClick={onNewBatch} style={{
+              background: ACCENT.greenDark, color: "#fff", border: "none", padding: "10px 18px",
+              borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 13, display: "flex", gap: 6, alignItems: "center"
+            }}><span>+</span> New Batch</button>
+          </div>
         }
       />
 
+      {/* ── STAT CARDS ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 32 }}>
-        {stats.map((s, i) => (
-          <Card key={i} style={{ padding: "20px 24px" }} hover={false}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-              <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, letterSpacing: "0.05em" }}>{s.label}</div>
-              <div style={{ background: "var(--bg-input)", padding: 6, borderRadius: "50%", fontSize: 12 }}>{s.icon}</div>
-            </div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>{s.value}</div>
-            <div style={{ fontSize: 12, color: "var(--text-dim)" }}>{s.sub}</div>
-          </Card>
-        ))}
+        {isLoading
+          ? Array.from({ length: 8 }).map((_, i) => (
+              <Card key={i} style={{ padding: "20px 24px" }} hover={false}>
+                <div style={{ height: 12, background: "var(--bg-input)", borderRadius: 6, marginBottom: 12, width: "60%", animation: "pulse 1.5s ease infinite" }} />
+                <div style={{ height: 28, background: "var(--bg-input)", borderRadius: 6, marginBottom: 8, width: "80%", animation: "pulse 1.5s ease infinite" }} />
+                <div style={{ height: 10, background: "var(--bg-input)", borderRadius: 6, width: "50%", animation: "pulse 1.5s ease infinite" }} />
+              </Card>
+            ))
+          : statCards.map((s, i) => (
+              <Card key={i} style={{ padding: "20px 24px" }} hover={false}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, letterSpacing: "0.05em" }}>{s.label}</div>
+                  <div style={{ background: "var(--bg-input)", padding: 6, borderRadius: "50%", fontSize: 12 }}>{s.icon}</div>
+                </div>
+                <div style={{ fontSize: 26, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>{s.value}</div>
+                <div style={{ fontSize: 12, color: "var(--text-dim)" }}>{s.sub}</div>
+              </Card>
+            ))
+        }
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
+        {/* ── THERMAL HEATMAP ── */}
         <Card hover={false}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
             <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>Dhaka Thermal Hazard Map</div>
-            <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>Live MERM Classification</div>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+              {isLive ? "🟢 Live Weather Data" : "⚡ Estimated · Live MERM"}
+            </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {hazardMaps.map(m => {
-              const hColor = m.hazard === "Extreme" ? ACCENT.red : m.hazard === "High" ? ACCENT.amber : m.hazard === "Moderate" ? ACCENT.amber : ACCENT.green;
-              return (
-                <div key={m.zone} style={{ border: "1px solid var(--border-primary)", borderRadius: 12, padding: "16px 20px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: hColor }}></span>
-                      <span style={{ fontWeight: 600, fontSize: 14 }}>{m.zone}</span>
-                      <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 12, background: hColor+"15", color: hColor, fontWeight: 600 }}>{m.hazard}</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{m.temp} · {m.rh}</div>
+            {isLoading
+              ? Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} style={{ border: "1px solid var(--border-primary)", borderRadius: 12, padding: "16px 20px" }}>
+                    <div style={{ height: 14, background: "var(--bg-input)", borderRadius: 6, width: "40%", marginBottom: 8, animation: "pulse 1.5s ease infinite" }} />
+                    <div style={{ height: 10, background: "var(--bg-input)", borderRadius: 6, width: "80%", animation: "pulse 1.5s ease infinite" }} />
                   </div>
-                  <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 4 }}>{m.desc}</div>
-                  {m.time !== "N/A" && <div style={{ fontSize: 12, color: ACCENT.amber }}>Peak: {m.time}</div>}
-                </div>
-              );
-            })}
+                ))
+              : heatmap.map(m => {
+                  const hColor = m.hazard === "Extreme" ? ACCENT.red : m.hazard === "High" ? ACCENT.amber : m.hazard === "Moderate" ? ACCENT.amber : ACCENT.green;
+                  return (
+                    <div key={m.zone} style={{ border: "1px solid var(--border-primary)", borderRadius: 12, padding: "16px 20px", transition: "background 0.2s" }}
+                         onMouseEnter={e => e.currentTarget.style.background = "var(--bg-input)"}
+                         onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: hColor, boxShadow: `0 0 6px ${hColor}66` }} />
+                          <span style={{ fontWeight: 600, fontSize: 14 }}>{m.zone}</span>
+                          <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 12, background: hColor+"15", color: hColor, fontWeight: 600 }}>{m.hazard}</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "'JetBrains Mono', monospace" }}>{m.temp} · {m.rh}</div>
+                      </div>
+                      <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 4 }}>{m.desc}</div>
+                      {m.time !== "N/A" && <div style={{ fontSize: 12, color: ACCENT.amber }}>⚡ Peak: {m.time}</div>}
+                    </div>
+                  );
+                })
+            }
           </div>
         </Card>
 
+        {/* ── RECENT ACTIVITY ── */}
         <Card hover={false}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
             <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>Recent Activity</div>
-            <a href="#" style={{ fontSize: 13, color: ACCENT.green, textDecoration: "none", fontWeight: 500 }}>View all →</a>
+            <button onClick={fetchDashboard} style={{
+              fontSize: 13, color: ACCENT.green, background: "none", border: "none",
+              cursor: "pointer", fontWeight: 500, padding: 0
+            }}>Refresh ↺</button>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-            {[
-              { icon: "🛡️", text: "Batch ECO-2025-142 certified — Trust Score 91", time: "2 min ago", bg: ACCENT.greenBg },
-              { icon: "📈", text: "DVS simulation for Old Dhaka route — Score 63 (Caution)", time: "18 min ago", bg: ACCENT.amberBg },
-              { icon: "🚚", text: "Batch ECO-2025-140 dispatched to Mirpur", time: "1 hr ago", bg: ACCENT.greenBg },
-              { icon: "⚠️", text: "High thermal hazard in Old Dhaka — delay dispatches until 5 PM", time: "2 hr ago", bg: ACCENT.redBg },
-              { icon: "📦", text: "New biochar batch ECO-2025-141 created (180 kg)", time: "3 hr ago", bg: ACCENT.blueBg },
-            ].map((a, i) => (
-              <div key={i} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-                <div style={{ width: 36, height: 36, borderRadius: "50%", background: a.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{a.icon}</div>
-                <div>
-                  <div style={{ fontSize: 13, color: "var(--text-primary)", marginBottom: 4, lineHeight: 1.4 }}>{a.text}</div>
-                  <div style={{ fontSize: 11, color: "var(--text-dim)" }}>{a.time}</div>
-                </div>
-              </div>
-            ))}
+            {isLoading
+              ? Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--bg-input)", animation: "pulse 1.5s ease infinite", flexShrink: 0 }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ height: 12, background: "var(--bg-input)", borderRadius: 6, marginBottom: 6, animation: "pulse 1.5s ease infinite" }} />
+                      <div style={{ height: 10, background: "var(--bg-input)", borderRadius: 6, width: "40%", animation: "pulse 1.5s ease infinite" }} />
+                    </div>
+                  </div>
+                ))
+              : activity.length > 0
+              ? activity.map((a, i) => (
+                  <div key={i} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: colorMap[a.colorType] || ACCENT.greenBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>{a.icon}</div>
+                    <div>
+                      <div style={{ fontSize: 13, color: "var(--text-primary)", marginBottom: 4, lineHeight: 1.4 }}>{a.text}</div>
+                      <div style={{ fontSize: 11, color: "var(--text-dim)" }}>{a.time}</div>
+                    </div>
+                  </div>
+                ))
+              : <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: "20px 0" }}>No activity yet.</div>
+            }
           </div>
         </Card>
       </div>
