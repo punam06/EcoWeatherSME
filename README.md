@@ -49,28 +49,6 @@ Bangladesh's organic fertilizer market is valued at **BDT 800 Crore annually**, 
 
 ---
 
-## 📁 Project Structure
-
-```text
-.
-├── backend/               # Node/Express API and backend-specific package files
-├── contexts/              # Planning, architecture, and submission notes
-├── Frontend and UI/       # Standalone dashboard, integration script, and demo UI
-├── lib/                    # Shared TypeScript services and types
-├── public/                 # Static demo data and mock assets
-├── scripts/                # Seeder, demo, and validation scripts
-├── supabase/               # Supabase config and edge functions
-├── DEPLOYMENT_NOTES.md     # Deployment guidance
-├── INTEGRATION_GUIDE.md    # Setup and integration walkthrough
-├── README.md               # Main project overview
-├── schema.sql              # Primary database schema
-└── sync.js                 # Sync helper for local automation
-```
-
-Local-only artifacts such as `.env`, `.DS_Store`, `node_modules/`, and `supabase/.temp/` are intentionally left out of the tree view.
-
----
-
 ## Current Integration Status (28 May 2026)
 
 - Backend: Express.js API completed and running locally on port 5001. Core endpoints implemented (health, trust-score calculation, demand-forecast, zones, batches, IoT readings, users). Database-dependent endpoints are present and guarded to fail gracefully when `DATABASE_URL` is not configured.

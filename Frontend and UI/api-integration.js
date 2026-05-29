@@ -5,10 +5,10 @@
  */
 
 // API Client - Simple fetch wrapper for backend communication
-const IS_STATIC_FILE = window.location.protocol === "file:";
-const API_BASE_URL = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-  ? "http://localhost:5001"
-  : "https://backsme.onrender.com";
+const IS_STATIC_FILE = window.location.protocol === 'file:';
+const API_BASE_URL = !IS_STATIC_FILE && window.location.hostname === 'localhost' 
+  ? 'http://localhost:5001' 
+  : '';
 
 const APIClient = {
   async request(endpoint, options = {}) {
@@ -75,25 +75,6 @@ const APIClient = {
   // External APIs (Weather & Geocoding)
   geocode: (query) => APIClient.request(`/geocode?q=${encodeURIComponent(query)}`),
   getWeather: (lat, lon) => APIClient.request(`/weather?lat=${lat}&lon=${lon}`),
-  getWeatherByCity: (city) => APIClient.request(`/weather-by-city?q=${encodeURIComponent(city)}`),
-
-  // Chatbot (live Grok on legacy backend)
-  chat: (message) => APIClient.request('/chat', {
-    method: 'POST',
-    body: JSON.stringify({ message }),
-  }),
-
-  // Audio transcription (Groq Whisper)
-  transcribeAudio: (blob, lang = 'en-US') => {
-    return APIClient.request(`/transcribe?lang=${lang}`, {
-      method: 'POST',
-      body: blob,
-      headers: {
-        // Omitting Content-Type allows browser to set it or leaves it raw
-        'Content-Type': blob.type || 'audio/webm'
-      }
-    });
-  }
 };
 
 // Utility function to initialize database connections on page load
@@ -104,7 +85,7 @@ async function initializeConnections() {
   }
 
   console.log('🔄 Initializing connections...');
-
+  
   try {
     // Test backend health
     const healthResponse = await APIClient.health();

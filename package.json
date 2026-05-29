@@ -10,21 +10,22 @@
     "test:math": "ts-node scripts/test-math.ts",
     "demo:microclimate": "ts-node scripts/demo-microclimate.ts",
     "backend:install": "cd backend && npm install",
-    "backend:start": "node backend/index.js",
-    "backend:dev": "node backend/index.js",
+    "backend:start": "cd backend && npm start",
+    "backend:dev": "cd backend && npm run dev",
     "frontend:serve": "python3 -m http.server 3000 --directory \"Frontend and UI\"",
-    "dev": "echo '🚀 Starting development environment...' && (node backend/index.js &) && npm run frontend:serve",
+    "dev": "echo '🚀 Starting development environment...' && (cd backend && npm start &) && npm run frontend:serve",
     "db:seed": "psql \"$DATABASE_URL\" -f db/seeds/001_zones.sql",
     "db:seed:zones": "psql \"$DATABASE_URL\" -f db/seeds/001_zones.sql",
-"db:seed:users": "psql \"$DATABASE_URL\" -f db/seeds/002_demo_users.sql",
-"db:seed:batches": "psql \"$DATABASE_URL\" -f db/seeds/003_demo_batches.sql",
-"db:seed:readings": "psql \"$DATABASE_URL\" -f db/seeds/004_demo_iot_readings.sql",
-"db:seed:all": "npm run db:seed:zones && npm run db:seed:users && npm run db:seed:batches && npm run db:seed:readings",
+    "db:seed:users": "psql \"$DATABASE_URL\" -f db/seeds/002_demo_users.sql",
+    "db:seed:batches": "psql \"$DATABASE_URL\" -f db/seeds/003_demo_batches.sql",
+    "db:seed:readings": "psql \"$DATABASE_URL\" -f db/seeds/004_demo_iot_readings.sql",
+    "db:seed:all": "npm run db:seed:zones && npm run db:seed:users && npm run db:seed:batches && npm run db:seed:readings",
     "setup": "npm install && npm run backend:install"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.43.4",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.2",

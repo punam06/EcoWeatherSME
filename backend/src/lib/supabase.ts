@@ -10,6 +10,15 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
+// Polyfill WebSocket for older Node.js versions
+if (typeof global.WebSocket === 'undefined') {
+  try {
+    global.WebSocket = require('ws');
+  } catch (e) {
+    console.warn('WebSocket polyfill not loaded');
+  }
+}
+
 let _client: SupabaseClient | null = null;
 
 /**

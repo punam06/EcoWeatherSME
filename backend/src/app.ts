@@ -27,6 +27,9 @@ import cors from 'cors';
 import trustScoreRouter from './api/routes/trustScore.route';
 import climateDVSRouter from './api/routes/climateDVS.route';
 import aiRecommendRouter from './api/routes/aiRecommend.route';
+import agentRouter from './api/routes/agent.route';
+import aiChatRouter from './api/routes/aiChat.route';
+import { startSessionPruningInterval } from './lib/services/chatSession.service';
 
 // ── Supabase Guard ────────────────────────────────────────────────────────────
 import { isSupabaseConfigured } from './lib/supabase';
@@ -137,6 +140,9 @@ app.get('/api/test-db', async (_req: Request, res: Response) => {
 app.use('/api/batch/trust-score', trustScoreRouter);
 app.use('/api/climate/dvs', climateDVSRouter);
 app.use('/api/ai/recommend', aiRecommendRouter);
+app.use('/api/agent', agentRouter);
+app.use('/api', agentRouter);
+app.use('/api/ai/chat', aiChatRouter);
 
 // ═══════════════════════════════════════════════════════════════
 // LEGACY ROUTES (keep compatibility with existing frontend JS client)
@@ -270,6 +276,9 @@ app.use((_req: Request, res: Response) => {
 // ═══════════════════════════════════════════════════════════════
 // SERVER START
 // ═══════════════════════════════════════════════════════════════
+
+// Start session pruning interval on boot
+startSessionPruningInterval();
 
 app.listen(PORT, () => {
   console.log('\n╔══════════════════════════════════════════════════════════╗');

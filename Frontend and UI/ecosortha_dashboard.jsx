@@ -144,7 +144,7 @@ function calcTrustScore({ pH, EC, temp, ratio, days }) {
   score -= Math.abs(EC - ECOpt) * 6;
   score -= Math.abs(temp - tempOpt) * 1.2;
   const ratioMap = { "1:1:10": -5, "1:1:20": 0, "1:1:30": -3, "1:1:40": -8 };
-  score += ratioMap[ratio] !== undefined ? ratioMap[ratio] : 0;
+  score += ratioMap[ratio] ?? 0;
   if (days < 7) score -= (7 - days) * 4;
   else if (days > 14) score -= (days - 14) * 2;
   return Math.max(0, Math.min(100, Math.round(score)));
@@ -176,19 +176,15 @@ function calcThermalRisk(adjustedTemp) {
 }
 
 function calcDVS(trustScore, adjustedTemp) {
-  // Continuous thermal risk factor starting from 25°C to 40°C
-  const tempExcess = Math.max(0, adjustedTemp - 25);
-  // Linear risk scaling: 0 at 25°C, up to 1.0 at 40°C
-  const trf = Math.min(1.0, tempExcess / 15);
-  return Math.max(0, Math.min(100, Math.round(trustScore * (1 - trf * 0.45))));
+  const trf = adjustedTemp > 38 ? 1.0 : adjustedTemp > 35 ? 0.5 : 0.1;
+  return Math.max(0, Math.min(100, Math.round(trustScore * (1 - trf * 0.42))));
 }
 
 function calcTST(trustScore, zone, packaging, hour) {
   const uhi = UHI_ZONES[zone];
   const pkgFactor = packaging === "thermal" ? 4.0 : packaging === "insulated" ? 2.0 : 1.0;
   const solarMulti = getSolarHourMultiplier(hour);
-  // TST represents realistic delivery windows (in minutes) based on IoT Trust and local hazards
-  const raw = (trustScore * pkgFactor * uhi.baseSurvival) / (uhi.hazardMultiplier * solarMulti);
+  const raw = (trustScore * pkgFactor * uhi.baseSurvival) / (uhi.hazardMultiplier * solarMulti) * 60;
   return Math.max(10, Math.round(raw));
 }
 
@@ -218,7 +214,7 @@ function GaugeArc({ value, max = 100, color, size = 140, strokeWidth = 10 }) {
 }
 
 function ScoreGauge({ value, label, size = 140 }) {
-  const color = value === 0 ? "var(--text-dim)" : (value >= 75 ? ACCENT.green : value >= 55 ? ACCENT.amber : ACCENT.red);
+  const color = value >= 75 ? ACCENT.green : value >= 55 ? ACCENT.amber : ACCENT.red;
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
       <div style={{ position: "relative", width: size, height: size / 2 + 20 }}>
@@ -359,14 +355,39 @@ function IoTForm({ onResult }) {
   useEffect(() => {
     const fetchTrustScore = async () => {
       setIsLoading(true);
-      setTimeout(() => {
-        const score = calcTrustScore({ pH, EC, temp, ratio, days });
-        setTs(score);
-        onResult(score);
+      try {
+        const response = await fetch(
+          "https://pdeskdcdyhbldwfgbowz.supabase.co/functions/v1/clever-responder",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              action: "trust-score",
+              pH,
+              EC,
+              temp,
+              ratio,
+              days,
+            }),
+          }
+        );
+        const data = await response.json();
+        setTs(data.trustScore || 0);
+        onResult(data.trustScore || 0);
         setCertified(false);
+      } catch (error) {
+        console.error("Failed to fetch trust score:", error);
+        // Fallback to local calculation on error
+        const fallbackScore = calcTrustScore({ pH, EC, temp, ratio, days });
+        setTs(fallbackScore);
+        onResult(fallbackScore);
+      } finally {
         setIsLoading(false);
-      }, 400); 
+      }
     };
+    
     fetchTrustScore();
   }, [pH, EC, temp, ratio, days, onResult]);
 
@@ -492,211 +513,173 @@ function DispatchCalendar({ baseTemp, zone, trustScore, windSpeed }) {
   );
 }
 
-function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
+function MicroclimateSimulator({ trustScore }) {
   const [baseTemp, setBaseTemp] = useState(31);
   const [zone, setZone] = useState("Mirpur");
   const [packaging, setPackaging] = useState("standard");
-  const [hour, setHour] = useState(new Date().getHours());
+  const [hour, setHour] = useState(12);
   const [windSpeed, setWindSpeed] = useState(8);
-  const [routeDuration, setRouteDuration] = useState(90);
   const [zoneSearch, setZoneSearch] = useState("");
   const [isFetchingWeather, setIsFetchingWeather] = useState(false);
+  const [isFetchingMetrics, setIsFetchingMetrics] = useState(false);
+  const [dvs, setDvs] = useState(0);
   const [tst, setTst] = useState(0);
   const [adjustedTemp, setAdjustedTemp] = useState(31);
   const [thermalRisk, setThermalRisk] = useState({ value: 0.1, label: "Low", color: ACCENT.green });
   const [isListening, setIsListening] = useState(false);
   const [speechLang, setSpeechLang] = useState("en-US");
   const [speechSupported, setSpeechSupported] = useState(true);
-  const [weatherStatus, setWeatherStatus] = useState("");
-  const [isCalculating, setIsCalculating] = useState(false);
-  const [hasCalculated, setHasCalculated] = useState(false);
-  const [activeFormulaTab, setActiveFormulaTab] = useState("dvs");
-  const recognitionRef = useRef(null);
 
   const uhi = UHI_ZONES[zone] || UHI_ZONES["Mirpur"];
-  const solarFactor = getSolarFactor(hour);
   const dvsColor = dvs >= 75 ? ACCENT.green : dvs >= 55 ? ACCENT.amber : ACCENT.red;
-  const trustColor = trustScore >= 75 ? ACCENT.green : trustScore >= 55 ? ACCENT.amber : ACCENT.red;
 
   const filteredZones = Object.keys(UHI_ZONES).filter(z => z.toLowerCase().includes(zoneSearch.toLowerCase()));
 
-  // Calculate viability scores manual click trigger
-  const handleCalculate = () => {
-    setIsCalculating(true);
-    setTimeout(() => {
-      const adjTemp = calcAdjustedTemp(baseTemp, zone, hour, windSpeed);
-      const risk = calcThermalRisk(adjTemp);
-      const tstScore = calcTST(trustScore, zone, packaging, hour);
-      // Continuous route duration penalty based on safety margin relative to thermal survival time
-      const routePenalty = Math.min(0.8, (routeDuration / tstScore) * 0.3);
-      const baseDvs = calcDVS(trustScore, adjTemp);
-      const finalDvs = Math.max(0, Math.round(baseDvs * (1 - routePenalty)));
-      
-      setAdjustedTemp(adjTemp);
-      setThermalRisk(risk);
-      setDvs(finalDvs);
-      setTst(tstScore);
-      setHasCalculated(true);
-      setIsCalculating(false);
-    }, 600); // Premium calculation delay for loading transition
-  };
-
-  // Reset calculations to zero when parameters change
+  // Fetch microclimate metrics when inputs change
   useEffect(() => {
-    setHasCalculated(false);
-    setDvs(0);
-  }, [trustScore, baseTemp, zone, hour, windSpeed, routeDuration, packaging, setDvs]);
+    const fetchMicroclimateMetrics = async () => {
+      setIsFetchingMetrics(true);
+      try {
+        const response = await fetch(
+          "https://pdeskdcdyhbldwfgbowz.supabase.co/functions/v1/clever-responder",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              action: "microclimate-metrics",
+              trustScore,
+              zone,
+              packaging,
+              hour,
+              baseTemp,
+              windSpeed,
+            }),
+          }
+        );
+        const data = await response.json();
+        setDvs(data.dvs || 0);
+        setTst(data.tst || 0);
+        setAdjustedTemp(data.adjustedTemp || baseTemp);
+        setThermalRisk(data.thermalRisk || { value: 0.1, label: "Low", color: ACCENT.green });
+      } catch (error) {
+        console.error("Failed to fetch microclimate metrics:", error);
+        // Fallback to local calculation on error
+        const adjTemp = calcAdjustedTemp(baseTemp, zone, hour, windSpeed);
+        const risk = calcThermalRisk(adjTemp);
+        const dvsScore = calcDVS(trustScore, adjTemp);
+        const tstScore = calcTST(trustScore, zone, packaging, hour);
+        setAdjustedTemp(adjTemp);
+        setThermalRisk(risk);
+        setDvs(dvsScore);
+        setTst(tstScore);
+      } finally {
+        setIsFetchingMetrics(false);
+      }
+    };
+    
+    fetchMicroclimateMetrics();
+  }, [baseTemp, zone, packaging, hour, windSpeed, trustScore]);
 
-  // On mount: fetch live Dhaka weather automatically
-  useEffect(() => {
-    fetchLiveWeather("Dhaka");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // On mount: detect speech language from browser locale
   useEffect(() => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       setSpeechSupported(false);
     } else {
       const locale = (navigator.languages && navigator.languages[0]) || navigator.language || "en-US";
-      if (locale.toLowerCase().startsWith("bn")) setSpeechLang("bn-BD");
+      if (locale.toLowerCase().startsWith("bn")) {
+        setSpeechLang("bn-BD");
+      }
+
+      // Pre-detect language based on location
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          try {
+            const { latitude, longitude } = position.coords;
+            const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`);
+            const data = await res.json();
+            if (data.countryCode === "BD") {
+              setSpeechLang("bn-BD");
+            } else if (!locale.toLowerCase().startsWith("bn")) {
+              setSpeechLang("en-US");
+            }
+          } catch (e) {
+            console.error("Failed to detect language from location", e);
+          }
+        },
+        () => console.warn("Geolocation denied/failed. Defaulting to en-US.")
+      );
     }
   }, []);
 
-  const handleListen = async () => {
-    if (isListening) {
-      if (recognitionRef.current && recognitionRef.current.state === "recording") {
-        recognitionRef.current.stop();
-      }
-      setIsListening(false);
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      recognitionRef.current = mediaRecorder;
-      let audioChunks = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) audioChunks.push(event.data);
-      };
-
-      mediaRecorder.onstop = async () => {
-        // Stop all tracks to release mic
-        stream.getTracks().forEach(track => track.stop());
-        
-        if (audioChunks.length === 0) return;
-        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-        
-        try {
-          // Use Groq Whisper transcription
-          const res = await window.APIClient.transcribeAudio(audioBlob, speechLang);
-          if (res.success && res.text) {
-            const transcript = res.text.trim();
-            setZoneSearch(transcript);
-            
-            // Auto-select zone if matched
-            const matchedZone = Object.keys(UHI_ZONES).find(z => z.toLowerCase().includes(transcript.toLowerCase()));
-            if (matchedZone) {
-              setZone(matchedZone);
-            }
-            // Auto-fetch weather for spoken location
-            fetchLiveWeather(matchedZone || transcript);
-          }
-        } catch (err) {
-          console.error("Transcription error:", err);
-        }
-      };
-
-      mediaRecorder.start();
-      setIsListening(true);
-    } catch (err) {
-      console.error("Microphone access denied or error:", err);
-      setIsListening(false);
-      setSpeechSupported(false); // If they deny permission
-    }
+  const handleListen = () => {
+    if (isListening) return;
+    startSpeechRecognition(speechLang);
   };
 
-  // Auto-detect: use browser GPS -> /api/weather by lat/lon (no Google Maps key needed)
-  // Also auto-sets dispatch hour to current local time
-  async function fetchLiveWeather(locationQuery) {
-    setIsFetchingWeather(true);
-    setWeatherStatus("Detecting...");
-    setHour(new Date().getHours());
+  const startSpeechRecognition = (lang) => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setSpeechSupported(false);
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = lang;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
 
-    if (typeof locationQuery === "string") {
-      // Called from speech recognition with a zone/city name
-      try {
-        const weatherRes = await window.APIClient.getWeatherByCity(locationQuery);
+    recognition.onstart = () => {
+      setIsListening(true);
+    };
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setZoneSearch(transcript);
+      // Auto-select zone if matched
+      const matchedZone = Object.keys(UHI_ZONES).find(z => z.toLowerCase().includes(transcript.toLowerCase()));
+      if (matchedZone) {
+        setZone(matchedZone);
+      }
+      // Auto-fetch weather for spoken location
+      fetchLiveWeather(matchedZone || transcript);
+    };
+
+    recognition.onerror = (event) => {
+      console.error("Speech recognition error", event.error);
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.start();
+  };
+
+  const fetchLiveWeather = async (locationQuery = null) => {
+    setIsFetchingWeather(true);
+    const targetLocation = typeof locationQuery === "string" ? locationQuery : (zoneSearch || zone || "Dhaka");
+    try {
+      const geoRes = await window.APIClient.geocode(targetLocation);
+      if (geoRes.success && geoRes.data) {
+        const { lat, lon } = geoRes.data;
+        const weatherRes = await window.APIClient.getWeather(lat, lon);
         if (weatherRes.success && weatherRes.data) {
           setBaseTemp(Math.round(weatherRes.data.temperature * 10) / 10);
           setWindSpeed(Math.round(weatherRes.data.windspeed_kmh));
-          setWeatherStatus("Live: " + (weatherRes.data.name || locationQuery));
         }
-      } catch (e) {
-        console.error("Weather by city failed", e);
-        setWeatherStatus("Failed.");
       }
-      setIsFetchingWeather(false);
-      return;
+    } catch (e) {
+      console.error("Failed to fetch live weather via backend", e);
     }
-
-    // Auto-detect button: use browser GPS
-    if (!navigator.geolocation) {
-      setWeatherStatus("GPS not supported.");
-      setIsFetchingWeather(false);
-      return;
-    }
-    setWeatherStatus("Getting GPS...");
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const { latitude, longitude } = position.coords;
-          setWeatherStatus("Fetching weather...");
-          const weatherRes = await window.APIClient.getWeather(latitude, longitude);
-          if (weatherRes.success && weatherRes.data) {
-            setBaseTemp(Math.round(weatherRes.data.temperature * 10) / 10);
-            setWindSpeed(Math.round(weatherRes.data.windspeed_kmh));
-            setWeatherStatus("Live: " + (weatherRes.data.name || "your location"));
-          }
-        } catch (e) {
-          console.error("GPS weather fetch failed", e);
-          setWeatherStatus("Failed.");
-        }
-        setIsFetchingWeather(false);
-      },
-      async () => {
-        // GPS denied — fall back to Dhaka
-        setWeatherStatus("GPS denied, loading Dhaka...");
-        try {
-          const weatherRes = await window.APIClient.getWeather(23.8103, 90.4125);
-          if (weatherRes.success && weatherRes.data) {
-            setBaseTemp(Math.round(weatherRes.data.temperature * 10) / 10);
-            setWindSpeed(Math.round(weatherRes.data.windspeed_kmh));
-            setWeatherStatus("Live: Dhaka (fallback)");
-          }
-        } catch (e) { setWeatherStatus("Weather unavailable."); }
-        setIsFetchingWeather(false);
-      },
-      { timeout: 3000, maximumAge: 60000 }
-    );
-  }
+    setIsFetchingWeather(false);
+  };
 
   const advice = dvs >= 75
     ? `${zone} zone — DVS ${dvs} is SAFE. Adjusted temp ${adjustedTemp.toFixed(1)}°C. Products can be dispatched safely. TST: ${tst} min.`
     : dvs >= 55
     ? `CAUTION: ${zone} reaches ${adjustedTemp.toFixed(1)}°C. Dispatch heat-sensitive items before 08:00 AM only. TST: ${tst} min. Consider insulated packaging.`
     : `HIGH RISK: ${zone} at ${adjustedTemp.toFixed(1)}°C. TST only ${tst} min. Delay dispatch or upgrade to thermal-insulated bins for perishable goods.`;
-
-  const displayDvsVal = hasCalculated ? dvs : 0;
-  const displayTrustVal = hasCalculated ? trustScore : 0;
-  const displayDvsColor = hasCalculated ? dvsColor : "var(--text-dim)";
-  const displayTrustColor = hasCalculated ? trustColor : "var(--text-dim)";
-  const displayTstColor = hasCalculated ? (tst > routeDuration ? ACCENT.green : ACCENT.red) : "var(--text-dim)";
-  const displayedAdvice = hasCalculated
-    ? advice
-    : "Adjust delivery parameters on the left and click 'Calculate Viability Scores' to evaluate thermal risks and delivery viability.";
 
   return (
     <div>
@@ -717,11 +700,6 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
               {isFetchingWeather ? "⏳ Fetching..." : "📡 Auto-Detect (Live)"}
             </button>
           </div>
-          {weatherStatus ? (
-            <div style={{ fontSize: 10, color: ACCENT.blue, marginBottom: 8, marginTop: -4 }}>
-              {weatherStatus}
-            </div>
-          ) : null}
           <div style={{ background: "var(--bg-input)", padding: 14, borderRadius: 10, border: "1px solid var(--border-primary)", marginBottom: 16 }}>
             <SliderRow label="Base Temperature (Regional)" min={25} max={42} step={0.5} value={baseTemp} onChange={setBaseTemp} unit="°C" color={baseTemp > 35 ? ACCENT.red : ACCENT.amber} />
             <div style={{ marginTop: 12 }}>
@@ -730,17 +708,6 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
           </div>
 
           <SliderRow label="Dispatch Hour" min={0} max={23} step={1} value={hour} onChange={setHour} unit={`:00 ${hour >= 11 && hour < 15 ? '(Peak Solar)' : hour >= 8 && hour < 18 ? '(Daylight)' : '(Night)'}`} color={hour >= 11 && hour < 15 ? ACCENT.red : hour >= 8 && hour < 18 ? ACCENT.amber : ACCENT.green} />
-
-          <div style={{ marginTop: 14 }}>
-            <SliderRow
-              label="Route Duration"
-              min={15} max={240} step={15}
-              value={routeDuration}
-              onChange={setRouteDuration}
-              unit={` min${routeDuration > tst && tst > 0 ? ' ⚠ Exceeds TST!' : ''}`}
-              color={routeDuration > tst && tst > 0 ? ACCENT.red : routeDuration > tst * 0.8 && tst > 0 ? ACCENT.amber : ACCENT.green}
-            />
-          </div>
 
           <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, marginTop: 16, fontWeight: 500 }}>Delivery Zone (Dhaka)</div>
           
@@ -756,7 +723,7 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
               />
             </div>
             {speechSupported && (
-              <React.Fragment>
+              <>
                 <select 
                   value={speechLang} 
                   onChange={e => setSpeechLang(e.target.value)}
@@ -782,7 +749,7 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
                 >
                   {isListening ? "🔴" : "🎤"}
                 </button>
-              </React.Fragment>
+              </>
             )}
           </div>
           {speechSupported && isListening && (
@@ -818,7 +785,7 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
           </div>
 
           <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>Packaging Type</div>
-          <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
+          <div style={{ display: "flex", gap: 6 }}>
             {[["standard", "Standard"], ["insulated", "Insulated"], ["thermal", "Thermal Bin"]].map(([v, l]) => (
               <button key={v} onClick={() => setPackaging(v)}
                 style={{
@@ -833,158 +800,52 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
               </button>
             ))}
           </div>
-
-          <button
-            onClick={() => handleCalculate()}
-            disabled={isCalculating}
-            style={{
-              width: "100%", padding: "12px", borderRadius: 10, border: "none",
-              background: isCalculating 
-                ? ACCENT.amber 
-                : (hasCalculated ? ACCENT.green : ACCENT.blue),
-              color: "#fff", fontSize: 14, fontWeight: 700,
-              cursor: isCalculating ? "wait" : "pointer", transition: "all 0.3s ease",
-              boxShadow: isCalculating 
-                ? "0 4px 14px rgba(245, 158, 11, 0.3)" 
-                : (hasCalculated ? "0 4px 14px rgba(16, 185, 129, 0.3)" : "0 4px 14px rgba(59, 130, 246, 0.3)")
-            }}
-            onMouseOver={(e) => e.currentTarget.style.opacity = 0.9}
-            onMouseOut={(e) => e.currentTarget.style.opacity = 1}
-          >
-            {isCalculating 
-              ? "⏳ Running MERM Analysis..." 
-              : (hasCalculated ? "✓ Analysis Complete!" : "📊 Calculate Viability Scores")
-            }
-          </button>
         </div>
 
         {/* RIGHT COLUMN */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", alignItems: "center", background: "var(--bg-input)", borderRadius: 12, border: "1px solid var(--border-primary)", minHeight: 250 }}>
+            {isFetchingMetrics ? (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 250 }}>
+                <div style={{ fontSize: 24, marginBottom: 12 }}>⏳</div>
+                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>Analyzing microclimate...</div>
+              </div>
+            ) : (
+              <>
+                <div style={{ position: "relative", marginBottom: 24 }}>
+                  <div style={{ background: "var(--bg-primary)", borderRadius: "50%", padding: 12 }}>
+                    <CircleArc value={dvs} color={dvsColor} size={150} strokeWidth={14} />
+                  </div>
+                  <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center" }}>
+                    <div style={{ fontSize: 36, fontWeight: 700, color: dvsColor, lineHeight: 1, fontFamily: "'JetBrains Mono', monospace" }}>{dvs}</div>
+                    <div style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 600, marginTop: 4 }}>DVS SCORE</div>
+                  </div>
+                </div>
 
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", background: "var(--bg-input)", borderRadius: 12, border: "1px solid var(--border-primary)", padding: "20px 24px" }}>
-            <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, marginBottom: 16, letterSpacing: "0.06em" }}>VIABILITY SCORES</div>
-            <div style={{ display: "flex", gap: 24, justifyContent: "center", marginBottom: 16 }}>
-              {/* DVS Arc */}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                <div style={{ position: "relative" }}>
-                  <div style={{ background: "var(--bg-primary)", borderRadius: "50%", padding: 10 }}>
-                    <CircleArc value={displayDvsVal} color={displayDvsColor} size={120} strokeWidth={12} />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, width: "100%" }}>
+                  <div style={{ background: "var(--bg-primary)", padding: "16px 0", borderRadius: 8, textAlign: "center", border: "1px solid var(--border-primary)" }}>
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Thermal Survival</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{tst} min</div>
                   </div>
-                  <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center" }}>
-                    <div style={{ fontSize: 26, fontWeight: 700, color: displayDvsColor, lineHeight: 1, fontFamily: "'JetBrains Mono', monospace" }}>{displayDvsVal}</div>
-                    <div style={{ fontSize: 8, color: "var(--text-dim)", fontWeight: 600, marginTop: 2 }}>/ 100</div>
+                  <div style={{ background: "var(--bg-primary)", padding: "16px 0", borderRadius: 8, textAlign: "center", border: "1px solid var(--border-primary)" }}>
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Route Duration</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>90 min</div>
                   </div>
                 </div>
-                <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: displayDvsColor }}>DVS</div>
-                  <div style={{ fontSize: 9, color: "var(--text-dim)" }}>Delivery Viability</div>
-                </div>
-              </div>
-              {/* Trust Score Arc */}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                <div style={{ position: "relative" }}>
-                  <div style={{ background: "var(--bg-primary)", borderRadius: "50%", padding: 10 }}>
-                    <CircleArc value={displayTrustVal} color={displayTrustColor} size={120} strokeWidth={12} />
-                  </div>
-                  <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center" }}>
-                    <div style={{ fontSize: 26, fontWeight: 700, color: displayTrustColor, lineHeight: 1, fontFamily: "'JetBrains Mono', monospace" }}>{displayTrustVal}</div>
-                    <div style={{ fontSize: 8, color: "var(--text-dim)", fontWeight: 600, marginTop: 2 }}>/ 100</div>
-                  </div>
-                </div>
-                <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: displayTrustColor }}>TRUST</div>
-                  <div style={{ fontSize: 9, color: "var(--text-dim)" }}>IoT Batch Score</div>
-                </div>
-              </div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, width: "100%" }}>
-              <div style={{ background: "var(--bg-primary)", padding: "12px 0", borderRadius: 8, textAlign: "center", border: "1px solid var(--border-primary)" }}>
-                <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>Thermal Survival</div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: displayTstColor, fontFamily: "'JetBrains Mono', monospace" }}>
-                  {hasCalculated ? `${tst} min` : "0 min"}
-                </div>
-              </div>
-              <div style={{ background: "var(--bg-primary)", padding: "12px 0", borderRadius: 8, textAlign: "center", border: `1px solid ${hasCalculated && routeDuration > tst && tst > 0 ? ACCENT.redBorder : "var(--border-primary)"}` }}>
-                <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>Route Duration</div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: hasCalculated && routeDuration > tst && tst > 0 ? ACCENT.red : "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace" }}>{routeDuration} min</div>
-              </div>
-            </div>
+              </>
+            )}
           </div>
 
           <div style={{ padding: "20px 24px", background: "var(--bg-input)", borderRadius: 12, border: "1px solid var(--border-primary)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", letterSpacing: "0.05em" }}>FORMULA ENGINES</div>
-              <div style={{ display: "flex", gap: 4 }}>
-                {["dvs", "trust", "tst"].map(t => (
-                  <button key={t} onClick={() => setActiveFormulaTab(t)}
-                    style={{
-                      padding: "3px 8px", borderRadius: 6, border: "none",
-                      background: activeFormulaTab === t ? (hasCalculated ? displayDvsColor + "22" : "var(--bg-primary)") : "transparent",
-                      color: activeFormulaTab === t ? (hasCalculated ? displayDvsColor : "var(--text-primary)") : "var(--text-dim)",
-                      fontSize: 10, fontWeight: 700, cursor: "pointer",
-                      letterSpacing: "0.05em", transition: "all 0.25s ease",
-                      border: `1px solid ${activeFormulaTab === t ? (hasCalculated ? displayDvsColor + "44" : "var(--border-primary)") : "transparent"}`
-                    }}>
-                    {t.toUpperCase()}
-                  </button>
-                ))}
-              </div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 16, letterSpacing: "0.05em" }}>TST FORMULA (MERM)</div>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: "var(--text-primary)", lineHeight: 1.8 }}>
+              <div style={{ color: "var(--text-secondary)" }}>TST = (Trust × Insulation)</div>
+              <div style={{ color: "var(--text-secondary)", marginLeft: 24 }}>÷ (Hazard × Solar)</div>
+              <div style={{ borderBottom: "1px solid var(--border-primary)", margin: "12px 0" }}></div>
+              <div>= ({trustScore} × {(packaging==="thermal"?4:packaging==="insulated"?2:1).toFixed(1)})</div>
+              <div>÷ ({uhi.hazardMultiplier.toFixed(1)} × {solarFactor.toFixed(1)})</div>
+              <div style={{ color: ACCENT.green, fontWeight: 600 }}>≈ {tst} min</div>
             </div>
-
-            {activeFormulaTab === "dvs" && (
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "var(--text-primary)", lineHeight: 1.8 }}>
-                <div style={{ color: "var(--text-secondary)", fontWeight: 600 }}>DVS = Trust × (1 - TRF × 0.45) × (1 - Penalty)</div>
-                <div style={{ borderBottom: "1px solid var(--border-primary)", margin: "10px 0" }}></div>
-                {hasCalculated ? (
-                  <>
-                    <div style={{ color: "var(--text-muted)" }}>• Trust Score: {trustScore}</div>
-                    <div style={{ color: "var(--text-muted)" }}>• TRF: Math.min(1.0, Max(0, {adjustedTemp.toFixed(1)}°C - 25) / 15) = {(Math.min(1.0, Math.max(0, adjustedTemp - 25) / 15)).toFixed(3)}</div>
-                    <div style={{ color: "var(--text-muted)" }}>• Penalty: Math.min(0.8, ({routeDuration} / {tst}) × 0.3) = {Math.min(0.8, (routeDuration / tst) * 0.3).toFixed(2)}</div>
-                    <div style={{ borderBottom: "1px dashed var(--border-primary)", margin: "8px 0" }}></div>
-                    <div>= {trustScore} × (1 - {(Math.min(1.0, Math.max(0, adjustedTemp - 25) / 15)).toFixed(3)} × 0.45) × (1 - {Math.min(0.8, (routeDuration / tst) * 0.3).toFixed(2)})</div>
-                    <div style={{ color: displayDvsColor, fontWeight: 700, marginTop: 4 }}>≈ {dvs} / 100</div>
-                  </>
-                ) : (
-                  <div style={{ color: "var(--text-dim)", fontStyle: "italic", marginTop: 10 }}>Pending calculation...</div>
-                )}
-              </div>
-            )}
-
-            {activeFormulaTab === "trust" && (
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "var(--text-primary)", lineHeight: 1.8 }}>
-                <div style={{ color: "var(--text-secondary)", fontWeight: 600 }}>Trust = 100 - pH_err - EC_err - Temp_err ± Ratio ± Days</div>
-                <div style={{ borderBottom: "1px solid var(--border-primary)", margin: "10px 0" }}></div>
-                {hasCalculated ? (
-                  <>
-                    <div style={{ color: "var(--text-muted)" }}>• Certified Formulation Base Score</div>
-                    <div style={{ color: "var(--text-muted)" }}>• Derived from pH, EC, Temp & Storage values</div>
-                    <div style={{ borderBottom: "1px dashed var(--border-primary)", margin: "8px 0" }}></div>
-                    <div style={{ color: displayTrustColor, fontWeight: 700 }}>≈ {trustScore} / 100 (Certified IoT Batch)</div>
-                  </>
-                ) : (
-                  <div style={{ color: "var(--text-dim)", fontStyle: "italic", marginTop: 10 }}>Pending calculation...</div>
-                )}
-              </div>
-            )}
-
-            {activeFormulaTab === "tst" && (
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "var(--text-primary)", lineHeight: 1.8 }}>
-                <div style={{ color: "var(--text-secondary)", fontWeight: 600 }}>TST = (Trust × Insulation) ÷ (Hazard × Solar)</div>
-                <div style={{ borderBottom: "1px solid var(--border-primary)", margin: "10px 0" }}></div>
-                {hasCalculated ? (
-                  <>
-                    <div style={{ color: "var(--text-muted)" }}>• Insulation: {(packaging === "thermal" ? 4.0 : packaging === "insulated" ? 2.0 : 1.0).toFixed(1)}</div>
-                    <div style={{ color: "var(--text-muted)" }}>• Hazard ({zone}): {uhi.hazardMultiplier.toFixed(2)} ({uhi.hazardClass})</div>
-                    <div style={{ color: "var(--text-muted)" }}>• Solar multiplier: {solarFactor.toFixed(1)}</div>
-                    <div style={{ borderBottom: "1px dashed var(--border-primary)", margin: "8px 0" }}></div>
-                    <div>= ({trustScore} × {(packaging === "thermal" ? 4.0 : packaging === "insulated" ? 2.0 : 1.0).toFixed(1)}) ÷ ({uhi.hazardMultiplier.toFixed(2)} × {solarFactor.toFixed(1)})</div>
-                    <div style={{ color: displayTstColor, fontWeight: 700, marginTop: 4 }}>≈ {tst} min</div>
-                  </>
-                ) : (
-                  <div style={{ color: "var(--text-dim)", fontStyle: "italic", marginTop: 10 }}>Pending calculation...</div>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -992,20 +853,16 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
       {/* Advisory */}
       <div style={{
         marginTop: 14, padding: 14, borderRadius: 10,
-        border: `1px solid ${hasCalculated ? displayDvsColor + "33" : "var(--border-primary)"}`,
-        background: hasCalculated ? displayDvsColor + "0A" : "var(--bg-input)",
+        border: `1px solid ${dvsColor}33`, background: dvsColor + "0A",
         transition: "all 0.4s ease",
       }}>
-        <div style={{ fontSize: 11, color: hasCalculated ? displayDvsColor : "var(--text-secondary)", fontWeight: 700, marginBottom: 5 }}>
-          {hasCalculated 
-            ? (dvs >= 75 ? "✓ Smart Dispatch Advice" : dvs >= 55 ? "⚠ Smart Dispatch Advice" : "✕ High Risk Advisory")
-            : "✦ Smart Dispatch Advisory Pending"
-          }
+        <div style={{ fontSize: 11, color: dvsColor, fontWeight: 700, marginBottom: 5 }}>
+          {dvs >= 75 ? "✓ Smart Dispatch Advice" : dvs >= 55 ? "⚠ Smart Dispatch Advice" : "✕ High Risk Advisory"}
         </div>
-        <div style={{ fontSize: 12, color: hasCalculated ? "var(--text-primary)" : "var(--text-muted)", lineHeight: 1.7 }}>{displayedAdvice}</div>
+        <div style={{ fontSize: 12, color: "var(--text-primary)", lineHeight: 1.7 }}>{advice}</div>
       </div>
 
-      <DispatchCalendar baseTemp={baseTemp} zone={zone} trustScore={trustScore} windSpeed={windSpeed} routeDuration={routeDuration} />
+      <DispatchCalendar baseTemp={baseTemp} zone={zone} trustScore={trustScore} windSpeed={windSpeed} />
     </div>
   );
 }
@@ -1099,163 +956,22 @@ function DemandChart() {
    TAB 4: IMPACT & ESG LEDGER
    ═══════════════════════════════════════════════════════════════ */
 function ESGCard({ trustScore, dvs }) {
-  // Calibrate DVS if simulator hasn't been run yet for general display
-  const activeDvs = dvs > 0 ? dvs : 72;
-  const isSimulated = dvs > 0;
-  
-  // Calculate ESG Scores
-  const eScore = Math.round((trustScore * 0.5) + (activeDvs * 0.5));
-  const sScore = Math.round((trustScore * 0.4) + 54);
-  const gScore = Math.round((trustScore * 0.6) + 38);
-  const esgScore = Math.round((eScore + sScore + gScore) / 3);
-  const esgGrade = esgScore >= 95 ? "A+" : esgScore >= 90 ? "A" : esgScore >= 80 ? "B+" : "B";
-  
-  // Core KPI Calculations
-  const spoilagePrevented = Math.round(trustScore * 2.1 * (activeDvs / 100) * 40);
+  const spoilagePrevented = Math.round(trustScore * 2.1 * (dvs / 100) * 40);
   const plasticOffset = Math.round(trustScore * 0.8);
   const carbonSeq = Math.round(trustScore * 1.4);
-
-  const mockLedger = [
-    { id: "BCH-8492", date: "2026-05-28", zone: "Mirpur", env: "4.2 kg CO₂", soc: "Direct SME B2B Premium Paid", gov: "IoT Signed (BARI)", hash: "0x8f7a...3e" },
-    { id: "BCH-8411", date: "2026-05-27", zone: "Jatrabari", env: "3.8 kg CO₂", soc: "Direct SME B2B Premium Paid", gov: "IoT Signed (BARI)", hash: "0x4b2c...7d" },
-    { id: "BCH-8380", date: "2026-05-26", zone: "Uttara", env: "4.9 kg CO₂", soc: "Direct SME B2B Premium Paid", gov: "IoT Signed (BARI)", hash: "0x9a1e...9b" },
-  ];
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20, animation: "fadeSlideIn 0.4s ease" }}>
-      
-      {/* Dynamic ESG Grade & Segment Indicators */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 2fr", gap: 16 }}>
-        {/* Overall ESG Grade Ring */}
-        <div style={{
-          display: "flex", alignItems: "center", justifyItems: "center", gap: 20,
-          background: "var(--bg-input)", border: "1px solid var(--border-primary)",
-          borderRadius: 12, padding: "20px 24px", position: "relative",
-          backgroundImage: `linear-gradient(135deg, ${ACCENT.green}0A, transparent)`
-        }}>
-          <div style={{ position: "relative", flexShrink: 0 }}>
-            <CircleArc value={esgScore} color={ACCENT.green} size={110} strokeWidth={10} />
-            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center" }}>
-              <div style={{ fontSize: 32, fontWeight: 800, color: ACCENT.green, lineHeight: 1 }}>{esgGrade}</div>
-              <div style={{ fontSize: 10, color: "var(--text-dim)", fontWeight: 600, marginTop: 2 }}>{esgScore}/100</div>
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>EcoSortha ESG Rating</div>
-            <div style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.6 }}>
-              Your agricultural supply chain operates with exceptional compliance. 
-              {!isSimulated && <span style={{ color: ACCENT.amber }}> (DVS currently defaulting to compliant 72. Run simulator to dynamically refine this grade!)</span>}
-            </div>
-          </div>
-        </div>
-
-        {/* E, S, G Progress Indicators */}
-        <div style={{
-          background: "var(--bg-input)", border: "1px solid var(--border-primary)",
-          borderRadius: 12, padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14, justifyContent: "center"
-        }}>
-          {[
-            ["E", "Environmental Protection", eScore, ACCENT.green, "Waste & Plastic offset compliance"],
-            ["S", "Social Responsibility", sScore, ACCENT.blue, "Fair Direct-to-Market SME pricing model"],
-            ["G", "Governance & Traceability", gScore, ACCENT.amber, "BARI Certified & Blockchain Cryptography"]
-          ].map(([letter, title, val, col, sub]) => (
-            <div key={letter} style={{ display: "grid", gridTemplateColumns: "24px 1fr 40px", gap: 12, alignItems: "center" }}>
-              <div style={{
-                width: 24, height: 24, borderRadius: 6, background: col + "15",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: col, fontWeight: 700, fontSize: 12
-              }}>{letter}</div>
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-primary)" }}>{title}</span>
-                  <span style={{ fontSize: 10, color: "var(--text-dim)" }}>{sub}</span>
-                </div>
-                <div style={{ height: 6, background: "var(--gauge-track)", borderRadius: 3, overflow: "hidden" }}>
-                  <div style={{ width: `${val}%`, height: "100%", background: col, borderRadius: 3, transition: "width 0.8s ease" }}></div>
-                </div>
-              </div>
-              <div style={{ textAlign: "right", fontSize: 12, fontWeight: 700, color: col, fontFamily: "'JetBrains Mono', monospace" }}>{val}%</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* The 3 Core KPI Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-        {[
-          ["🛡️", "Agricultural Spoilage Prevented", `BDT ${spoilagePrevented.toLocaleString()}`, ACCENT.green, "Equivalent food waste savings"],
-          ["♻️", "Biodegradable Plastic Offset", `${plasticOffset} kg`, ACCENT.green, "Avoided standard polymers"],
-          ["🌿", "Ecological Carbon Sequestered", `${carbonSeq} kg CO₂`, ACCENT.green, "Soil biochar application"]
-        ].map(([icon, l, v, c, sub]) => (
-          <Card key={l} style={{ textAlign: "center", padding: "18px 14px", position: "relative" }}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>{icon}</div>
-            <div style={{ fontSize: 11, color: "var(--text-dim)", fontWeight: 500, marginBottom: 4 }}>{l}</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: c, fontFamily: "'JetBrains Mono', monospace", marginBottom: 4 }}>{v}</div>
-            <div style={{ fontSize: 9, color: "var(--text-dim)" }}>{sub}</div>
-          </Card>
-        ))}
-      </div>
-
-      {/* Blockchain Ledger & Formulas Grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.8fr 1.2fr", gap: 16 }}>
-        {/* Auditable Blockchain Ledger */}
-        <div style={{
-          background: "var(--bg-input)", border: "1px solid var(--border-primary)",
-          borderRadius: 12, padding: "20px 24px"
-        }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 12, letterSpacing: "0.05em" }}>AUDITABLE ESG LEDGER (LIVE ACCRUAL)</div>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 11 }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid var(--border-primary)" }}>
-                  <th style={{ padding: "8px 4px", color: "var(--text-dim)" }}>BATCH ID</th>
-                  <th style={{ padding: "8px 4px", color: "var(--text-dim)" }}>ZONE</th>
-                  <th style={{ padding: "8px 4px", color: "var(--text-dim)" }}>CARBON SAVED</th>
-                  <th style={{ padding: "8px 4px", color: "var(--text-dim)" }}>GOVERNANCE AUDIT</th>
-                  <th style={{ padding: "8px 4px", color: "var(--text-dim)", textAlign: "right" }}>BLOCKCHAIN PROOF</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mockLedger.map(row => (
-                  <tr key={row.id} style={{ borderBottom: "1px dashed var(--border-primary)" }}>
-                    <td style={{ padding: "10px 4px", fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>{row.id}</td>
-                    <td style={{ padding: "10px 4px", color: "var(--text-secondary)" }}>{row.zone}</td>
-                    <td style={{ padding: "10px 4px", color: col => col === ACCENT.green ? col : "var(--text-primary)" }}>{row.env}</td>
-                    <td style={{ padding: "10px 4px", color: ACCENT.green, fontWeight: 600 }}>✓ {row.gov}</td>
-                    <td style={{ padding: "10px 4px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", color: ACCENT.blue }}>{row.hash}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Dynamic ESG Formulas Explained */}
-        <div style={{
-          background: "var(--bg-input)", border: "1px solid var(--border-primary)",
-          borderRadius: 12, padding: "20px 24px"
-        }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 12, letterSpacing: "0.05em" }}>ESG FORMULATION METRICS</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, lineHeight: 1.6 }}>
-            <div>
-              <div style={{ color: ACCENT.green, fontWeight: 700 }}>1. Environmental (E-Impact)</div>
-              <div style={{ color: "var(--text-secondary)" }}>• Carbon = Trust × 1.4 kg CO₂</div>
-              <div style={{ color: "var(--text-secondary)" }}>• Plastic = Trust × 0.8 kg</div>
-              <div style={{ color: "var(--text-secondary)" }}>• Spoilage = Trust × 2.1 × (DVS/100) × BDT 40</div>
-            </div>
-            <div style={{ borderBottom: "1px dashed var(--border-primary)", margin: "4px 0" }}></div>
-            <div>
-              <div style={{ color: ACCENT.blue, fontWeight: 700 }}>2. Social (S-Impact)</div>
-              <div style={{ color: "var(--text-secondary)" }}>• Direct SME Premium direct B2B pricing model bypassed standard high-commission aggregators.</div>
-            </div>
-            <div style={{ borderBottom: "1px dashed var(--border-primary)", margin: "4px 0" }}></div>
-            <div>
-              <div style={{ color: ACCENT.amber, fontWeight: 700 }}>3. Governance (G-Impact)</div>
-              <div style={{ color: "var(--text-secondary)" }}>• Cryptographic signing audits and smart IoT validation thresholds. BARI certification guarantees trace standards.</div>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+      {[
+        ["🛡️", "Spoilage Prevented", `BDT ${spoilagePrevented.toLocaleString()}`, ACCENT.green],
+        ["♻️", "Plastic Offset", `${plasticOffset} kg`, ACCENT.green],
+        ["🌿", "Carbon Sequestered", `${carbonSeq} kg CO₂`, ACCENT.green],
+      ].map(([icon, l, v, c]) => (
+        <Card key={l} style={{ textAlign: "center", padding: "16px 12px" }}>
+          <div style={{ fontSize: 26, marginBottom: 6 }}>{icon}</div>
+          <div style={{ fontSize: 10, color: "var(--text-dim)", marginBottom: 6, lineHeight: 1.4 }}>{l}</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: c, fontFamily: "'JetBrains Mono', monospace" }}>{v}</div>
+        </Card>
+      ))}
     </div>
   );
 }
@@ -1536,20 +1252,12 @@ function ChatbotView() {
   const [isRecording, setIsRecording] = useState(false);
   const [speechLang, setSpeechLang] = useState("en-US");
   const [speechSupported, setSpeechSupported] = useState(true);
-  const [voiceError, setVoiceError] = useState("");
-  const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
-  const recognitionRef = useRef(null);
 
   useEffect(() => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       setSpeechSupported(false);
     } else {
-      const locale = (navigator.languages && navigator.languages[0]) || navigator.language || "en-US";
-      if (locale.toLowerCase().startsWith("bn")) {
-        setSpeechLang("bn-BD");
-      }
-
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           try {
@@ -1558,8 +1266,6 @@ function ChatbotView() {
             const data = await res.json();
             if (data.countryCode === "BD") {
               setSpeechLang("bn-BD");
-            } else if (!locale.toLowerCase().startsWith("bn")) {
-              setSpeechLang("en-US");
             }
           } catch (e) {
             console.error("Failed to detect language from location", e);
@@ -1581,55 +1287,30 @@ function ChatbotView() {
     setMessages(prev => [...prev, newMsg]);
     setInput("");
     
-    // Call actual backend API
-    const fetchReply = async () => {
-      try {
-        const response = await window.APIClient.chat(text);
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "system",
-            content: response.reply || "I couldn't generate a response.",
-            time: new Date().toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-          },
-        ]);
-      } catch (error) {
-        console.error("Chat API error:", error);
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "system",
-            content: "Sorry, I am having trouble connecting to the AI server.",
-            time: new Date().toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-          },
-        ]);
+    // Mock AI response
+    setTimeout(() => {
+      let reply = "I've recorded that for you.";
+      if (attachedFileName) {
+        reply = `I've analyzed the attached file: "${attachedFileName}". The context shows a sudden spike in ambient temperature. I suggest upgrading to thermal bins for this batch.`;
+      } else if (text.toLowerCase().includes("forecast")) {
+        reply = "Currently, the Mirpur zone is experiencing a moderate thermal hazard (38.7°C). I suggest delaying heat-sensitive dispatches until 5:00 PM when the solar factor drops.";
+      } else if (text.toLowerCase().includes("suggestion")) {
+        reply = "Based on your recent batches, upgrading to Thermal-Insulated packaging will extend your Thermal Survival Time (TST) by 4x, allowing safe midday deliveries.";
+      } else if (text.toLowerCase().includes("feedback")) {
+        reply = "Thank you for the feedback. I've logged this in the ESG ledger to improve our ML demand forecasting models.";
       }
-    };
-    
-    fetchReply();
+      setMessages(prev => [...prev, { role: "system", content: reply, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }]);
+    }, 1200);
   };
 
   const handleVoice = () => {
-    if (isRecording) {
-      if (recognitionRef.current) recognitionRef.current.stop();
-      setIsRecording(false);
-      return;
+    if (isRecording) return;
+    if (navigator.mediaDevices?.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => stream.getTracks().forEach(track => track.stop()))
+        .catch(() => {});
     }
-    setVoiceError("");
-
-    try {
-      startSpeechRecognition(speechLang);
-    } catch (error) {
-      console.error("Speech recognition start error", error);
-      setVoiceError("Microphone access is blocked. Check Safari site permissions for this page.");
-      setIsRecording(false);
-    }
+    startSpeechRecognition(speechLang);
   };
 
   const startSpeechRecognition = (lang) => {
@@ -1639,7 +1320,6 @@ function ChatbotView() {
       return;
     }
     const recognition = new SpeechRecognition();
-    recognitionRef.current = recognition;
     recognition.lang = lang;
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
@@ -1657,11 +1337,6 @@ function ChatbotView() {
     recognition.onerror = (event) => {
       console.error("Speech recognition error", event.error);
       setIsRecording(false);
-      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-        setVoiceError("Safari blocked speech input. Re-enable microphone and speech permissions for this site.");
-      } else {
-        setVoiceError(`Voice input failed: ${event.error}`);
-      }
     };
 
     recognition.onend = () => {
@@ -1726,11 +1401,6 @@ function ChatbotView() {
               Microphone not supported in this browser.
             </div>
           )}
-          {voiceError && (
-            <div style={{ padding: "12px 18px", fontSize: 12, color: ACCENT.red, background: "var(--bg-input)", borderRadius: "18px 18px 18px 0", width: "fit-content", border: `1px solid ${ACCENT.redBorder}` }}>
-              {voiceError}
-            </div>
-          )}
         </div>
 
         {/* Quick Actions */}
@@ -1747,7 +1417,7 @@ function ChatbotView() {
 
         {/* Input Area */}
         <div style={{ padding: "16px 24px", display: "flex", gap: 12, alignItems: "center", background: "var(--bg-secondary)" }}>
-          <button onClick={() => fileInputRef.current && fileInputRef.current.click()} style={{
+          <button onClick={() => fileInputRef.current?.click()} style={{
             width: 44, height: 44, borderRadius: "50%", border: "none", cursor: "pointer",
             background: "var(--bg-input)", color: "var(--text-secondary)",
             display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
@@ -1762,7 +1432,7 @@ function ChatbotView() {
             />
           </button>
           {speechSupported && (
-            <React.Fragment>
+            <>
               <select 
                 value={speechLang} 
                 onChange={e => setSpeechLang(e.target.value)}
@@ -1784,7 +1454,7 @@ function ChatbotView() {
               }} title="Voice Input">
                 🎙️
               </button>
-            </React.Fragment>
+            </>
           )}
           <input 
             type="text" 
@@ -1917,12 +1587,14 @@ const TABS = [
   { label: "Chatbot", icon: "💬" }
 ];
 
-function EcoSorthaApp() {
+export default function EcoSorthaApp() {
   const [tab, setTab] = useState(0);
   const [trustScore, setTrustScore] = useState(84);
   const [isRegisteringBatch, setIsRegisteringBatch] = useState(false);
   const [theme, setTheme] = useState("dark");
-  const [dvs, setDvs] = useState(0);
+
+  const adjustedTemp = calcAdjustedTemp(31, "Mirpur", 12, 8);
+  const dvs = calcDVS(trustScore, adjustedTemp);
 
   const themeVars = THEMES[theme];
 
@@ -2007,6 +1679,10 @@ function EcoSorthaApp() {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ display: "flex", gap: 10 }}>
+            <ScoreGauge value={trustScore} label="Trust" size={76} />
+            <ScoreGauge value={dvs} label="DVS" size={76} />
+          </div>
           <ThemeToggle theme={theme} onToggle={() => setTheme(t => t === "dark" ? "light" : "dark")} />
         </div>
       </header>
@@ -2075,7 +1751,7 @@ function EcoSorthaApp() {
           <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
             <SectionLabel icon="🌡️" text="Delivery Viability Simulator" />
             <Card>
-              <MicroclimateSimulator trustScore={trustScore} dvs={dvs} setDvs={setDvs} />
+              <MicroclimateSimulator trustScore={trustScore} />
             </Card>
           </div>
         )}
@@ -2122,9 +1798,3 @@ function EcoSorthaApp() {
     </div>
   );
 }
-
-window.EcoSorthaApp = EcoSorthaApp;
-
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<EcoSorthaApp />);
-  
