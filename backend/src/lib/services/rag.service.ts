@@ -147,17 +147,14 @@ export async function queryRAG(query: string, language: 'bn' | 'en'): Promise<RA
   const contextCategories = relevantChunks.map((c) => c.category);
 
   // ── 2. Build system prompt ────────────────────────────────
-  const languageInstruction =
-    language === 'bn'
-      ? 'Respond in clean, helpful, natural conversational Bangla (বাংলা).'
-      : 'Respond in clear, professional English.';
-
   const systemPrompt =
+    `You MUST respond exclusively in ${language === 'bn' ? 'Bangla (Bengali script)' : 'English'}. ` +
+    `Do not switch languages under any circumstance. ` +
+    `If the user writes in Romanized Bangla (Banglish), still respond in proper Bangla script.\n\n` +
     `You are an expert agricultural AI assistant for Bangladesh's organic farming sector, ` +
     `specializing in BARI (Bangladesh Agricultural Research Institute) standards.\n` +
     `Answer based strictly on the following BARI standard context. ` +
-    `If the answer is not in context, clearly state that.\n` +
-    `${languageInstruction}\n\n` +
+    `If the answer is not in context, clearly state that.\n\n` +
     `Context:\n${contextText}`;
 
   // ── 3. Call Groq API ──────────────────────────────────────
@@ -223,17 +220,14 @@ export async function queryRAGConversational(
   const contextText = relevantChunks.map((c) => c.content).join('\n\n');
   const contextCategories = relevantChunks.map((c) => c.category);
 
-  const languageInstruction =
-    language === 'bn'
-      ? 'Respond in clean, helpful, natural conversational Bangla (বাংলা).'
-      : 'Respond in clear, professional English.';
-
   const systemPrompt =
+    `You MUST respond exclusively in ${language === 'bn' ? 'Bangla (Bengali script)' : 'English'}. ` +
+    `Do not switch languages under any circumstance. ` +
+    `If the user writes in Romanized Bangla (Banglish), still respond in proper Bangla script.\n\n` +
     `You are an expert agricultural AI assistant for Bangladesh's organic farming sector, ` +
     `specializing in BARI (Bangladesh Agricultural Research Institute) standards.\n` +
     `Answer based strictly on the following BARI standard context. ` +
-    `If the answer is not in context, clearly state that.\n` +
-    `${languageInstruction}\n\n` +
+    `If the answer is not in context, clearly state that.\n\n` +
     `Context:\n${contextText}`;
 
   const conversationMessages = history.map((msg) => ({

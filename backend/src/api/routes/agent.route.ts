@@ -12,6 +12,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { aiRateLimiter } from '../../lib/middleware/rateLimiter';
 import { isContentClean } from '../../lib/utils/moderationFilter';
+import { detectLanguageFromText } from '../../lib/utils/languageNormalizer';
 import { processMessage } from '../../lib/services/agentOrchestrator.service';
 
 const router = Router();
@@ -38,19 +39,23 @@ router.post('/message', aiRateLimiter, async (req: Request, res: Response, next:
     }
 
     const { query, language, sessionId, farmerId } = parsed.data;
+    
+    // Auto-detect language if the user sent the default 'en'
+    const detectedLanguage = detectLanguageFromText(query);
+    const finalLanguage = language !== 'en' ? language : detectedLanguage;
 
     // Safety moderation check
     if (!isContentClean(query)) {
       res.status(400).json({
         success: false,
-        error: language === 'bn'
+        error: finalLanguage === 'bn'
           ? 'সংবেদনশীল বা অননুমোদিত কন্টেন্ট সনাক্ত করা হয়েছে।'
           : 'Sensitive or disallowed content detected in message.',
       });
       return;
     }
 
-    const agentResult = await processMessage(query, language, sessionId, farmerId);
+    const agentResult = await processMessage(query, finalLanguage, sessionId, farmerId);
 
     res.status(200).json({
       success: true,
@@ -75,18 +80,22 @@ router.post('/voice-message', aiRateLimiter, async (req: Request, res: Response,
 
     const { query, language, sessionId, farmerId } = parsed.data;
 
+    // Auto-detect language if the user sent the default 'en'
+    const detectedLanguage = detectLanguageFromText(query);
+    const finalLanguage = language !== 'en' ? language : detectedLanguage;
+
     // Safety moderation check
     if (!isContentClean(query)) {
       res.status(400).json({
         success: false,
-        error: language === 'bn'
+        error: finalLanguage === 'bn'
           ? 'সংবেদনশীল বা অননুমোদিত কন্টেন্ট সনাক্ত করা হয়েছে।'
           : 'Sensitive or disallowed content detected in message.',
       });
       return;
     }
 
-    const agentResult = await processMessage(query, language, sessionId, farmerId);
+    const agentResult = await processMessage(query, finalLanguage, sessionId, farmerId);
 
     res.status(200).json({
       success: true,

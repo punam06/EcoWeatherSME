@@ -14,6 +14,7 @@ import { classifyIntent } from './intentClassifier.service';
 import { searchProducts, Product } from './productSearch.service';
 import { initiateOrder, confirmOrder, cancelOrder, getAutoRecommendation, OrderResult } from './orderExecution.service';
 import { queryRAGConversational } from './rag.service';
+import { getWeatherByCity } from './weather.service';
 
 export interface AgentResponse {
   type:
@@ -217,6 +218,41 @@ export async function processMessage(
         language === 'bn'
           ? `আপনার অর্ডারটি সফলভাবে বাতিল করা হয়েছে।`
           : `Your pending order has been successfully canceled.`;
+      break;
+    }
+
+    case 'WEATHER_QUERY': {
+      const cityName = extractedEntities.cityName;
+      if (!cityName) {
+        responseType = 'TEXT';
+        message =
+          language === 'bn'
+            ? 'আপনি কোন শহরের আবহাওয়া জানতে চান?'
+            : "Which city's weather would you like to know?";
+      } else {
+        const weather = await getWeatherByCity(cityName, language);
+        responseType = 'TEXT';
+        if (weather.found) {
+          if (language === 'bn') {
+            message = `${weather.city}-এর বর্তমান আবহাওয়া:
+🌡️ তাপমাত্রা: ${weather.temperature}°C (অনুভূতি: ${weather.feelsLike}°C)
+🌤️ অবস্থা: ${weather.description}
+💧 আর্দ্রতা: ${weather.humidity}%
+💨 বাতাসের গতি: ${weather.windSpeed} m/s`;
+          } else {
+            message = `Current weather in ${weather.city}:
+🌡️ Temperature: ${weather.temperature}°C (Feels like: ${weather.feelsLike}°C)
+🌤️ Condition: ${weather.description}
+💧 Humidity: ${weather.humidity}%
+💨 Wind Speed: ${weather.windSpeed} m/s`;
+          }
+        } else {
+          message =
+            language === 'bn'
+              ? `দুঃখিত, ${cityName} শহরের আবহাওয়া সংক্রান্ত তথ্য পাওয়া যায়নি। শহরের নাম ঠিক আছে কিনা পরীক্ষা করুন।`
+              : `Could not find weather data for ${cityName}. Please check the city name.`;
+        }
+      }
       break;
     }
 

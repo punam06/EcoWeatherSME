@@ -12,6 +12,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { aiRateLimiter } from '../../lib/middleware/rateLimiter';
 import { isContentClean } from '../../lib/utils/moderationFilter';
+import { detectLanguageFromText } from '../../lib/utils/languageNormalizer';
 import { createSession, destroySession } from '../../lib/services/chatSession.service';
 import { processMessage } from '../../lib/services/agentOrchestrator.service';
 
@@ -58,12 +59,16 @@ router.post('/message', aiRateLimiter, async (req: Request, res: Response, next:
 
     const { query, language, sessionId, farmerId } = parsed.data;
 
+    // Auto-detect language if the user sent the default 'en'
+    const detectedLanguage = detectLanguageFromText(query);
+    const finalLanguage = language !== 'en' ? language : detectedLanguage;
+
     if (!isContentClean(query)) {
       res.status(400).json({ success: false, error: 'Moderation check failed' });
       return;
     }
 
-    const result = await processMessage(query, language, sessionId, farmerId);
+    const result = await processMessage(query, finalLanguage, sessionId, farmerId);
     res.status(200).json({ success: true, data: result });
   } catch (error) {
     next(error);
@@ -105,12 +110,16 @@ router.post('/voice-recommend', aiRateLimiter, async (req: Request, res: Respons
 
     const { query, language, sessionId } = parsed.data;
 
+    // Auto-detect language if the user sent the default 'en'
+    const detectedLanguage = detectLanguageFromText(query);
+    const finalLanguage = language !== 'en' ? language : detectedLanguage;
+
     if (!isContentClean(query)) {
       res.status(400).json({ success: false, error: 'Moderation check failed' });
       return;
     }
 
-    const result = await processMessage(query, language, sessionId);
+    const result = await processMessage(query, finalLanguage, sessionId);
     res.status(200).json({ success: true, data: result });
   } catch (error) {
     next(error);

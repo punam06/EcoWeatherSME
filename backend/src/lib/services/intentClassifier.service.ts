@@ -19,6 +19,7 @@ export type AgentIntent =
   | 'ORDER_CANCEL'
   | 'PRODUCT_SELECT'
   | 'GENERAL_ADVICE'
+  | 'WEATHER_QUERY'
   | 'UNKNOWN';
 
 export interface ExtractedEntities {
@@ -28,6 +29,7 @@ export interface ExtractedEntities {
   unit?: string;
   targetPage?: string;
   selectionIndex?: number;
+  cityName?: string;
 }
 
 export interface ClassifiedIntent {
@@ -117,7 +119,11 @@ export function classifyIntent(query: string): ClassifiedIntent {
 
   // 2. Check Order Confirmation
   const confirmKeywords = ['yes', 'confirm', 'ok', 'sure', 'agree', 'হ্যাঁ', 'ঠিক আছে', 'কনফার্ম', 'নিশ্চিত'];
-  if (confirmKeywords.some((kw) => normalized.includes(kw))) {
+  // Match confirm keywords as standalone words/phrases to prevent substring false-positives
+  if (confirmKeywords.some((kw) => {
+    const regex = new RegExp(`\\b${kw}\\b`, 'i');
+    return regex.test(normalized) || normalized === kw;
+  })) {
     return {
       intent: 'ORDER_CONFIRM',
       confidence: 0.9,
@@ -127,7 +133,11 @@ export function classifyIntent(query: string): ClassifiedIntent {
 
   // 3. Check Order Cancel
   const cancelKeywords = ['no', 'cancel', 'stop', 'abort', 'reject', 'না', 'বাদ', 'বাতিল', 'ক্যান্সেল'];
-  if (cancelKeywords.some((kw) => normalized.includes(kw))) {
+  // Match cancel keywords as standalone words/phrases (excluding 'konta' / 'kon' substring collisions)
+  if (cancelKeywords.some((kw) => {
+    const regex = new RegExp(`\\b${kw}\\b`, 'i');
+    return (regex.test(normalized) || normalized === kw) && !normalized.includes('konta') && !normalized.includes('kon');
+  })) {
     return {
       intent: 'ORDER_CANCEL',
       confidence: 0.9,
@@ -198,6 +208,33 @@ export function classifyIntent(query: string): ClassifiedIntent {
     return {
       intent: 'PRODUCT_SEARCH',
       confidence: 0.8,
+      extractedEntities: entities,
+    };
+  }
+
+  // 7.5 Weather Query Intent
+  const bnWeatherKws = ['আবহাওয়া', 'আবহাওয়ার', 'তাপমাত্রা', 'বৃষ্টি', 'রোদ', 'ঝড়', 'মেঘ', 'গরম', 'ঠান্ডা', 'weather'];
+  const enWeatherKws = ['weather', 'temperature', 'rain', 'sunny', 'forecast', 'hot', 'cold', 'humid', 'climate'];
+  const weatherKeywords = [...bnWeatherKws, ...enWeatherKws];
+
+  if (weatherKeywords.some((kw) => normalized.includes(kw))) {
+    // Extract city name: strip weather keywords and filler words
+    const fillers = ['te', 'এ', 'তে', 'in', 'at', 'of', 'কেমন', 'কি', 'ekhon', 'এখন', 'আবহাওয়া', 'আবহাওয়ার', 'আবহাওয়া:', 'weather', 'weather?', 'temperature', 'rain', 'sunny', 'forecast', 'hot', 'cold', 'humid', 'climate', 'kemon', 'kemon?', 'ache', 'achi', 'eikhane', 'eikhaner'];
+    let remainingText = normalized;
+    for (const filler of fillers) {
+      const regex = new RegExp(`\\b${filler}\\b|${filler}`, 'gi');
+      remainingText = remainingText.replace(regex, ' ');
+    }
+    
+    // Clean up remaining text to get the city name (first word of what remains)
+    const words = remainingText.trim().split(/\s+/).filter(w => w.length > 1);
+    if (words.length > 0) {
+      entities.cityName = words[0];
+    }
+
+    return {
+      intent: 'WEATHER_QUERY',
+      confidence: 0.9,
       extractedEntities: entities,
     };
   }

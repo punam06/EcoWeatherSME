@@ -1382,7 +1382,7 @@ function ChatbotView() {
     }
   }, []);
 
-  const handleSend = (text, attachedFileName = null) => {
+  const handleSend = async (text, attachedFileName = null) => {
     if (!text.trim() && !attachedFileName) return;
     const newMsg = { 
       role: "user", 
@@ -1393,20 +1393,47 @@ function ChatbotView() {
     setMessages(prev => [...prev, newMsg]);
     setInput("");
     
-    // Mock AI response
-    setTimeout(() => {
-      let reply = "I've recorded that for you.";
-      if (attachedFileName) {
-        reply = `I've analyzed the attached file: "${attachedFileName}". The context shows a sudden spike in ambient temperature. I suggest upgrading to thermal bins for this batch.`;
-      } else if (text.toLowerCase().includes("forecast")) {
-        reply = "Currently, the Mirpur zone is experiencing a moderate thermal hazard (38.7°C). I suggest delaying heat-sensitive dispatches until 5:00 PM when the solar factor drops.";
-      } else if (text.toLowerCase().includes("suggestion")) {
-        reply = "Based on your recent batches, upgrading to Thermal-Insulated packaging will extend your Thermal Survival Time (TST) by 4x, allowing safe midday deliveries.";
-      } else if (text.toLowerCase().includes("feedback")) {
-        reply = "Thank you for the feedback. I've logged this in the ESG ledger to improve our ML demand forecasting models.";
+    // Call the actual backend agent endpoint!
+    try {
+      const userStr = localStorage.getItem("user") || localStorage.getItem("farmer");
+      const user = userStr ? JSON.parse(userStr) : null;
+      
+      const res = await fetch("http://localhost:5001/api/agent/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: text,
+          language: speechLang.startsWith("bn") ? "bn" : "en",
+          farmerId: user ? user.id : undefined
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        setMessages(prev => [...prev, {
+          role: "system",
+          content: data.data.message,
+          time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+        }]);
+      } else {
+        throw new Error(data.error || "Failed");
       }
-      setMessages(prev => [...prev, { role: "system", content: reply, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }]);
-    }, 1200);
+    } catch (err) {
+      console.warn("Failed to get response from backend agent, falling back to mock reply:", err);
+      // Fallback mock responses
+      setTimeout(() => {
+        let reply = "I've recorded that for you.";
+        if (attachedFileName) {
+          reply = `I've analyzed the attached file: "${attachedFileName}". The context shows a sudden spike in ambient temperature. I suggest upgrading to thermal bins for this batch.`;
+        } else if (text.toLowerCase().includes("forecast")) {
+          reply = "Currently, the Mirpur zone is experiencing a moderate thermal hazard (38.7°C). I suggest delaying heat-sensitive dispatches until 5:00 PM when the solar factor drops.";
+        } else if (text.toLowerCase().includes("suggestion")) {
+          reply = "Based on your recent batches, upgrading to Thermal-Insulated packaging will extend your Thermal Survival Time (TST) by 4x, allowing safe midday deliveries.";
+        } else if (text.toLowerCase().includes("feedback")) {
+          reply = "Thank you for the feedback. I've logged this in the ESG ledger to improve our ML demand forecasting models.";
+        }
+        setMessages(prev => [...prev, { role: "system", content: reply, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }]);
+      }, 1000);
+    }
   };
 
   const handleVoice = () => {
