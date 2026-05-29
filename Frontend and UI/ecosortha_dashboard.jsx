@@ -519,6 +519,7 @@ function MicroclimateSimulator({ trustScore }) {
   const [packaging, setPackaging] = useState("standard");
   const [hour, setHour] = useState(new Date().getHours());
   const [windSpeed, setWindSpeed] = useState(8);
+  const [routeDuration, setRouteDuration] = useState(90);
   const [zoneSearch, setZoneSearch] = useState("");
   const [isFetchingWeather, setIsFetchingWeather] = useState(false);
   const [dvs, setDvs] = useState(0);
@@ -533,20 +534,24 @@ function MicroclimateSimulator({ trustScore }) {
   const uhi = UHI_ZONES[zone] || UHI_ZONES["Mirpur"];
   const solarFactor = getSolarFactor(hour);
   const dvsColor = dvs >= 75 ? ACCENT.green : dvs >= 55 ? ACCENT.amber : ACCENT.red;
+  const trustColor = trustScore >= 75 ? ACCENT.green : trustScore >= 55 ? ACCENT.amber : ACCENT.red;
 
   const filteredZones = Object.keys(UHI_ZONES).filter(z => z.toLowerCase().includes(zoneSearch.toLowerCase()));
 
-  // Recalculate DVS/TST locally whenever any input changes — instant, no external API needed
+  // Recalculate DVS/TST locally — route duration now penalises DVS if route > TST
   useEffect(() => {
     const adjTemp = calcAdjustedTemp(baseTemp, zone, hour, windSpeed);
     const risk = calcThermalRisk(adjTemp);
-    const dvsScore = calcDVS(trustScore, adjTemp);
     const tstScore = calcTST(trustScore, zone, packaging, hour);
+    // Penalise DVS if route duration exceeds thermal survival time
+    const routePenalty = routeDuration > tstScore ? Math.min(0.5, (routeDuration - tstScore) / tstScore) : 0;
+    const baseDvs = calcDVS(trustScore, adjTemp);
+    const finalDvs = Math.max(0, Math.round(baseDvs * (1 - routePenalty)));
     setAdjustedTemp(adjTemp);
     setThermalRisk(risk);
-    setDvs(dvsScore);
+    setDvs(finalDvs);
     setTst(tstScore);
-  }, [baseTemp, zone, packaging, hour, windSpeed, trustScore]);
+  }, [baseTemp, zone, packaging, hour, windSpeed, trustScore, routeDuration]);
 
   // On mount: detect speech language from browser locale
   useEffect(() => {
@@ -705,6 +710,17 @@ function MicroclimateSimulator({ trustScore }) {
 
           <SliderRow label="Dispatch Hour" min={0} max={23} step={1} value={hour} onChange={setHour} unit={`:00 ${hour >= 11 && hour < 15 ? '(Peak Solar)' : hour >= 8 && hour < 18 ? '(Daylight)' : '(Night)'}`} color={hour >= 11 && hour < 15 ? ACCENT.red : hour >= 8 && hour < 18 ? ACCENT.amber : ACCENT.green} />
 
+          <div style={{ marginTop: 14 }}>
+            <SliderRow
+              label="Route Duration"
+              min={15} max={240} step={15}
+              value={routeDuration}
+              onChange={setRouteDuration}
+              unit={` min${routeDuration > tst && tst > 0 ? ' ⚠ Exceeds TST!' : ''}`}
+              color={routeDuration > tst && tst > 0 ? ACCENT.red : routeDuration > tst * 0.8 && tst > 0 ? ACCENT.amber : ACCENT.green}
+            />
+          </div>
+
           <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, marginTop: 16, fontWeight: 500 }}>Delivery Zone (Dhaka)</div>
           
           <div style={{ position: "relative", marginBottom: 8, display: "flex", gap: 8 }}>
@@ -801,25 +817,50 @@ function MicroclimateSimulator({ trustScore }) {
         {/* RIGHT COLUMN */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", background: "var(--bg-input)", borderRadius: 12, border: "1px solid var(--border-primary)", minHeight: 250, padding: "20px 24px" }}>
-            <div style={{ position: "relative", marginBottom: 24 }}>
-              <div style={{ background: "var(--bg-primary)", borderRadius: "50%", padding: 12 }}>
-                <CircleArc value={dvs} color={dvsColor} size={150} strokeWidth={14} />
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", background: "var(--bg-input)", borderRadius: 12, border: "1px solid var(--border-primary)", padding: "20px 24px" }}>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, marginBottom: 16, letterSpacing: "0.06em" }}>VIABILITY SCORES</div>
+            <div style={{ display: "flex", gap: 24, justifyContent: "center", marginBottom: 16 }}>
+              {/* DVS Arc */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                <div style={{ position: "relative" }}>
+                  <div style={{ background: "var(--bg-primary)", borderRadius: "50%", padding: 10 }}>
+                    <CircleArc value={dvs} color={dvsColor} size={120} strokeWidth={12} />
+                  </div>
+                  <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center" }}>
+                    <div style={{ fontSize: 26, fontWeight: 700, color: dvsColor, lineHeight: 1, fontFamily: "'JetBrains Mono', monospace" }}>{dvs}</div>
+                    <div style={{ fontSize: 8, color: "var(--text-dim)", fontWeight: 600, marginTop: 2 }}>/ 100</div>
+                  </div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: dvsColor }}>DVS</div>
+                  <div style={{ fontSize: 9, color: "var(--text-dim)" }}>Delivery Viability</div>
+                </div>
               </div>
-              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center" }}>
-                <div style={{ fontSize: 36, fontWeight: 700, color: dvsColor, lineHeight: 1, fontFamily: "'JetBrains Mono', monospace" }}>{dvs}</div>
-                <div style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 600, marginTop: 4 }}>DVS SCORE</div>
+              {/* Trust Score Arc */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                <div style={{ position: "relative" }}>
+                  <div style={{ background: "var(--bg-primary)", borderRadius: "50%", padding: 10 }}>
+                    <CircleArc value={trustScore} color={trustColor} size={120} strokeWidth={12} />
+                  </div>
+                  <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center" }}>
+                    <div style={{ fontSize: 26, fontWeight: 700, color: trustColor, lineHeight: 1, fontFamily: "'JetBrains Mono', monospace" }}>{trustScore}</div>
+                    <div style={{ fontSize: 8, color: "var(--text-dim)", fontWeight: 600, marginTop: 2 }}>/ 100</div>
+                  </div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: trustColor }}>TRUST</div>
+                  <div style={{ fontSize: 9, color: "var(--text-dim)" }}>IoT Batch Score</div>
+                </div>
               </div>
             </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, width: "100%" }}>
-              <div style={{ background: "var(--bg-primary)", padding: "16px 0", borderRadius: 8, textAlign: "center", border: "1px solid var(--border-primary)" }}>
-                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Thermal Survival</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{tst} min</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, width: "100%" }}>
+              <div style={{ background: "var(--bg-primary)", padding: "12px 0", borderRadius: 8, textAlign: "center", border: "1px solid var(--border-primary)" }}>
+                <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>Thermal Survival</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: tst > routeDuration ? ACCENT.green : ACCENT.red, fontFamily: "'JetBrains Mono', monospace" }}>{tst} min</div>
               </div>
-              <div style={{ background: "var(--bg-primary)", padding: "16px 0", borderRadius: 8, textAlign: "center", border: "1px solid var(--border-primary)" }}>
-                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Route Duration</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>90 min</div>
+              <div style={{ background: "var(--bg-primary)", padding: "12px 0", borderRadius: 8, textAlign: "center", border: `1px solid ${routeDuration > tst && tst > 0 ? ACCENT.redBorder : "var(--border-primary)"}` }}>
+                <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>Route Duration</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: routeDuration > tst && tst > 0 ? ACCENT.red : "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace" }}>{routeDuration} min</div>
               </div>
             </div>
           </div>
@@ -850,7 +891,7 @@ function MicroclimateSimulator({ trustScore }) {
         <div style={{ fontSize: 12, color: "var(--text-primary)", lineHeight: 1.7 }}>{advice}</div>
       </div>
 
-      <DispatchCalendar baseTemp={baseTemp} zone={zone} trustScore={trustScore} windSpeed={windSpeed} />
+      <DispatchCalendar baseTemp={baseTemp} zone={zone} trustScore={trustScore} windSpeed={windSpeed} routeDuration={routeDuration} />
     </div>
   );
 }
