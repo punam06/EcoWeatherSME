@@ -1099,22 +1099,163 @@ function DemandChart() {
    TAB 4: IMPACT & ESG LEDGER
    ═══════════════════════════════════════════════════════════════ */
 function ESGCard({ trustScore, dvs }) {
-  const spoilagePrevented = Math.round(trustScore * 2.1 * (dvs / 100) * 40);
+  // Calibrate DVS if simulator hasn't been run yet for general display
+  const activeDvs = dvs > 0 ? dvs : 72;
+  const isSimulated = dvs > 0;
+  
+  // Calculate ESG Scores
+  const eScore = Math.round((trustScore * 0.5) + (activeDvs * 0.5));
+  const sScore = Math.round((trustScore * 0.4) + 54);
+  const gScore = Math.round((trustScore * 0.6) + 38);
+  const esgScore = Math.round((eScore + sScore + gScore) / 3);
+  const esgGrade = esgScore >= 95 ? "A+" : esgScore >= 90 ? "A" : esgScore >= 80 ? "B+" : "B";
+  
+  // Core KPI Calculations
+  const spoilagePrevented = Math.round(trustScore * 2.1 * (activeDvs / 100) * 40);
   const plasticOffset = Math.round(trustScore * 0.8);
   const carbonSeq = Math.round(trustScore * 1.4);
+
+  const mockLedger = [
+    { id: "BCH-8492", date: "2026-05-28", zone: "Mirpur", env: "4.2 kg CO₂", soc: "Direct SME B2B Premium Paid", gov: "IoT Signed (BARI)", hash: "0x8f7a...3e" },
+    { id: "BCH-8411", date: "2026-05-27", zone: "Jatrabari", env: "3.8 kg CO₂", soc: "Direct SME B2B Premium Paid", gov: "IoT Signed (BARI)", hash: "0x4b2c...7d" },
+    { id: "BCH-8380", date: "2026-05-26", zone: "Uttara", env: "4.9 kg CO₂", soc: "Direct SME B2B Premium Paid", gov: "IoT Signed (BARI)", hash: "0x9a1e...9b" },
+  ];
+
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-      {[
-        ["🛡️", "Spoilage Prevented", `BDT ${spoilagePrevented.toLocaleString()}`, ACCENT.green],
-        ["♻️", "Plastic Offset", `${plasticOffset} kg`, ACCENT.green],
-        ["🌿", "Carbon Sequestered", `${carbonSeq} kg CO₂`, ACCENT.green],
-      ].map(([icon, l, v, c]) => (
-        <Card key={l} style={{ textAlign: "center", padding: "16px 12px" }}>
-          <div style={{ fontSize: 26, marginBottom: 6 }}>{icon}</div>
-          <div style={{ fontSize: 10, color: "var(--text-dim)", marginBottom: 6, lineHeight: 1.4 }}>{l}</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: c, fontFamily: "'JetBrains Mono', monospace" }}>{v}</div>
-        </Card>
-      ))}
+    <div style={{ display: "flex", flexDirection: "column", gap: 20, animation: "fadeSlideIn 0.4s ease" }}>
+      
+      {/* Dynamic ESG Grade & Segment Indicators */}
+      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 2fr", gap: 16 }}>
+        {/* Overall ESG Grade Ring */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyItems: "center", gap: 20,
+          background: "var(--bg-input)", border: "1px solid var(--border-primary)",
+          borderRadius: 12, padding: "20px 24px", position: "relative",
+          backgroundImage: `linear-gradient(135deg, ${ACCENT.green}0A, transparent)`
+        }}>
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            <CircleArc value={esgScore} color={ACCENT.green} size={110} strokeWidth={10} />
+            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center" }}>
+              <div style={{ fontSize: 32, fontWeight: 800, color: ACCENT.green, lineHeight: 1 }}>{esgGrade}</div>
+              <div style={{ fontSize: 10, color: "var(--text-dim)", fontWeight: 600, marginTop: 2 }}>{esgScore}/100</div>
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>EcoSortha ESG Rating</div>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+              Your agricultural supply chain operates with exceptional compliance. 
+              {!isSimulated && <span style={{ color: ACCENT.amber }}> (DVS currently defaulting to compliant 72. Run simulator to dynamically refine this grade!)</span>}
+            </div>
+          </div>
+        </div>
+
+        {/* E, S, G Progress Indicators */}
+        <div style={{
+          background: "var(--bg-input)", border: "1px solid var(--border-primary)",
+          borderRadius: 12, padding: "20px 24px", display: "flex", flexDirection: "column", gap: 14, justifyContent: "center"
+        }}>
+          {[
+            ["E", "Environmental Protection", eScore, ACCENT.green, "Waste & Plastic offset compliance"],
+            ["S", "Social Responsibility", sScore, ACCENT.blue, "Fair Direct-to-Market SME pricing model"],
+            ["G", "Governance & Traceability", gScore, ACCENT.amber, "BARI Certified & Blockchain Cryptography"]
+          ].map(([letter, title, val, col, sub]) => (
+            <div key={letter} style={{ display: "grid", gridTemplateColumns: "24px 1fr 40px", gap: 12, alignItems: "center" }}>
+              <div style={{
+                width: 24, height: 24, borderRadius: 6, background: col + "15",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: col, fontWeight: 700, fontSize: 12
+              }}>{letter}</div>
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-primary)" }}>{title}</span>
+                  <span style={{ fontSize: 10, color: "var(--text-dim)" }}>{sub}</span>
+                </div>
+                <div style={{ height: 6, background: "var(--gauge-track)", borderRadius: 3, overflow: "hidden" }}>
+                  <div style={{ width: `${val}%`, height: "100%", background: col, borderRadius: 3, transition: "width 0.8s ease" }}></div>
+                </div>
+              </div>
+              <div style={{ textAlign: "right", fontSize: 12, fontWeight: 700, color: col, fontFamily: "'JetBrains Mono', monospace" }}>{val}%</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* The 3 Core KPI Cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        {[
+          ["🛡️", "Agricultural Spoilage Prevented", `BDT ${spoilagePrevented.toLocaleString()}`, ACCENT.green, "Equivalent food waste savings"],
+          ["♻️", "Biodegradable Plastic Offset", `${plasticOffset} kg`, ACCENT.green, "Avoided standard polymers"],
+          ["🌿", "Ecological Carbon Sequestered", `${carbonSeq} kg CO₂`, ACCENT.green, "Soil biochar application"]
+        ].map(([icon, l, v, c, sub]) => (
+          <Card key={l} style={{ textAlign: "center", padding: "18px 14px", position: "relative" }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>{icon}</div>
+            <div style={{ fontSize: 11, color: "var(--text-dim)", fontWeight: 500, marginBottom: 4 }}>{l}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: c, fontFamily: "'JetBrains Mono', monospace", marginBottom: 4 }}>{v}</div>
+            <div style={{ fontSize: 9, color: "var(--text-dim)" }}>{sub}</div>
+          </Card>
+        ))}
+      </div>
+
+      {/* Blockchain Ledger & Formulas Grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "1.8fr 1.2fr", gap: 16 }}>
+        {/* Auditable Blockchain Ledger */}
+        <div style={{
+          background: "var(--bg-input)", border: "1px solid var(--border-primary)",
+          borderRadius: 12, padding: "20px 24px"
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 12, letterSpacing: "0.05em" }}>AUDITABLE ESG LEDGER (LIVE ACCRUAL)</div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 11 }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--border-primary)" }}>
+                  <th style={{ padding: "8px 4px", color: "var(--text-dim)" }}>BATCH ID</th>
+                  <th style={{ padding: "8px 4px", color: "var(--text-dim)" }}>ZONE</th>
+                  <th style={{ padding: "8px 4px", color: "var(--text-dim)" }}>CARBON SAVED</th>
+                  <th style={{ padding: "8px 4px", color: "var(--text-dim)" }}>GOVERNANCE AUDIT</th>
+                  <th style={{ padding: "8px 4px", color: "var(--text-dim)", textAlign: "right" }}>BLOCKCHAIN PROOF</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mockLedger.map(row => (
+                  <tr key={row.id} style={{ borderBottom: "1px dashed var(--border-primary)" }}>
+                    <td style={{ padding: "10px 4px", fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>{row.id}</td>
+                    <td style={{ padding: "10px 4px", color: "var(--text-secondary)" }}>{row.zone}</td>
+                    <td style={{ padding: "10px 4px", color: col => col === ACCENT.green ? col : "var(--text-primary)" }}>{row.env}</td>
+                    <td style={{ padding: "10px 4px", color: ACCENT.green, fontWeight: 600 }}>✓ {row.gov}</td>
+                    <td style={{ padding: "10px 4px", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", color: ACCENT.blue }}>{row.hash}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Dynamic ESG Formulas Explained */}
+        <div style={{
+          background: "var(--bg-input)", border: "1px solid var(--border-primary)",
+          borderRadius: 12, padding: "20px 24px"
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 12, letterSpacing: "0.05em" }}>ESG FORMULATION METRICS</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, lineHeight: 1.6 }}>
+            <div>
+              <div style={{ color: ACCENT.green, fontWeight: 700 }}>1. Environmental (E-Impact)</div>
+              <div style={{ color: "var(--text-secondary)" }}>• Carbon = Trust × 1.4 kg CO₂</div>
+              <div style={{ color: "var(--text-secondary)" }}>• Plastic = Trust × 0.8 kg</div>
+              <div style={{ color: "var(--text-secondary)" }}>• Spoilage = Trust × 2.1 × (DVS/100) × BDT 40</div>
+            </div>
+            <div style={{ borderBottom: "1px dashed var(--border-primary)", margin: "4px 0" }}></div>
+            <div>
+              <div style={{ color: ACCENT.blue, fontWeight: 700 }}>2. Social (S-Impact)</div>
+              <div style={{ color: "var(--text-secondary)" }}>• Direct SME Premium direct B2B pricing model bypassed standard high-commission aggregators.</div>
+            </div>
+            <div style={{ borderBottom: "1px dashed var(--border-primary)", margin: "4px 0" }}></div>
+            <div>
+              <div style={{ color: ACCENT.amber, fontWeight: 700 }}>3. Governance (G-Impact)</div>
+              <div style={{ color: "var(--text-secondary)" }}>• Cryptographic signing audits and smart IoT validation thresholds. BARI certification guarantees trace standards.</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1866,10 +2007,6 @@ function EcoSorthaApp() {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <div style={{ display: "flex", gap: 10 }}>
-            <ScoreGauge value={trustScore} label="Trust" size={76} />
-            <ScoreGauge value={dvs} label="DVS" size={76} />
-          </div>
           <ThemeToggle theme={theme} onToggle={() => setTheme(t => t === "dark" ? "light" : "dark")} />
         </div>
       </header>
