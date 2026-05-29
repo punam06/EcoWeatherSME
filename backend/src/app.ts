@@ -52,10 +52,12 @@ app.use(express.urlencoded({ extended: true }));
 const FRONTEND_ORIGINS = [
   process.env.FRONTEND_URL,
   'https://ecoweathersme.onrender.com',
+  'https://backsme.onrender.com',
   'http://localhost:3000',
   'http://localhost:5173',
   'http://localhost:5001',
   'http://127.0.0.1:3000',
+  'http://127.0.0.1:5001',
 ].filter(Boolean) as string[];
 
 app.use(
@@ -64,6 +66,10 @@ app.use(
       // Allow requests with no origin (e.g. Postman, Railway health check)
       if (!origin) return callback(null, true);
       if (FRONTEND_ORIGINS.includes(origin)) return callback(null, true);
+      // Allow ALL *.onrender.com subdomains
+      if (origin.endsWith('.onrender.com')) return callback(null, true);
+      // Allow localhost on any port
+      if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true);
       // Allow in development
       if (process.env.NODE_ENV !== 'production') return callback(null, true);
       callback(new Error(`CORS: Origin ${origin} not allowed`));
@@ -147,7 +153,7 @@ app.use('/api/batch/trust-score', trustScoreRouter);
 app.use('/api/climate/dvs', climateDVSRouter);
 app.use('/api/ai/recommend', aiRecommendRouter);
 app.use('/api/agent', agentRouter);
-app.use('/api/ai-chat', aiChatRouter);
+app.use('/api/ai/chat', aiChatRouter);
 app.use('/api/batches', batchRouter);
 app.use('/api/esg', esgRouter);
 
