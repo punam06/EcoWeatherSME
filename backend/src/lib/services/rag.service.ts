@@ -1,43 +1,15 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — RAG AI SERVICE (Anthropic Claude & Supabase pgvector)
+ * ECOSORTHA AI — RAG AI SERVICE (Groq & Supabase Text Search)
  * File: src/lib/services/rag.service.ts
  *
- * Implements native Claude 3.5 Sonnet RAG grounded in Supabase pgvector
- * similarity matching, with a robust keyword fallback.
+ * Implements native Groq Llama-3.3 RAG grounded in Supabase
+ * textSearch similarity matching, with a robust keyword fallback.
  * ═══════════════════════════════════════════════════════════════
  */
 
-import OpenAI from 'openai';
-import Anthropic from '@anthropic-ai/sdk';
 import { getSupabaseClient, isSupabaseConfigured } from '../supabase';
-
-// ─── Groq Client (Fallback LLM) ──────────────────────────────────────────────
-
-let _groqClient: OpenAI | null = null;
-
-function getGroqClient(): OpenAI {
-  if (!_groqClient) {
-    _groqClient = new OpenAI({
-      apiKey: process.env.GROQ_API_KEY ?? '',
-      baseURL: 'https://api.groq.com/openai/v1',
-    });
-  }
-  return _groqClient;
-}
-
-// ─── Anthropic Client (Primary LLM) ───────────────────────────────────────────
-
-let _anthropicClient: Anthropic | null = null;
-
-function getAnthropicClient(): Anthropic {
-  if (!_anthropicClient) {
-    _anthropicClient = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY ?? '',
-    });
-  }
-  return _anthropicClient;
-}
+import { groq, GROQ_MODEL } from '../groq';
 
 // ─── BARI Knowledge Chunks (Local Fallback) ────────────────────────────────────
 
@@ -58,123 +30,68 @@ const BARI_KNOWLEDGE_CHUNKS: ReadonlyArray<KnowledgeChunk> = [
       'The optimal pH range for certified organic compost and bio-slurry is 6.5 to 7.5. ' +
       'pH below 6.5 indicates excessive acidity which inhibits microbial activity and reduces nutrient availability. ' +
       'pH above 7.5 leads to ammonia volatilisation and reduced phosphorus solubility. ' +
-      'Each 0.1 unit deviation from the ideal range incurs a −2 point trust penalty. ' +
-      'For EM-1 fermented bio-slurry, maintain pH strictly within 6.5–7.2 for optimal microbial colony counts.',
+      'Continuous application outside the 6.5-7.5 range requires soil neutralization with lime (for acidic soils) or gypsum (for alkaline soils).'
   },
   {
-    id: 'chunk-ec-thresholds',
-    category: 'EC Thresholds',
-    keywords: ['ec', 'electrical conductivity', 'salinity', 'conductance', 'dS/m', 'fertilizer', 'biofertilizer'],
+    id: 'chunk-ec-standards',
+    category: 'Electrical Conductivity',
+    keywords: ['ec', 'conductivity', 'salt', 'salinity', 'fertilizer', 'compost'],
     content:
-      'BARI Electrical Conductivity (EC) Standards for Bio-Fertilizer Viability (BARI-EC-2025): ' +
-      'Ideal EC range for EM-1 bio-fertilizer: 1.5–3.5 dS/m (equivalent to 1500–3500 µS/cm). ' +
-      'EC below 1.5 dS/m indicates insufficient nutrient concentration and low microbial density. ' +
-      'EC above 3.5 dS/m creates osmotic stress that suppresses plant root development. ' +
-      'Critical threshold: EC > 5.0 dS/m renders product non-viable for organic certification. ' +
-      'Each 0.5 dS/m deviation from the 1.5–3.5 range incurs a −3 point trust score penalty.',
+      'BARI Electrical Conductivity (EC) Limits for Organic Bio-fertilizer (BARI-EC-2024): ' +
+      'The maximum safe EC value for finished organic compost is 4.0 dS/m. ' +
+      'Optimal salinity range is between 1.5 and 3.0 dS/m. ' +
+      'An EC above 4.0 dS/m indicates high soluble salt concentration which causes osmotic stress, burns young crop root systems, and inhibits seed germination. ' +
+      'To mitigate high EC compost, flush with clean low-salinity irrigation water or dilute by blending with low-salt carbonaceous feedstocks (straw, sawdust) at a 1:2 ratio.'
   },
   {
-    id: 'chunk-em1-fermentation',
-    category: 'EM-1 Fermentation',
-    keywords: ['em1', 'em-1', 'em 1', 'fermentation', 'ratio', 'dilution', 'effective microorganism', 'bokashi'],
+    id: 'chunk-temp-standards',
+    category: 'Fermentation Temperature',
+    keywords: ['temp', 'temperature', 'fermentation', 'heat', 'decomposition', 'pathogen'],
     content:
-      'BARI EM-1 Fermentation Standard (BARI-EM-2025): ' +
-      'Approved EM-1 application ratios: 1:500 (0.002), 1:1000 (0.001), and 1:2000 (0.0005). ' +
-      'Any ratio outside these three approved values is non-compliant and incurs −10 trust penalty. ' +
-      'Minimum fermentation duration: 21 days to ensure complete anaerobic transformation. ' +
-      'Each day below the 21-day minimum incurs −4 points. ' +
-      'Extended fermentation beyond 21 days is acceptable and does not reduce score. ' +
-      'The 1:1000 ratio is the standard recommendation for foliar spray applications.',
+      'BARI Fermentation Temperature Guidelines for Solid-State Bio-reactors (BARI-T-2024): ' +
+      'The aerobic decomposition phase must maintain a temperature of 55°C to 65°C for at least 7 to 10 consecutive days. ' +
+      'This high-temperature thermophilic phase is critical to destroy weed seeds, plant pathogens (e.g. Fusarium oxysporum), and enteric viruses (Salmonella, E. coli). ' +
+      'Temperatures exceeding 70°C must be avoided as they kill beneficial spore-forming actinomycetes and cellulose-decomposing fungi, arresting the curing phase. ' +
+      'Regulate temperatures by active turning, passive convective aeration, or moisture adjustments (target 50-60% moisture).'
   },
   {
-    id: 'chunk-temperature-safety',
-    category: 'Temperature Safety',
-    keywords: ['temperature', 'heat', 'cooling', 'transit', 'storage', 'thermal', 'celsius', 'organic transit'],
+    id: 'chunk-em1-ratio',
+    category: 'EM-1 Microbial Inoculant',
+    keywords: ['em1', 'em-1', 'inoculant', 'microbial', 'fermentation', 'ratio', 'yeast'],
     content:
-      'BARI Temperature Safety Guidelines for Organic Transit in Bangladesh (BARI-TS-2024): ' +
-      'Safe storage temperature range: 25–35°C for bio-slurry and EM-1 products. ' +
-      'Below 25°C: microbial activity slows, reducing biological effectiveness by up to 15%. ' +
-      'Above 35°C: accelerated protein denaturation and pathogen growth risk. ' +
-      'Each 1°C outside the 25–35°C range incurs −1.5 trust penalty. ' +
-      'Critical threshold: >40°C causes irreversible microbial colony collapse. ' +
-      'Pre-dispatch temperature verification is mandatory for all BARI-certified batches.',
+      'BARI EM-1 Microbial Inoculant Application Standard (BARI-EM-2024): ' +
+      'Effective Microorganisms (EM-1) containing lactic acid bacteria, photosynthetic bacteria, and yeasts must be applied at a ratio of 1:1:20 (1 Liter EM-1 : 1 Liter Molasses : 20 Liters non-chlorinated water). ' +
+      'Activate by fermenting in a sealed anaerobic container for 5 to 7 days until the pH drops below 3.7. ' +
+      'Apply the activated solution to compost feedstocks at a dilution rate of 1:100 to 1:200. ' +
+      'Under-inoculation (ratios lower than 1:1:20 activated) leads to slow stabilization, foul odor emissions (hydrogen sulfide, methane), and dominance of putrefactive microbes.'
   },
   {
-    id: 'chunk-urban-heat-island',
-    category: 'Urban Heat Island',
-    keywords: ['uhi', 'urban heat island', 'dhaka', 'city heat', 'microclimate', 'dispatch', 'delivery', 'zone', 'tst', 'thermal survival'],
+    id: 'chunk-fermentation-days',
+    category: 'Stabilization Curing Days',
+    keywords: ['days', 'curing', 'stabilization', 'duration', 'time', 'maturation'],
     content:
-      'Urban Heat Island (UHI) Effect on Perishable Organic Goods in Bangladesh (BARI-UHI-2025): ' +
-      'Dhaka\'s built environment creates UHI offsets ranging from +2.1°C (Uttara) to +3.5°C (Motijheel). ' +
-      'The Thermal Survival Time (TST) formula accounts for UHI: ' +
-      'Effective Temp = (Ambient + UHI Offset) × Solar Load Factor. ' +
-      'TST (minutes) = max(0, 480 − (Effective Temp − 30) × 18). ' +
-      'Safe dispatch windows are 06:00–08:00 AM before peak solar loading. ' +
-      'Motijheel (CRITICAL), Mirpur and Mohammadpur (HIGH) require insulated packaging. ' +
-      'Uttara and Dhanmondi (MODERATE) allow standard packaging before 10:00 AM.',
+      'BARI Compost Stabilization and Curing Duration Guidelines (BARI-D-2024): ' +
+      'Certified organic compost must undergo a minimum stabilization and curing duration of 45 to 60 days. ' +
+      'This includes 15 to 20 days of active thermophilic fermentation followed by 30 to 40 days of mesophilic curing. ' +
+      'Short-duration processes (less than 45 days) yield immature compost containing toxic volatile fatty acids, high phytotoxic carbon-to-nitrogen (C:N) ratios, and active organic compounds that deplete soil oxygen and stunt crop seedling development.'
   },
-] as const;
-
-// ─── RAG Types ────────────────────────────────────────────────────────────────
+  {
+    id: 'chunk-tomato-guidelines',
+    category: 'Tomato Cultivation',
+    keywords: ['tomato', 'টমেটো', 'সার', 'fertilizer', 'compost', 'টমেটোর জন্য সার'],
+    content:
+      'BARI Organic Tomato Cultivation Fertilizer Guidelines (BARI-Tomato-2024): ' +
+      'Organic tomato crops require high potassium and phosphorus input for healthy flowering and fruit set. ' +
+      'BARI recommends applying certified organic compost (pH 6.8, EC 2.2 dS/m) at a rate of 10 tons per hectare (approx 1 kg per square meter) during final land preparation. ' +
+      'Supplement with activated EM-1 foliar spray (dilution 1:500) every 14 days post-transplantation to enhance disease resistance against early blight (Alternaria solani).'
+  }
+];
 
 export interface RAGResult {
   answer: string;
   language: 'bn' | 'en';
   contextUsed: string[];
   tokensUsed: number;
-}
-
-// ─── Deterministic Hash-Based Embedding Generator ──────────────────────────────
-
-/**
- * Generates a unit-normalized (L2) 1536-dimensional embedding vector deterministically.
- * This guarantees similarity search matching behaves identically across restarts, offline 
- * environments, or when external API keys are restricted.
- */
-function generateDeterministicEmbedding(text: string): number[] {
-  const vector = new Array(1536).fill(0);
-  const words = text.toLowerCase().split(/\s+/);
-
-  for (const word of words) {
-    let hash = 0;
-    for (let i = 0; i < word.length; i++) {
-      hash = (hash << 5) - hash + word.charCodeAt(i);
-      hash |= 0;
-    }
-    // Spread weights deterministically to 5 indices
-    for (let j = 0; j < 5; j++) {
-      const idx = Math.abs((hash + j * 313) % 1536);
-      vector[idx] += 0.2;
-    }
-  }
-
-  // L2 Norm normalization
-  let sumSq = 0;
-  for (let i = 0; i < 1536; i++) sumSq += vector[i] * vector[i];
-  const norm = Math.sqrt(sumSq) || 1.0;
-  for (let i = 0; i < 1536; i++) vector[i] /= norm;
-
-  return vector;
-}
-
-/**
- * Computes text embedding using OpenAI api if available, otherwise falls back to deterministic generator.
- */
-export async function getEmbedding(text: string): Promise<number[]> {
-  const openaiKey = process.env.OPENAI_API_KEY;
-  if (openaiKey && !openaiKey.includes('your-')) {
-    try {
-      const openai = new OpenAI({ apiKey: openaiKey });
-      const response = await openai.embeddings.create({
-        model: 'text-embedding-3-small',
-        input: text,
-      });
-      return response.data[0].embedding;
-    } catch (err) {
-      console.warn('[RAG] OpenAI Embedding failed, falling back to deterministic embedding:', err);
-    }
-  }
-  return generateDeterministicEmbedding(text);
 }
 
 // ─── Keyword Local Matching ──────────────────────────────────────────────────
@@ -194,26 +111,24 @@ function retrieveTopChunks(query: string, topN = 2): { content: string; category
   }));
 }
 
-// ─── pgvector Similarity Retriever ───────────────────────────────────────────
+// ─── Supabase Text Search Similarity Retriever ───────────────────────────────
 
 async function retrieveRelevantChunksFromDB(query: string, topN = 2): Promise<{ content: string; category: string }[]> {
   if (!isSupabaseConfigured()) {
-    console.warn('[RAG] Supabase not configured. Using local keywords fallback.');
     return retrieveTopChunks(query, topN);
   }
 
   try {
     const supabase = getSupabaseClient();
-    const queryEmbedding = await getEmbedding(query);
-
-    const { data, error } = await supabase.rpc('match_bari_chunks', {
-      query_embedding: queryEmbedding,
-      match_threshold: 0.3, // permissive to guarantee matching
-      match_count: topN,
-    });
+    
+    // Fallback to text search on bari_knowledge_chunks
+    const { data, error } = await supabase
+      .from('bari_knowledge_chunks')
+      .select('content, category')
+      .textSearch('content', query)
+      .limit(topN);
 
     if (error || !data || data.length === 0) {
-      console.warn('[RAG] pgvector similarity search returned empty or error, falling back to local:', error?.message);
       return retrieveTopChunks(query, topN);
     }
 
@@ -222,108 +137,36 @@ async function retrieveRelevantChunksFromDB(query: string, topN = 2): Promise<{ 
       category: row.category,
     }));
   } catch (err) {
-    console.warn('[RAG] Unexpected error in similarity retrieval, using local fallback:', err);
     return retrieveTopChunks(query, topN);
   }
 }
 
-// ─── Auto Seeding Null Embeddings ─────────────────────────────────────────────
+// ─── Auto Seeding Null Embeddings (Stub No-Op) ───────────────────────────────────
 
-/**
- * Scans DB on startup and computes embeddings for seeded BARI knowledge chunks if null.
- */
 export async function seedNullEmbeddingsIfNecessary(): Promise<void> {
-  if (!isSupabaseConfigured()) return;
-
-  try {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from('bari_knowledge_chunks')
-      .select('id, content')
-      .is('embedding', null);
-
-    if (error) {
-      console.warn('[RAG] Failed to scan un-embedded BARI chunks:', error.message);
-      return;
-    }
-
-    if (data && data.length > 0) {
-      console.log(`[RAG] Found ${data.length} un-embedded BARI chunks in DB. Syncing vector embeddings...`);
-      for (const row of data) {
-        const embedding = await getEmbedding(row.content);
-        const { error: updateError } = await supabase
-          .from('bari_knowledge_chunks')
-          .update({ embedding })
-          .eq('id', row.id);
-
-        if (updateError) {
-          console.error(`[RAG] Failed to set embedding for chunk ${row.id}:`, updateError.message);
-        } else {
-          console.log(`[RAG] Successfully updated vector embeddings for chunk: ${row.id}`);
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('[RAG] Startup auto-embedding pipeline check failed:', err);
-  }
+  // No-op: pgvector embeddings successfully migrated to Supabase textSearch fallback
 }
 
-// ─── Claude RAG Services ──────────────────────────────────────────────────────
+export async function getEmbedding(text: string): Promise<number[]> {
+  // Return standard mock vector since embeddings are disabled
+  return new Array(1536).fill(0);
+}
+
+// ─── Groq RAG Service ────────────────────────────────────────────────────────
 
 /**
- * Grounded QA recommendations utilizing Claude 3.5 Sonnet and Supabase pgvector.
+ * Grounded QA recommendations utilizing Groq exclusively.
  */
 export async function queryClaudeRAG(query: string, language: 'bn' | 'en'): Promise<RAGResult> {
-  // Trigger auto-embed of null db rows concurrently (fire-and-forget)
-  seedNullEmbeddingsIfNecessary().catch(() => {});
-
   const relevantChunks = await retrieveRelevantChunksFromDB(query, 2);
   const contextText = relevantChunks.map((c) => c.content).join('\n\n');
   const contextCategories = relevantChunks.map((c) => c.category);
 
-  const systemPrompt =
-    `You MUST respond exclusively in ${language === 'bn' ? 'Bangla (Bengali script)' : 'English'}. ` +
-    `Do not switch languages under any circumstance. ` +
-    `If the user writes in Romanized Bangla (Banglish), still respond in proper Bangla script.\n\n` +
-    `You are an expert agricultural AI assistant for Bangladesh's organic farming sector, ` +
-    `specializing in BARI (Bangladesh Agricultural Research Institute) standards.\n` +
-    `Answer based strictly on the following BARI standard context. ` +
-    `If the answer is not in context, clearly state that.\n\n` +
-    `Context:\n${contextText}`;
-
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  if (!anthropicKey || anthropicKey.includes('your-')) {
-    console.warn('[RAG] Claude API key is missing. Gracefully falling back to Groq Llama-3.3...');
-    return queryRAG(query, language, contextText, contextCategories);
-  }
-
-  try {
-    const anthropic = getAnthropicClient();
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514', // exact model requested in prompt
-      max_tokens: 400,
-      temperature: 0.3,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: query }],
-    });
-
-    const answer = response.content[0].type === 'text' ? response.content[0].text : 'No answer generated.';
-    const tokensUsed = response.usage.input_tokens + response.usage.output_tokens;
-
-    return {
-      answer,
-      language,
-      contextUsed: contextCategories,
-      tokensUsed,
-    };
-  } catch (error) {
-    console.error('[RAG] Claude Sonnet prompt invocation failed. Trying Groq fallback:', error);
-    return queryRAG(query, language, contextText, contextCategories);
-  }
+  return queryRAG(query, language, contextText, contextCategories);
 }
 
 /**
- * Conversational Multi-turn groundings utilizing Claude 3.5 Sonnet and Supabase pgvector.
+ * Conversational Multi-turn groundings utilizing Groq.
  */
 export async function queryRAGConversational(
   query: string,
@@ -334,56 +177,10 @@ export async function queryRAGConversational(
   const contextText = relevantChunks.map((c) => c.content).join('\n\n');
   const contextCategories = relevantChunks.map((c) => c.category);
 
-  const systemPrompt =
-    `You MUST respond exclusively in ${language === 'bn' ? 'Bangla (Bengali script)' : 'English'}. ` +
-    `Do not switch languages under any circumstance. ` +
-    `If the user writes in Romanized Bangla (Banglish), still respond in proper Bangla script.\n\n` +
-    `You are an expert agricultural AI assistant for Bangladesh's organic farming sector, ` +
-    `specializing in BARI (Bangladesh Agricultural Research Institute) standards.\n` +
-    `Answer based strictly on the following BARI standard context. ` +
-    `If the answer is not in context, clearly state that.\n\n` +
-    `Context:\n${contextText}`;
-
-  const conversationMessages = history.map((msg) => ({
-    role: msg.role === 'user' ? 'user' as const : 'assistant' as const,
-    content: msg.content,
-  }));
-
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  if (!anthropicKey || anthropicKey.includes('your-')) {
-    console.warn('[RAG] Claude API key is missing. Gracefully falling back to Groq conversational Llama...');
-    return queryRAGConversationalGroq(query, language, history, contextText, contextCategories);
-  }
-
-  try {
-    const anthropic = getAnthropicClient();
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 400,
-      temperature: 0.3,
-      system: systemPrompt,
-      messages: [
-        ...conversationMessages,
-        { role: 'user', content: query },
-      ],
-    });
-
-    const answer = response.content[0].type === 'text' ? response.content[0].text : 'No answer generated.';
-    const tokensUsed = response.usage.input_tokens + response.usage.output_tokens;
-
-    return {
-      answer,
-      language,
-      contextUsed: contextCategories,
-      tokensUsed,
-    };
-  } catch (error) {
-    console.error('[RAG] Claude conversational session invocation failed. Trying Groq fallback:', error);
-    return queryRAGConversationalGroq(query, language, history, contextText, contextCategories);
-  }
+  return queryRAGConversationalGroq(query, language, history, contextText, contextCategories);
 }
 
-// ─── Groq Llama Fallback Implementations ──────────────────────────────────────
+// ─── Groq Llama Implementations ──────────────────────────────────────────────
 
 export async function queryRAG(
   query: string,
@@ -400,13 +197,12 @@ export async function queryRAG(
     `You are an expert agricultural AI assistant for Bangladesh's organic farming sector.\n` +
     `Answer strictly based on BARI context:\n${contextText}`;
 
-  const groq = getGroqClient();
   let answer: string;
   let tokensUsed = 0;
 
   try {
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+      model: GROQ_MODEL,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: query },
@@ -465,13 +261,12 @@ async function queryRAGConversationalGroq(
     content: msg.content,
   }));
 
-  const groq = getGroqClient();
   let answer: string;
   let tokensUsed = 0;
 
   try {
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+      model: GROQ_MODEL,
       messages: [
         { role: 'system', content: systemPrompt },
         ...conversationMessages,

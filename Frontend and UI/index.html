@@ -1342,7 +1342,7 @@ const MOCK_PRODUCTS = [
 ];
 
 
-function ChatbotView() {
+function ChatbotView({ setTab }) {
   const [messages, setMessages] = useState([
     { role: "system", content: "Hello! I am EcoSortha AI, your voice and text-based assistant. I can provide microclimate forecasts, smart dispatch suggestions, or analyze files and context. How can I help you today?", time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }
   ]);
@@ -1352,6 +1352,7 @@ function ChatbotView() {
   const [speechSupported, setSpeechSupported] = useState(true);
   const [voiceError, setVoiceError] = useState(null);
   const [hasAttemptedVoice, setHasAttemptedVoice] = useState(false);
+  const [orderContext, setOrderContext] = useState(null);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -1396,6 +1397,39 @@ function ChatbotView() {
     setMessages(prev => [...prev, newMsg]);
     setInput("");
     
+    // Check for conversational order confirmation
+    const normalizedText = text.toLowerCase().trim();
+    const isYes = normalizedText === "yes" || normalizedText === "confirm" || normalizedText.includes("অর্ডার করো") || normalizedText.includes("confirm") || normalizedText.includes("করো") || normalizedText.includes("হাঁ") || normalizedText === "ha" || normalizedText === "ok" || normalizedText === "হ্যাঁ";
+    
+    if (orderContext && isYes) {
+      try {
+        const userStr = localStorage.getItem("user") || localStorage.getItem("farmer");
+        const user = userStr ? JSON.parse(userStr) : null;
+        
+        const voiceRes = await fetch("http://localhost:5001/api/orders/voice", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            productName: orderContext.productName,
+            quantity: orderContext.quantity,
+            farmerId: user ? user.id : undefined
+          })
+        });
+        const voiceData = await voiceRes.json();
+        if (voiceData.success && voiceData.data) {
+          setMessages(prev => [...prev, {
+            role: "system",
+            content: voiceData.data.message,
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+          }]);
+          setOrderContext(null);
+          return;
+        }
+      } catch (err) {
+        console.error("Conversational order failed:", err);
+      }
+    }
+
     // Call the actual backend agent endpoint!
     try {
       const userStr = localStorage.getItem("user") || localStorage.getItem("farmer");
@@ -1412,11 +1446,42 @@ function ChatbotView() {
       });
       const data = await res.json();
       if (data.success && data.data) {
+        const agentResponse = data.data;
+        
         setMessages(prev => [...prev, {
           role: "system",
-          content: data.data.message,
+          content: agentResponse.message,
           time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
         }]);
+
+        // Handle navigation routing
+        if (agentResponse.type === "NAVIGATION" && agentResponse.navigationTarget) {
+          const pageRoutes = {
+            'dashboard': 0,
+            'orders': 1,
+            'marketplace': 6,
+            'batches': 1,
+            'batch_verification': 2,
+            'microclimate': 3,
+            'climate_demand': 4,
+            'impact_esg': 5,
+            'chatbot': 7,
+          };
+          const targetIndex = pageRoutes[agentResponse.navigationTarget.toLowerCase()];
+          if (targetIndex !== undefined) {
+            setTimeout(() => {
+              setTab(targetIndex);
+            }, 1500);
+          }
+        }
+
+        // Handle order context extraction
+        if (agentResponse.type === "ORDER_CONFIRM_PROMPT" && agentResponse.pendingOrder) {
+          const { productName, quantity } = agentResponse.pendingOrder;
+          if (productName) {
+            setOrderContext({ productName, quantity: quantity || 1 });
+          }
+        }
       } else {
         throw new Error(data.error || "Failed");
       }
@@ -1588,12 +1653,16 @@ function ChatbotView() {
 
         {/* Quick Actions */}
         <div style={{ padding: "12px 24px", display: "flex", gap: 12, borderTop: "1px solid var(--border-primary)", background: "var(--bg-input)" }}>
-          {["Climate Forecast", "Dispatch Suggestions", "Submit Feedback"].map(action => (
-            <button key={action} onClick={() => handleSend(`Show me ${action.toLowerCase()}`)} style={{
+          {[
+            { label: '🌤️ আবহাওয়া দেখুন', message: 'আজকের আবহাওয়া কেমন?' },
+            { label: '🛒 Marketplace', message: 'marketplace দেখাও' },
+            { label: '📦 আমার অর্ডার', message: 'আমার orders দেখাও' }
+          ].map(action => (
+            <button key={action.label} onClick={() => handleSend(action.message)} style={{
               padding: "6px 14px", borderRadius: 20, background: "var(--bg-primary)", border: `1px solid ${ACCENT.greenBorder}`,
               color: ACCENT.green, fontSize: 12, cursor: "pointer", fontWeight: 500, transition: "background 0.2s"
             }} onMouseEnter={e => e.currentTarget.style.background=ACCENT.greenBg} onMouseLeave={e => e.currentTarget.style.background="var(--bg-primary)"}>
-              {action}
+              {action.label}
             </button>
           ))}
         </div>
@@ -2554,7 +2623,7 @@ function EcoSorthaApp() {
         )}
 
         {tab === 6 && <MarketplaceView />}
-        {tab === 7 && <ChatbotView />}
+        {tab === 7 && <ChatbotView setTab={setTab} />}
       </main>
 
 

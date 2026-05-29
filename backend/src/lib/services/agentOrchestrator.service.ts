@@ -208,6 +208,113 @@ async function handleProductSearch(
   }
 }
 
+import { groq, GROQ_MODEL } from '../groq';
+
+const AGENT_SYSTEM_PROMPT = `
+You are EcoSortha AI, an intelligent agricultural commerce assistant for Bangladesh's organic farming sector. You understand Bangla, English, and Banglish (mixed) naturally.
+
+You help farmers and SMEs with: weather/climate data, BARI agricultural guidelines, product browsing, placing orders, and navigating the platform dashboard.
+
+For every user message, respond with a JSON object in this exact format:
+{
+  "intent": "weather" | "navigate" | "order" | "product_search" | "bari_advice" | "general_chat",
+  "language": "bn" | "en" | "mixed",
+  "extractedData": {
+    "city": "string or null",
+    "page": "dashboard" | "orders" | "marketplace" | "batches" | "batch_verification" | "microclimate" | "climate_demand" | "impact_esg" | "chatbot" | null,
+    "productName": "string or null",
+    "quantity": "number or null",
+    "unit": "string or null",
+    "cropContext": "string or null"
+  },
+  "replyMessage": "Your natural conversational response in the same language the user used"
+}
+
+Rules:
+- Always respond in the same language the user wrote in (Bangla, English, or mixed)
+- "replyMessage" must be warm, conversational, and helpful — never robotic
+- If the user says anything like "dashboard দেখাও", "go to orders", "marketplace নিয়ে যাও", "order page" — set intent to "navigate" and extract the page
+- If the user wants to buy/order something — set intent to "order"
+- If the user asks about weather, temperature, climate, আবহাওয়া — set intent to "weather"
+- For BARI guidelines, soil, pH, organic farming advice — set intent to "bari_advice"
+- Everything else is "general_chat" — answer helpfully from your agricultural knowledge
+- Never say "I cannot help with that". Always try to answer.
+
+IMPORTANT: Respond ONLY with a valid JSON object. Do not wrap it in markdown block backticks or include any preambles.
+`;
+
+interface AgentParsedResult {
+  intent: 'weather' | 'navigate' | 'order' | 'product_search' | 'bari_advice' | 'general_chat';
+  language: 'bn' | 'en' | 'mixed';
+  extractedData: {
+    city: string | null;
+    page: 'dashboard' | 'orders' | 'marketplace' | 'batches' | 'batch_verification' | 'microclimate' | 'climate_demand' | 'impact_esg' | 'chatbot' | null;
+    productName: string | null;
+    quantity: number | null;
+    unit: string | null;
+    cropContext: string | null;
+  };
+  replyMessage: string;
+}
+
+async function queryLLMIntent(
+  query: string,
+  history: { role: 'user' | 'assistant'; content: string }[]
+): Promise<AgentParsedResult> {
+  const conversationHistory = history.slice(-6).map((m) => ({
+    role: m.role === 'user' ? ('user' as const) : ('assistant' as const),
+    content: m.content,
+  }));
+
+  const messages = [...conversationHistory, { role: 'user' as const, content: query }];
+
+  let textResult = '';
+
+  try {
+    const completion = await groq.chat.completions.create({
+      model: GROQ_MODEL,
+      messages: [
+        { role: 'system', content: AGENT_SYSTEM_PROMPT },
+        ...messages,
+      ],
+      temperature: 0.3,
+      response_format: { type: 'json_object' },
+    });
+    textResult = completion.choices[0]?.message?.content || '';
+  } catch (error) {
+    console.error('[Agent Orchestrator] Groq intent classification failed:', error);
+  }
+
+  // Parse textResult as JSON
+  try {
+    let cleaned = textResult.trim();
+    if (cleaned.startsWith('```')) {
+      cleaned = cleaned.replace(/^```json\s*/i, '').replace(/\s*```$/, '');
+    }
+    const parsed = JSON.parse(cleaned);
+    if (parsed && parsed.intent) {
+      return parsed as AgentParsedResult;
+    }
+  } catch (e) {
+    console.error('[Agent Orchestrator] Failed to parse JSON from LLM response. Raw text:', textResult);
+  }
+
+  // Default fallback
+  return {
+    intent: 'general_chat',
+    language: 'bn',
+    extractedData: {
+      city: null,
+      page: null,
+      productName: null,
+      quantity: null,
+      unit: null,
+      cropContext: null,
+    },
+    replyMessage: textResult || 'দুঃখিত, আমি বুঝতে পারিনি। অনুগ্রহ করে আবার বলুন।',
+  };
+}
+
 /**
  * Main process pipeline.
  */
@@ -230,29 +337,72 @@ export async function processMessage(
     session.farmerId = farmerId;
   }
 
+  // Query LLM Intent Layer
+  const llmResult = await queryLLMIntent(query, session.history);
+
   appendMessage(activeSessionId!, 'user', query);
 
   try {
-    // Step 1: Classify intent strictly using requested priority regex rules
-    const intent = classifyIntent(query, language);
-
     let result: AgentResponse;
 
-    // Step 2: Unified dispatcher switch block
-    switch (intent) {
-      case 'order_intent':
-        result = await handleAgenticOrder(query, session.farmerId, language, activeSessionId!);
+    // Step 2: Unified dispatcher switch block based on LLM intent
+    switch (llmResult.intent) {
+      case 'order': {
+        result = {
+          type: 'ORDER_CONFIRM_PROMPT',
+          message: llmResult.replyMessage,
+          language,
+          sessionId: activeSessionId!,
+          pendingOrder: {
+            productId: 'pending',
+            productName: llmResult.extractedData?.productName || '',
+            priceBdt: 0,
+            quantity: llmResult.extractedData?.quantity || 1,
+            totalBdt: 0,
+          }
+        };
         break;
+      }
 
-      case 'weather_intent':
-        result = await handleClimateForecast(query, language, activeSessionId!);
+      case 'weather': {
+        const cityCandidate = llmResult.extractedData?.city || query;
+        const normalizedCity = cityNameNormalizer(cityCandidate);
+        if (!normalizedCity) {
+          result = {
+            type: 'TEXT',
+            message:
+              language === 'bn'
+                ? 'আপনার শহরের নাম জানান, আমি আবহাওয়া তথ্য দেব। যেমন: "ঢাকার আবহাওয়া" বা "Chittagong weather"'
+                : 'Please let me know your city name, I will provide weather information.',
+            language,
+            sessionId: activeSessionId!,
+          };
+        } else {
+          result = await handleClimateForecast(normalizedCity, language, activeSessionId!);
+        }
         break;
+      }
 
-      case 'product_search_intent':
+      case 'navigate': {
+        result = {
+          type: 'NAVIGATION',
+          message: llmResult.replyMessage,
+          navigationTarget: llmResult.extractedData?.page || 'dashboard',
+          language,
+          sessionId: activeSessionId!,
+        };
+        break;
+      }
+
+      case 'product_search': {
         result = await handleProductSearch(query, language, activeSessionId!);
+        if (llmResult.replyMessage) {
+          result.message = llmResult.replyMessage;
+        }
         break;
+      }
 
-      case 'bari_advice_intent': {
+      case 'bari_advice': {
         const ragResult = await queryRAGConversational(query, language, session.history.slice(-5, -1));
         result = {
           type: 'TEXT',
@@ -263,12 +413,11 @@ export async function processMessage(
         break;
       }
 
-      case 'general_rag_intent':
+      case 'general_chat':
       default: {
-        const ragResult = await queryRAGConversational(query, language, session.history.slice(-5, -1));
         result = {
           type: 'TEXT',
-          message: ragResult.answer,
+          message: llmResult.replyMessage,
           language,
           sessionId: activeSessionId!,
         };
@@ -287,7 +436,7 @@ export async function processMessage(
             session_id: activeSessionId,
             farmer_id: session!.farmerId || null,
             message: query,
-            intent,
+            intent: llmResult.intent,
             response_type: result.type,
             language,
           });
