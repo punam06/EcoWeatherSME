@@ -774,11 +774,11 @@ app.post('/api/users', requireAuth, requireRole('admin'), asyncHandler(async (re
 }));
 
 /* ═══════════════════════════════════════════════════════════════
-   GROK AI CHATBOT (xAI via OpenAI SDK)
+   GROQ AI CHATBOT (via OpenAI SDK)
    ═══════════════════════════════════════════════════════════════ */
-const grokClient = new OpenAI({
-  apiKey: process.env.GROK_API_KEY || process.env.GORK_API_KEY || process.env.GROQ_API_KEY,
-  baseURL: 'https://api.x.ai/v1' // Grok (xAI) Base URL
+const groqClient = new OpenAI({
+  apiKey: process.env.GROQ_API_KEY || process.env.GROK_API_KEY || process.env.GORK_API_KEY,
+  baseURL: 'https://api.groq.com/openai/v1' // Groq Base URL
 });
 
 app.post('/api/chat', asyncHandler(async (req, res) => {
@@ -788,8 +788,8 @@ app.post('/api/chat', asyncHandler(async (req, res) => {
   }
 
   try {
-    const completion = await grokClient.chat.completions.create({
-      model: 'grok-beta',
+    const completion = await groqClient.chat.completions.create({
+      model: 'llama-3.1-8b-instant',
       messages: [
         {
           role: 'system',
