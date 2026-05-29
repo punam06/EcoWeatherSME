@@ -528,9 +528,14 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
     setTst(tstScore);
   };
 
-  // Run calculation once on mount to populate initial UI
+  // Run calculation in real-time as inputs change
   useEffect(() => {
     handleCalculate();
+  }, [trustScore, baseTemp, zone, hour, windSpeed, routeDuration, packaging]);
+
+  // On mount: fetch live Dhaka weather automatically
+  useEffect(() => {
+    fetchLiveWeather("Dhaka");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -659,7 +664,8 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
           }
         } catch (e) { setWeatherStatus("Weather unavailable."); }
         setIsFetchingWeather(false);
-      }
+      },
+      { timeout: 3000, maximumAge: 60000 }
     );
   };
 
