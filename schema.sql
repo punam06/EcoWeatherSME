@@ -12,6 +12,19 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 1b. Refresh token storage for JWT rotation
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    revoked BOOLEAN NOT NULL DEFAULT false,
+    revoked_at TIMESTAMP WITH TIME ZONE,
+    user_agent TEXT,
+    ip_address TEXT
+);
+
 -- 2. Organic Material Refining Batches
 CREATE TABLE IF NOT EXISTS batches (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -160,6 +173,8 @@ CREATE TABLE IF NOT EXISTS compliance_knowledge_base (
 CREATE INDEX IF NOT EXISTS idx_batches_number ON batches(batch_number);
 CREATE INDEX IF NOT EXISTS idx_iot_readings_batch ON iot_readings(batch_id);
 CREATE INDEX IF NOT EXISTS idx_products_scores ON products(trust_score, dvs);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
 
 -- Enable Row-Level Security (RLS) policies
 ALTER TABLE batches ENABLE ROW LEVEL SECURITY;
