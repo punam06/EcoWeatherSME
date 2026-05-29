@@ -935,8 +935,8 @@ app.get('/api/weather', asyncHandler(async (req, res) => {
     const response = await fetch(url);
     const data = await response.json();
 
-    if (data.cod !== 200) {
-      return res.status(data.cod).json({ success: false, error: data.message });
+    if (Number(data.cod) !== 200) {
+      return res.status(Number(data.cod) || 400).json({ success: false, error: data.message });
     }
 
     const result = {
@@ -970,21 +970,50 @@ app.get('/api/weather-by-city', asyncHandler(async (req, res) => {
     }
   }
 
-  try {
-    const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(q)}&appid=${apiKey}&units=metric`;
-    const response = await fetch(url);
-    const data = await response.json();
+  let lat, lon, formattedName;
+  const geocodeApiKey = process.env.GEOCODING_API_KEY;
+  if (geocodeApiKey) {
+    try {
+      // Append Dhaka, Bangladesh if search is likely a local zone, to avoid matches elsewhere in the world
+      const searchQuery = q.toLowerCase().includes('dhaka') || q.toLowerCase().includes('bangladesh')
+        ? q
+        : `${q}, Dhaka, Bangladesh`;
+      const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(searchQuery)}&key=${geocodeApiKey}`;
+      const geoResponse = await fetch(geocodeUrl);
+      const geoData = await geoResponse.json();
+      if (geoData.status === 'OK' && geoData.results.length > 0) {
+        const loc = geoData.results[0].geometry.location;
+        lat = loc.lat;
+        lon = loc.lng;
+        formattedName = geoData.results[0].formatted_address.split(',')[0];
+      }
+    } catch (e) {
+      console.warn('Geocoding pre-fetch failed for weather-by-city, falling back to direct search:', e);
+    }
+  }
 
-    if (data.cod !== 200) {
-      return res.status(400).json({ success: false, error: data.message || 'City not found' });
+  try {
+    let data;
+    if (lat !== undefined && lon !== undefined) {
+      const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`;
+      const response = await fetch(url);
+      data = await response.json();
+    } else {
+      const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(q)}&appid=${apiKey}&units=metric`;
+      const response = await fetch(url);
+      data = await response.json();
+    }
+
+    if (Number(data.cod) !== 200) {
+      return res.status(Number(data.cod) || 400).json({ success: false, error: data.message || 'City not found' });
     }
 
     const result = {
       temperature: data.main.temp,
       windspeed: data.wind.speed,
       windspeed_kmh: data.wind.speed * 3.6,
-      name: data.name,
-      country: data.sys.country,
+      name: formattedName || data.name,
+      country: data.sys.country || 'BD',
     };
 
     cache.weather.set(cacheKey, { timestamp: Date.now(), data: result });

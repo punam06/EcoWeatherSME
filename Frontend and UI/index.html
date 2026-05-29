@@ -593,7 +593,7 @@ function DispatchCalendar({ baseTemp, zone, trustScore, windSpeed }) {
   );
 }
 
-function MicroclimateSimulator({ trustScore }) {
+function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
   const [baseTemp, setBaseTemp] = useState(31);
   const [zone, setZone] = useState("Mirpur");
   const [packaging, setPackaging] = useState("standard");
@@ -602,7 +602,6 @@ function MicroclimateSimulator({ trustScore }) {
   const [routeDuration, setRouteDuration] = useState(90);
   const [zoneSearch, setZoneSearch] = useState("");
   const [isFetchingWeather, setIsFetchingWeather] = useState(false);
-  const [dvs, setDvs] = useState(0);
   const [tst, setTst] = useState(0);
   const [adjustedTemp, setAdjustedTemp] = useState(31);
   const [thermalRisk, setThermalRisk] = useState({ value: 0.1, label: "Low", color: ACCENT.green });
@@ -1472,57 +1471,60 @@ function ChatbotView() {
     fetchReply();
   };
 
-  const handleVoice = async () => {
+  const handleVoice = () => {
     if (isRecording) {
-      if (recognitionRef.current && recognitionRef.current.state === "recording") {
-        recognitionRef.current.stop();
-      }
+      if (recognitionRef.current) recognitionRef.current.stop();
       setIsRecording(false);
       return;
     }
     setVoiceError("");
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      recognitionRef.current = mediaRecorder;
-      let audioChunks = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) audioChunks.push(event.data);
-      };
-
-      mediaRecorder.onstop = async () => {
-        // Stop all tracks to release mic
-        stream.getTracks().forEach(track => track.stop());
-        
-        if (audioChunks.length === 0) return;
-        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-        
-        try {
-          // Use Groq Whisper transcription
-          const res = await window.APIClient.transcribeAudio(audioBlob, speechLang);
-          if (res.success && res.text) {
-            const transcript = res.text.trim();
-            setInput(transcript);
-            handleSend(transcript);
-          } else {
-            setVoiceError("Transcription failed: " + res.error);
-          }
-        } catch (err) {
-          console.error("Transcription error:", err);
-          setVoiceError("Could not reach transcription server.");
-        }
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (err) {
-      console.error("Microphone access denied or error:", err);
+      startSpeechRecognition(speechLang);
+    } catch (error) {
+      console.error("Speech recognition start error", error);
       setVoiceError("Microphone access is blocked. Check Safari site permissions for this page.");
       setIsRecording(false);
-      setSpeechSupported(false);
     }
+  };
+
+  const startSpeechRecognition = (lang) => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setSpeechSupported(false);
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+    recognition.lang = lang;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setIsRecording(true);
+    };
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setInput(transcript);
+      handleSend(transcript);
+    };
+
+    recognition.onerror = (event) => {
+      console.error("Speech recognition error", event.error);
+      setIsRecording(false);
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        setVoiceError("Safari blocked speech input. Re-enable microphone and speech permissions for this site.");
+      } else {
+        setVoiceError(`Voice input failed: ${event.error}`);
+      }
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    recognition.start();
   };
 
   const handleFileUpload = (e) => {
@@ -1629,14 +1631,14 @@ function ChatbotView() {
                 <option value="en-US">EN</option>
                 <option value="bn-BD">BN</option>
               </select>
-              <button onClick={handleVoice} style={{
-                width: 44, height: 44, borderRadius: "50%", border: "none", cursor: "pointer",
+              <button onClick={handleVoice} disabled={isRecording} style={{
+                width: 44, height: 44, borderRadius: "50%", border: "none", cursor: isRecording ? "not-allowed" : "pointer",
                 background: isRecording ? ACCENT.redBg : "var(--bg-input)",
                 color: isRecording ? ACCENT.red : "var(--text-secondary)",
                 display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
-                transition: "all 0.3s ease"
-              }} title={isRecording ? "Stop Listening" : "Voice Input"}>
-                {isRecording ? "🛑" : "🎙️"}
+                transition: "all 0.3s ease", opacity: isRecording ? 0.8 : 1
+              }} title="Voice Input">
+                🎙️
               </button>
             </React.Fragment>
           )}
@@ -1776,9 +1778,10 @@ function EcoSorthaApp() {
   const [trustScore, setTrustScore] = useState(84);
   const [isRegisteringBatch, setIsRegisteringBatch] = useState(false);
   const [theme, setTheme] = useState("dark");
-
-  const adjustedTemp = calcAdjustedTemp(31, "Mirpur", 12, 8);
-  const dvs = calcDVS(trustScore, adjustedTemp);
+  const [dvs, setDvs] = useState(() => {
+    const adjustedTemp = calcAdjustedTemp(31, "Mirpur", 12, 8);
+    return calcDVS(84, adjustedTemp);
+  });
 
   const themeVars = THEMES[theme];
 
@@ -1935,7 +1938,7 @@ function EcoSorthaApp() {
           <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
             <SectionLabel icon="🌡️" text="Delivery Viability Simulator" />
             <Card>
-              <MicroclimateSimulator trustScore={trustScore} />
+              <MicroclimateSimulator trustScore={trustScore} dvs={dvs} setDvs={setDvs} />
             </Card>
           </div>
         )}
@@ -1987,6 +1990,8 @@ window.EcoSorthaApp = EcoSorthaApp;
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(<EcoSorthaApp />);
+  
+
   </script>
 </body>
 </html>

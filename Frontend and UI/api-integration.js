@@ -6,7 +6,9 @@
 
 // API Client - Simple fetch wrapper for backend communication
 const IS_STATIC_FILE = window.location.protocol === "file:";
-const API_BASE_URL = "https://backsme.onrender.com";
+const API_BASE_URL = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+  ? "http://localhost:5001"
+  : "https://backsme.onrender.com";
 
 const APIClient = {
   async request(endpoint, options = {}) {
