@@ -45,14 +45,8 @@ jobs:
       - name: Deploy Supabase Edge Functions
         if: steps.check.outputs.skip == 'false'
         run: |
-          echo "Deploying functions under supabase/functions/ to project ref from secrets"
-          for fn in supabase/functions/*; do
-            if [ -d "$fn" ]; then
-              fname=$(basename "$fn")
-              echo "Deploying function: $fname"
-              supabase functions deploy "$fname" || { echo "deploy failed for $fname"; exit 1; }
-            fi
-          done
+          echo "Deploying functions..."
+          supabase functions deploy --no-verify-jwt
 
       - name: Note when skipped
         if: steps.check.outputs.skip == 'true'
