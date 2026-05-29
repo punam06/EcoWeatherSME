@@ -636,6 +636,7 @@ function MicroclimateSimulator({ trustScore }) {
   const [speechSupported, setSpeechSupported] = useState(true);
 
   const uhi = UHI_ZONES[zone] || UHI_ZONES["Mirpur"];
+  const solarFactor = getSolarFactor(hour);
   const dvsColor = dvs >= 75 ? ACCENT.green : dvs >= 55 ? ACCENT.amber : ACCENT.red;
 
   const filteredZones = Object.keys(UHI_ZONES).filter(z => z.toLowerCase().includes(zoneSearch.toLowerCase()));
