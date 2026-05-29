@@ -550,6 +550,9 @@ function IoTForm({ onResult }) {
   const [certified, setCertified] = useState(false);
   const [ts, setTs] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [qrCodeImg, setQrCodeImg] = useState(null);
+  const [isCertifying, setIsCertifying] = useState(false);
+  const [batchNum, setBatchNum] = useState("");
 
   useEffect(() => {
     const fetchTrustScore = async () => {
@@ -576,12 +579,17 @@ function IoTForm({ onResult }) {
         setTs(data.trustScore || 0);
         onResult(data.trustScore || 0);
         setCertified(false);
+        setQrCodeImg(null);
+        setBatchNum("");
       } catch (error) {
         console.error("Failed to fetch trust score:", error);
         // Fallback to local calculation on error
         const fallbackScore = calcTrustScore({ pH, EC, temp, ratio, days });
         setTs(fallbackScore);
         onResult(fallbackScore);
+        setCertified(false);
+        setQrCodeImg(null);
+        setBatchNum("");
       } finally {
         setIsLoading(false);
       }
@@ -629,22 +637,39 @@ function IoTForm({ onResult }) {
           <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: 7–14 days</div>
         </div>
       </div>
-      <button onClick={() => { if (ts >= 60) setCertified(true); }}
-        disabled={ts < 60 || isLoading}
+      <button 
+        onClick={async () => { 
+          if (ts >= 60) {
+            setIsCertifying(true);
+            try {
+              const res = await window.APIClient.certifyBatch({ batchId: `BCH-${Date.now().toString().slice(-6)}` });
+              if (res.success) {
+                setQrCodeImg(res.data.qrCodeDataUrl);
+                setBatchNum(res.data.batchId);
+                setCertified(true);
+              }
+            } catch (err) {
+              console.error("Batch certification failed:", err);
+            } finally {
+              setIsCertifying(false);
+            }
+          } 
+        }}
+        disabled={ts < 60 || isLoading || isCertifying}
         style={{
           width: "100%", padding: "12px", borderRadius: 10,
           border: `1px solid ${ts >= 60 ? ACCENT.green : "var(--border-primary)"}`,
           background: ts >= 60 ? ACCENT.greenBg : "var(--bg-input)",
           color: ts >= 60 ? ACCENT.green : "var(--text-dim)",
-          cursor: ts >= 60 && !isLoading ? "pointer" : "not-allowed",
+          cursor: ts >= 60 && !isLoading && !isCertifying ? "pointer" : "not-allowed",
           fontSize: 13, fontWeight: 600, letterSpacing: "0.05em",
           transition: "all 0.3s ease",
           boxShadow: ts >= 60 ? ACCENT.greenBg : "none",
-          opacity: isLoading ? 0.7 : 1,
+          opacity: isLoading || isCertifying ? 0.7 : 1,
         }}>
-        {isLoading ? "⏳ Calculating..." : ts >= 60 ? "✦ Certify Batch & Generate QR Certificate" : "Trust Score too low to certify"}
+        {isCertifying ? "⏳ Generating Cryptographic QR..." : (isLoading ? "⏳ Calculating..." : ts >= 60 ? "✦ Certify Batch & Generate QR Certificate" : "Trust Score too low to certify")}
       </button>
-      {certified && (
+      {certified && qrCodeImg && (
         <div style={{
           marginTop: 14, padding: 14, borderRadius: 10,
           border: `1px solid ${ACCENT.greenBorder}`, background: ACCENT.greenBg,
@@ -653,14 +678,18 @@ function IoTForm({ onResult }) {
           <div style={{ fontSize: 11, color: ACCENT.green, fontWeight: 700, marginBottom: 10 }}>✓ BATCH CERTIFIED — Certificate Generated</div>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
             <div style={{
-              width: 56, height: 56, background: "var(--bg-input)", borderRadius: 8,
+              width: 100, height: 100, background: "var(--bg-primary)", borderRadius: 8,
               display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 8, color: ACCENT.green, border: `1px solid ${ACCENT.greenBorder}`, flexShrink: 0,
+              border: `1px solid ${ACCENT.greenBorder}`, flexShrink: 0, overflow: "hidden"
             }}>
-              <div style={{ textAlign: "center", lineHeight: 1.4 }}>QR<br/>CODE<br/>▦</div>
+              <img 
+                src={qrCodeImg} 
+                alt="Cryptographic QR Code" 
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
             </div>
             <div style={{ fontSize: 10, color: "var(--text-secondary)", lineHeight: 1.9 }}>
-              <div><span style={{ color: ACCENT.green }}>Batch #:</span> BCH-{Date.now().toString().slice(-6)}</div>
+              <div><span style={{ color: ACCENT.green }}>Batch #:</span> {batchNum}</div>
               <div><span style={{ color: ACCENT.green }}>Trust Score:</span> {ts}/100</div>
               <div><span style={{ color: ACCENT.green }}>pH / EC / Temp:</span> {pH} / {EC} / {temp}°C</div>
               <div><span style={{ color: ACCENT.green }}>Ratio / Days:</span> {ratio} / {days}</div>
