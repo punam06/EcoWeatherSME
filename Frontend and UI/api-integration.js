@@ -70,7 +70,10 @@ const APIClient = {
   }),
 
   // ESG Metrics
-  getESGMetrics: () => APIClient.request('/esg'),
+  getESGMetrics: (trustScore, dvs) => {
+    const query = (trustScore !== undefined && dvs !== undefined) ? `?trustScore=${trustScore}&dvs=${dvs}` : '';
+    return APIClient.request(`/esg${query}`);
+  },
 
   // Forecast
   getDemandForecast: () => APIClient.request('/demand-forecast'),

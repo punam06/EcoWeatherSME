@@ -1179,7 +1179,7 @@ function ESGCard({ trustScore, dvs }) {
     const fetchEsgData = async () => {
       try {
         setIsLoading(true);
-        const data = await APIClient.getESGMetrics();
+        const data = await APIClient.getESGMetrics(trustScore, dvs);
         setEsgData(data);
         setError(null);
       } catch (err) {
@@ -1191,7 +1191,7 @@ function ESGCard({ trustScore, dvs }) {
     };
 
     fetchEsgData();
-  }, []);
+  }, [trustScore, dvs]);
 
   if (isLoading) {
     return <div>Loading ESG Data...</div>;

@@ -3,8 +3,9 @@ import { calculateESGMetrics } from '../../lib/services/esg.service';
 
 export const getESGMetrics = async (req: Request, res: Response) => {
   try {
-    // @ts-ignore
-    const metrics = await calculateESGMetrics(req.user.id);
+    const trustScore = parseFloat(req.query.trustScore as string ?? '84');
+    const dvs = parseFloat(req.query.dvs as string ?? '72');
+    const metrics = await calculateESGMetrics(trustScore, dvs);
     res.json(metrics);
   } catch (error) {
     console.error('Error getting ESG metrics:', error);
