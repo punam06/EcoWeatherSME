@@ -73,6 +73,7 @@ const APIClient = {
   // External APIs (Weather & Geocoding)
   geocode: (query) => APIClient.request(`/geocode?q=${encodeURIComponent(query)}`),
   getWeather: (lat, lon) => APIClient.request(`/weather?lat=${lat}&lon=${lon}`),
+  getWeatherByCity: (city) => APIClient.request(`/weather-by-city?q=${encodeURIComponent(city)}`),
 
   // Chatbot (live Grok on legacy backend)
   chat: (message) => APIClient.request('/chat', {

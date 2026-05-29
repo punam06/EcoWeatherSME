@@ -914,6 +914,47 @@ app.get('/api/weather', asyncHandler(async (req, res) => {
   }
 }));
 
+// Weather by city name — uses OpenWeather city search, no Google Maps key needed
+app.get('/api/weather-by-city', asyncHandler(async (req, res) => {
+  const { q } = req.query;
+  if (!q) return res.status(400).json({ success: false, error: 'Missing city query' });
+
+  const apiKey = process.env.OPENWEATHER_API_KEY;
+  if (!apiKey) return res.status(500).json({ success: false, error: 'Weather API key missing' });
+
+  const cacheKey = `city:${q.toLowerCase()}`;
+  if (cache.weather.has(cacheKey)) {
+    const cached = cache.weather.get(cacheKey);
+    if (Date.now() - cached.timestamp < CACHE_TTL) {
+      return res.json({ success: true, data: cached.data });
+    }
+  }
+
+  try {
+    const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(q)}&appid=${apiKey}&units=metric`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.cod !== 200) {
+      return res.status(400).json({ success: false, error: data.message || 'City not found' });
+    }
+
+    const result = {
+      temperature: data.main.temp,
+      windspeed: data.wind.speed,
+      windspeed_kmh: data.wind.speed * 3.6,
+      name: data.name,
+      country: data.sys.country,
+    };
+
+    cache.weather.set(cacheKey, { timestamp: Date.now(), data: result });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Weather-by-city error:', error);
+    res.status(500).json({ success: false, error: 'Weather request failed' });
+  }
+}));
+
 /* ═══════════════════════════════════════════════════════════════
    ERROR HANDLING
    ═══════════════════════════════════════════════════════════════ */
