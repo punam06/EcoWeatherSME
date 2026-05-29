@@ -35,7 +35,7 @@ jobs:
       - name: Supabase login
         if: steps.check.outputs.skip == 'false'
         run: supabase login --token ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          
+
       - name: Link Supabase project
         if: steps.check.outputs.skip == 'false'
         env:
@@ -45,11 +45,8 @@ jobs:
 
       - name: Deploy Supabase Edge Functions
         if: steps.check.outputs.skip == 'false'
-        env:
-          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
-          echo "Attempting to deploy with project ref: $SUPABASE_PROJECT_REF"
-          supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
+          supabase functions deploy --no-verify-jwt
 
       - name: Note when skipped
         if: steps.check.outputs.skip == 'true'
