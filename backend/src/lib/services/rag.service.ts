@@ -210,3 +210,84 @@ export async function queryRAG(query: string, language: 'bn' | 'en'): Promise<RA
     tokensUsed,
   };
 }
+
+/**
+ * Performs a conversational RAG query grounded in BARI context.
+ */
+export async function queryRAGConversational(
+  query: string,
+  language: 'bn' | 'en',
+  history: { role: 'user' | 'assistant'; content: string }[]
+): Promise<RAGResult> {
+  const relevantChunks = retrieveTopChunks(query, 2);
+  const contextText = relevantChunks.map((c) => c.content).join('\n\n');
+  const contextCategories = relevantChunks.map((c) => c.category);
+
+  const languageInstruction =
+    language === 'bn'
+      ? 'Respond in clean, helpful, natural conversational Bangla (বাংলা).'
+      : 'Respond in clear, professional English.';
+
+  const systemPrompt =
+    `You are an expert agricultural AI assistant for Bangladesh's organic farming sector, ` +
+    `specializing in BARI (Bangladesh Agricultural Research Institute) standards.\n` +
+    `Answer based strictly on the following BARI standard context. ` +
+    `If the answer is not in context, clearly state that.\n` +
+    `${languageInstruction}\n\n` +
+    `Context:\n${contextText}`;
+
+  const conversationMessages = history.map((msg) => ({
+    role: msg.role === 'user' ? 'user' as const : 'assistant' as const,
+    content: msg.content,
+  }));
+
+  const groq = getGroqClient();
+  let answer: string;
+  let tokensUsed = 0;
+
+  try {
+    const completion = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...conversationMessages,
+        { role: 'user', content: query },
+      ],
+      temperature: 0.3,
+      max_tokens: 400,
+    });
+
+    answer = completion.choices[0]?.message?.content ?? 'No answer generated.';
+    tokensUsed = completion.usage?.total_tokens ?? 0;
+  } catch (primaryError) {
+    console.warn('[RAG] llama-3.3-70b-versatile conversational failed, trying llama-3.1-8b-instant:', primaryError);
+    try {
+      const fallback = await groq.chat.completions.create({
+        model: 'llama-3.1-8b-instant',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...conversationMessages,
+          { role: 'user', content: query },
+        ],
+        temperature: 0.3,
+        max_tokens: 400,
+      });
+      answer = fallback.choices[0]?.message?.content ?? 'No answer generated.';
+      tokensUsed = fallback.usage?.total_tokens ?? 0;
+    } catch (fallbackError) {
+      console.error('[RAG] Both Groq models failed for conversation:', fallbackError);
+      answer =
+        language === 'bn'
+          ? `দুঃখিত, AI সার্ভিস এই মুহূর্তে অনুপলব্ধ। প্রাসঙ্গিক BARI নির্দেশিকা: ${contextText.slice(0, 300)}...`
+          : `AI service temporarily unavailable. Relevant BARI context: ${contextText.slice(0, 300)}...`;
+    }
+  }
+
+  return {
+    answer,
+    language,
+    contextUsed: contextCategories,
+    tokensUsed,
+  };
+}
+
