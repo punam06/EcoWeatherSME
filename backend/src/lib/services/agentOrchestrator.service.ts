@@ -233,6 +233,7 @@ For every user message, respond with a JSON object in this exact format:
 Rules:
 - Always respond in the same language the user wrote in (Bangla, English, or mixed)
 - "replyMessage" must be warm, conversational, and helpful — never robotic
+- If the assistant previously asked for a city name/location and the user responds with a city name (e.g. "Dhaka", "Sylhet", "dhakar"), set the intent to "weather" and extract the city
 - If the user says anything like "dashboard দেখাও", "go to orders", "marketplace নিয়ে যাও", "order page" — set intent to "navigate" and extract the page
 - If the user wants to buy/order something — set intent to "order"
 - If the user asks about weather, temperature, climate, আবহাওয়া — set intent to "weather"
