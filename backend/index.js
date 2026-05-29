@@ -1,11 +1,8 @@
 const path = require('path');
-// Load dotenv only in non-production to avoid overriding host env vars
-if (process.env.NODE_ENV !== 'production') {
-  const dotenv = require('dotenv');
-  // Load local .env first, then fallback to repository root .env
-  dotenv.config();
-  dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
-}
+// Always load .env — Render dashboard vars override these automatically
+const dotenv = require('dotenv');
+dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
@@ -22,9 +19,16 @@ const port = process.env.PORT || 5000;
 // Middleware
 app.use(express.json());
 
-// CORS Configuration
+// CORS Configuration — allow both local dev and Render production frontend
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:5000'],
+  origin: [
+    'https://ecoweathersme.onrender.com',
+    process.env.FRONTEND_URL,
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://localhost:5000',
+    'http://127.0.0.1:3000',
+  ].filter(Boolean),
   credentials: true,
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -693,6 +697,209 @@ app.post('/api/users', requireAuth, requireRole('admin'), asyncHandler(async (re
     throw error;
   }
 }));
+
+/* ═══════════════════════════════════════════════════════════════
+   AI AGENT CHATBOT ROUTES (Groq-powered)
+   ═══════════════════════════════════════════════════════════════ */
+
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
+
+// In-memory session store
+const chatSessions = new Map();
+
+function getOrCreateSession(sessionId) {
+  if (sessionId && chatSessions.has(sessionId)) {
+    return chatSessions.get(sessionId);
+  }
+  const id = sessionId || require('uuid').v4();
+  const session = { sessionId: id, history: [], createdAt: Date.now() };
+  chatSessions.set(id, session);
+  return session;
+}
+
+// City name normalizer
+const CITY_MAP = {
+  'borishal': 'Barisal', 'barisal': 'Barisal', 'barishal': 'Barisal',
+  'bogura': 'Bogra', 'bogra': 'Bogra', 'bogora': 'Bogra',
+  'dhaka': 'Dhaka', 'dhakar': 'Dhaka', 'dacca': 'Dhaka',
+  'chittagong': 'Chittagong', 'chattogram': 'Chittagong',
+  'sylhet': 'Sylhet', 'silhet': 'Sylhet',
+  'rajshahi': 'Rajshahi', 'khulna': 'Khulna',
+  'rangpur': 'Rangpur', 'mymensingh': 'Mymensingh',
+  'comilla': 'Comilla', 'cumilla': 'Comilla',
+  'coxsbazar': "Cox's Bazar", 'jessore': 'Jessore', 'jashore': 'Jessore',
+  'narayanganj': 'Narayanganj', 'gazipur': 'Gazipur',
+};
+const NOISE_TOKENS = new Set(['weather','forecast','climate','temperature',
+  'আবহাওয়া','তাপমাত্রা','বৃষ্টি','sohorer','sohor','shohorer','shohor',
+  'city','ki','kemon','ache','আছে','কি','কেমন','er','র','এর','te','তে']);
+
+function normalizeCity(input) {
+  if (!input) return null;
+  const tokens = input.toLowerCase().trim().split(/\s+/);
+  for (const token of tokens) {
+    if (NOISE_TOKENS.has(token)) continue;
+    if (CITY_MAP[token]) return CITY_MAP[token];
+    // Try stripping common suffixes
+    for (const suffix of ['er','r','te','e','thi']) {
+      if (token.endsWith(suffix)) {
+        const stripped = token.slice(0, -suffix.length);
+        if (stripped.length > 2 && CITY_MAP[stripped]) return CITY_MAP[stripped];
+      }
+    }
+  }
+  return null;
+}
+
+const AGENT_SYSTEM_PROMPT = `You are EcoSortha AI, an intelligent agricultural commerce assistant for Bangladesh's organic farming sector. You understand Bangla, English, and Banglish naturally.
+
+You help farmers with: weather/climate data, BARI agricultural guidelines, product browsing, placing orders, and navigating the platform.
+
+For every user message, respond with a JSON object in this exact format:
+{"intent": "weather" | "navigate" | "order" | "product_search" | "bari_advice" | "general_chat", "language": "bn" | "en" | "mixed", "extractedData": {"city": "string or null", "page": null, "productName": null, "quantity": null, "unit": null, "cropContext": null}, "replyMessage": "Your natural response in the same language the user used"}
+
+Rules:
+- Always respond in the same language the user wrote in (Bangla, English, or mixed)
+- If the user asks about weather, temperature, আবহাওয়া — set intent to "weather" and extract the city name into extractedData.city
+- replyMessage must be warm and conversational — never robotic
+- Never say "I cannot help with that"
+- IMPORTANT: Respond ONLY with valid JSON. No markdown, no backticks.`;
+
+async function callGroq(messages) {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error('GROQ_API_KEY not set');
+
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      messages,
+      temperature: 0.3,
+      response_format: { type: 'json_object' },
+      max_tokens: 1024,
+    }),
+  });
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Groq API error ${response.status}: ${err}`);
+  }
+  const data = await response.json();
+  return data.choices[0]?.message?.content || '';
+}
+
+async function getWeather(city, lang) {
+  const apiKey = process.env.OPENWEATHER_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)},BD&appid=${apiKey}&units=metric`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const d = await res.json();
+    return {
+      city: d.name,
+      temperature: Math.round(d.main.temp),
+      feelsLike: Math.round(d.main.feels_like),
+      humidity: d.main.humidity,
+      windSpeed: d.wind.speed,
+      description: d.weather[0].description,
+    };
+  } catch { return null; }
+}
+
+// POST /api/ai/chat/start
+app.post('/api/ai/chat/start', (req, res) => {
+  const session = getOrCreateSession(null);
+  res.json({ success: true, data: { sessionId: session.sessionId } });
+});
+
+// DELETE /api/ai/chat/end
+app.delete('/api/ai/chat/end', (req, res) => {
+  const { sessionId } = req.body || {};
+  if (sessionId) chatSessions.delete(sessionId);
+  res.json({ success: true });
+});
+
+// POST /api/agent/message — main chatbot endpoint
+app.post('/api/agent/message', async (req, res) => {
+  try {
+    const { query, language, sessionId } = req.body;
+    if (!query || !query.trim()) {
+      return res.status(400).json({ success: false, error: 'query is required' });
+    }
+
+    const session = getOrCreateSession(sessionId);
+    const lang = language === 'bn' ? 'bn' : 'en';
+
+    // Build conversation history for context
+    const history = session.history.slice(-6).map(m => ({ role: m.role, content: m.content }));
+    const messages = [
+      { role: 'system', content: AGENT_SYSTEM_PROMPT },
+      ...history,
+      { role: 'user', content: query },
+    ];
+
+    // Call Groq
+    let parsed = null;
+    try {
+      const raw = await callGroq(messages);
+      let cleaned = raw.trim().replace(/^```json\s*/i, '').replace(/\s*```$/, '');
+      parsed = JSON.parse(cleaned);
+    } catch (e) {
+      console.error('[Agent] Groq/parse failed:', e.message);
+    }
+
+    session.history.push({ role: 'user', content: query });
+
+    let responseMessage;
+    let responseType = 'TEXT';
+
+    if (parsed && parsed.intent === 'weather') {
+      const cityInput = parsed.extractedData?.city || query;
+      const normalizedCity = normalizeCity(cityInput);
+      if (normalizedCity) {
+        const weather = await getWeather(normalizedCity, lang);
+        if (weather) {
+          responseMessage = lang === 'bn'
+            ? `${weather.city}-এর বর্তমান আবহাওয়া:\n🌡️ তাপমাত্রা: ${weather.temperature}°C (অনুভূতি: ${weather.feelsLike}°C)\n🌤️ অবস্থা: ${weather.description}\n💧 আর্দ্রতা: ${weather.humidity}%\n💨 বাতাসের গতি: ${weather.windSpeed} m/s`
+            : `Current weather in ${weather.city}:\n🌡️ Temperature: ${weather.temperature}°C (Feels like: ${weather.feelsLike}°C)\n🌤️ Condition: ${weather.description}\n💧 Humidity: ${weather.humidity}%\n💨 Wind Speed: ${weather.windSpeed} m/s`;
+        } else {
+          responseMessage = parsed.replyMessage ||
+            (lang === 'bn' ? `দুঃখিত, ${normalizedCity} শহরের আবহাওয়া তথ্য পাওয়া যায়নি।` : `Could not find weather data for ${normalizedCity}.`);
+        }
+      } else {
+        responseMessage = parsed.replyMessage ||
+          (lang === 'bn' ? 'আপনার শহরের নাম জানান, আমি আবহাওয়া তথ্য দেব।' : 'Please tell me your city name for weather information.');
+      }
+    } else if (parsed && parsed.replyMessage) {
+      responseMessage = parsed.replyMessage;
+      if (parsed.intent === 'navigate') responseType = 'NAVIGATION';
+      if (parsed.intent === 'order') responseType = 'ORDER_CONFIRM_PROMPT';
+    } else {
+      responseMessage = lang === 'bn'
+        ? 'দুঃখিত, আমি বুঝতে পারিনি। অনুগ্রহ করে আবার বলুন।'
+        : 'Sorry, I could not understand. Please try again.';
+    }
+
+    session.history.push({ role: 'assistant', content: responseMessage });
+
+    res.json({
+      success: true,
+      data: {
+        type: responseType,
+        message: responseMessage,
+        language: lang,
+        sessionId: session.sessionId,
+      }
+    });
+  } catch (err) {
+    console.error('[Agent] Error:', err);
+    res.status(500).json({ success: false, error: err.message || 'Internal server error' });
+  }
+});
 
 /* ═══════════════════════════════════════════════════════════════
    ERROR HANDLING
