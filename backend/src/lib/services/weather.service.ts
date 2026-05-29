@@ -41,7 +41,7 @@ export async function getWeatherByCity(cityName: string, language: 'bn' | 'en'):
 
   try {
     const lang = language === 'bn' ? 'bn' : 'en';
-    const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(cityName)}&appid=${apiKey}&units=metric&lang=${lang}`;
+    const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(cityName)},BD&appid=${apiKey}&units=metric&lang=${lang}`;
     
     const response = await fetch(url);
     const data: any = await response.json();

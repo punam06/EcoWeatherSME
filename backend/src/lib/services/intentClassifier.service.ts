@@ -3,8 +3,8 @@
  * ECOSORTHA AI — INTENT CLASSIFIER SERVICE
  * File: src/lib/services/intentClassifier.service.ts
  *
- * Implements regex-based, ultra-low latency intent classification
- * and city name suffix normalization.
+ * Implements regex-based intent classification and comprehensive 
+ * city name normalization to strip Bangla geographic suffixes.
  * ═══════════════════════════════════════════════════════════════
  */
 
@@ -15,52 +15,85 @@ export type IntentType =
   | 'bari_advice_intent'
   | 'general_rag_intent';
 
-/**
- * Normalizes city names from raw user queries (e.g. "dhakar" -> "Dhaka", "dhakaer" -> "Dhaka").
- * Strips Bangla and English suffixes and maps known variations to canonical forms.
- */
-export function cityNameNormalizer(input: string): string {
-  if (!input) return '';
+const NOISE_TOKENS = new Set([
+  // Weather keywords
+  'weather', 'forecast', 'climate', 'temperature', 'আবহাওয়া', 'তাপমাত্রা', 'বৃষ্টি',
+  // Geographic noise words
+  'sohorer', 'sohor', 'shohorer', 'shohor', 'city', 'district', 'division', 'jela', 'জেলা', 'শহর',
+  // Question/filler particles
+  'ki', 'kি', 'kemon', 'ache', 'আছে', 'কি', 'কেমন', 'বলুন', 'জানাও', 'দেখাও',
+  // Prepositions
+  'er', 'র', 'এর', 'te', 'তে', 'e', 'এ', 'ke', 'কে', 'r',
+]);
 
-  // Clean fillers
-  const fillers = ['weather', 'forecast', 'climate', 'show', 'me', 'temperature', 'rain', 'আবহাওয়া', 'জলবায়ু', 'তাপমাত্রা', 'বৃষ্টি', 'ki', 'kি', 'kemon', 'কেমন', 'in', 'at', 'of', 'te', 'এ', 'তে'];
-  let clean = input.toLowerCase().trim();
-  for (const filler of fillers) {
-    const regex = new RegExp(`\\b${filler}\\b|${filler}`, 'gi');
-    clean = clean.replace(regex, ' ');
+const SUFFIX_PATTERNS = [
+  /sohorer$/i, /shohor$/i, /sohor$/i,
+  /er$/i, /র$/, /এর$/,
+  /te$/i, /তে$/,
+  /ke$/i, /কে$/,
+  /thi$/i,
+];
+
+const CITY_MAP: Record<string, string> = {
+  // Barisal variants
+  'borishal': 'Barisal', 'barisal': 'Barisal', 'barishal': 'Barisal',
+  'barsal': 'Barisal', 'borisol': 'Barisal',
+  // Bogra variants  
+  'bogura': 'Bogra', 'bogra': 'Bogra', 'bogora': 'Bogra',
+  // Dhaka variants
+  'dhaka': 'Dhaka', 'dhakar': 'Dhaka', 'dacca': 'Dhaka',
+  // Chittagong variants
+  'chittagong': 'Chittagong', 'chattogram': 'Chittagong', 'chittagon': 'Chittagong',
+  // Sylhet variants
+  'sylhet': 'Sylhet', 'silhet': 'Sylhet',
+  // Rajshahi variants
+  'rajshahi': 'Rajshahi', 'rajsahi': 'Rajshahi',
+  // Khulna variants
+  'khulna': 'Khulna', 'kulna': 'Khulna',
+  // Rangpur variants
+  'rangpur': 'Rangpur', 'rangpour': 'Rangpur',
+  // Mymensingh variants
+  'mymensingh': 'Mymensingh', 'mymensing': 'Mymensingh', 'maimansingh': 'Mymensingh',
+  // Comilla variants
+  'comilla': 'Comilla', 'cumilla': 'Comilla',
+  // Cox's Bazar variants
+  'coxsbazar': "Cox's Bazar", 'coxbazar': "Cox's Bazar", 'cox': "Cox's Bazar",
+  // Jessore variants
+  'jessore': 'Jessore', 'jashore': 'Jessore',
+  // Narayanganj
+  'narayanganj': 'Narayanganj', 'narayangonj': 'Narayanganj',
+  // Gazipur
+  'gazipur': 'Gazipur', 'gajipur': 'Gazipur',
+};
+
+export function cityNameNormalizer(input: string): string | null {
+  if (!input) return null;
+  const tokens = input.toLowerCase().trim().split(/\s+/);
+
+  for (const rawToken of tokens) {
+    // Skip known noise tokens
+    if (NOISE_TOKENS.has(rawToken)) continue;
+
+    // Try direct map lookup first
+    if (CITY_MAP[rawToken]) return CITY_MAP[rawToken];
+
+    // Strip suffixes and try again
+    let stripped = rawToken;
+    for (const pattern of SUFFIX_PATTERNS) {
+      const candidate = stripped.replace(pattern, '');
+      if (candidate.length > 2 && CITY_MAP[candidate]) {
+        return CITY_MAP[candidate];
+      }
+      if (candidate.length > 2) stripped = candidate;
+    }
+
+    // Try stripped token after all suffix removal
+    if (stripped.length > 2 && CITY_MAP[stripped]) {
+      return CITY_MAP[stripped];
+    }
   }
 
-  // Strip suffixes: "এর", "র", "তে", "এ"
-  clean = clean.replace(/(?:এর|র|তে|এ)$/gi, '').trim();
-  clean = clean.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?।'"\\]/g, '').trim();
-
-  // Mapping
-  const cityMapping: Record<string, string> = {
-    'dhaka': 'Dhaka',
-    'dhakaa': 'Dhaka',
-    'ঢাকায়': 'Dhaka',
-    'ঢাকা': 'Dhaka',
-    'ঢাকার': 'Dhaka',
-    'ঢাকায়': 'Dhaka',
-    'chittagong': 'Chittagong',
-    'chittaganger': 'Chittagong',
-    'চট্টগ্রাম': 'Chittagong',
-    'চট্টগ্রামের': 'Chittagong',
-    'sylhet': 'Sylhet',
-    'sylheter': 'Sylhet',
-    'সিলেট': 'Sylhet',
-    'সিলেটের': 'Sylhet',
-    'khulna': 'Khulna',
-    'খুলনা': 'Khulna',
-    'rajshahi': 'Rajshahi',
-    'রাজশাহী': 'Rajshahi',
-    'barisal': 'Barisal',
-    'বরিশাল': 'Barisal',
-    'rangpur': 'Rangpur',
-    'রংপুর': 'Rangpur',
-  };
-
-  return cityMapping[clean] || (clean.charAt(0).toUpperCase() + clean.slice(1));
+  return null; // No city found
 }
 
 /**

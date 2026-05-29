@@ -1350,7 +1350,8 @@ function ChatbotView() {
   const [isRecording, setIsRecording] = useState(false);
   const [speechLang, setSpeechLang] = useState("en-US");
   const [speechSupported, setSpeechSupported] = useState(true);
-  const [voiceError, setVoiceError] = useState("");
+  const [voiceError, setVoiceError] = useState(null);
+  const [hasAttemptedVoice, setHasAttemptedVoice] = useState(false);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -1384,6 +1385,8 @@ function ChatbotView() {
 
   const handleSend = async (text, attachedFileName = null) => {
     if (!text.trim() && !attachedFileName) return;
+    setVoiceError(null);
+    setHasAttemptedVoice(false);
     const newMsg = { 
       role: "user", 
       content: text, 
@@ -1438,7 +1441,8 @@ function ChatbotView() {
 
   const handleVoice = () => {
     if (isRecording) return;
-    setVoiceError("");
+    setVoiceError(null);
+    setHasAttemptedVoice(true);
 
     if (navigator.mediaDevices?.getUserMedia) {
       navigator.mediaDevices.getUserMedia({ audio: true })
@@ -1462,7 +1466,12 @@ function ChatbotView() {
       return;
     }
     const recognition = new SpeechRecognition();
-    recognition.lang = lang;
+    
+    // Fallback chain for lang attribute
+    const langCode = speechLang.startsWith('bn') ? 'bn-BD' : 
+                     speechLang.startsWith('en') ? 'en-US' : 'bn-BD';
+    recognition.lang = langCode;
+    recognition.continuous = false;
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
@@ -1491,10 +1500,20 @@ function ChatbotView() {
     recognition.onerror = (event) => {
       console.error("Speech recognition error", event.error);
       setIsRecording(false);
-      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-        setVoiceError("Safari blocked speech input. Re-enable microphone and speech permissions for this site.");
+      
+      if (event.error === 'network') {
+        setVoiceError('ইন্টারনেট সংযোগ সমস্যা। টেক্সট টাইপ করুন।');
+        // Autofocus the text input so the user can immediately type instead
+        const textInput = document.querySelector('input[placeholder="Type your message..."]');
+        if (textInput) {
+          textInput.focus();
+        }
+      } else if (event.error === 'not-allowed') {
+        setVoiceError('মাইক্রোফোন অনুমতি দিন।');
+      } else if (event.error === 'no-speech') {
+        setVoiceError('কোনো কথা শোনা যায়নি। আবার চেষ্টা করুন।');
       } else {
-        setVoiceError(`Voice input failed: ${event.error}`);
+        setVoiceError('ভয়েস ইনপুট ব্যর্থ হয়েছে। টেক্সট ব্যবহার করুন।');
       }
     };
 
@@ -1560,7 +1579,7 @@ function ChatbotView() {
               Microphone not supported in this browser.
             </div>
           )}
-          {voiceError && (
+          {voiceError && hasAttemptedVoice && (
             <div style={{ padding: "12px 18px", fontSize: 12, color: ACCENT.red, background: "var(--bg-input)", borderRadius: "18px 18px 18px 0", width: "fit-content", border: `1px solid ${ACCENT.redBorder}` }}>
               {voiceError}
             </div>
