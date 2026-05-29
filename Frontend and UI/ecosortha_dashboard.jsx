@@ -144,7 +144,7 @@ function calcTrustScore({ pH, EC, temp, ratio, days }) {
   score -= Math.abs(EC - ECOpt) * 6;
   score -= Math.abs(temp - tempOpt) * 1.2;
   const ratioMap = { "1:1:10": -5, "1:1:20": 0, "1:1:30": -3, "1:1:40": -8 };
-  score += ratioMap[ratio] ?? 0;
+  score += ratioMap[ratio] !== undefined ? ratioMap[ratio] : 0;
   if (days < 7) score -= (7 - days) * 4;
   else if (days > 14) score -= (days - 14) * 2;
   return Math.max(0, Math.min(100, Math.round(score)));
@@ -723,7 +723,7 @@ function MicroclimateSimulator({ trustScore }) {
               />
             </div>
             {speechSupported && (
-              <>
+              <React.Fragment>
                 <select 
                   value={speechLang} 
                   onChange={e => setSpeechLang(e.target.value)}
@@ -749,7 +749,7 @@ function MicroclimateSimulator({ trustScore }) {
                 >
                   {isListening ? "🔴" : "🎤"}
                 </button>
-              </>
+              </React.Fragment>
             )}
           </div>
           {speechSupported && isListening && (
@@ -811,7 +811,7 @@ function MicroclimateSimulator({ trustScore }) {
                 <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>Analyzing microclimate...</div>
               </div>
             ) : (
-              <>
+              <React.Fragment>
                 <div style={{ position: "relative", marginBottom: 24 }}>
                   <div style={{ background: "var(--bg-primary)", borderRadius: "50%", padding: 12 }}>
                     <CircleArc value={dvs} color={dvsColor} size={150} strokeWidth={14} />
@@ -832,7 +832,7 @@ function MicroclimateSimulator({ trustScore }) {
                     <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>90 min</div>
                   </div>
                 </div>
-              </>
+              </React.Fragment>
             )}
           </div>
 
@@ -1323,7 +1323,7 @@ function ChatbotView() {
 
   const handleVoice = () => {
     if (isRecording) return;
-    if (navigator.mediaDevices?.getUserMedia) {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       navigator.mediaDevices.getUserMedia({ audio: true })
         .then(stream => stream.getTracks().forEach(track => track.stop()))
         .catch(() => {});
@@ -1435,7 +1435,7 @@ function ChatbotView() {
 
         {/* Input Area */}
         <div style={{ padding: "16px 24px", display: "flex", gap: 12, alignItems: "center", background: "var(--bg-secondary)" }}>
-          <button onClick={() => fileInputRef.current?.click()} style={{
+          <button onClick={() => fileInputRef.current && fileInputRef.current.click()} style={{
             width: 44, height: 44, borderRadius: "50%", border: "none", cursor: "pointer",
             background: "var(--bg-input)", color: "var(--text-secondary)",
             display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
@@ -1450,7 +1450,7 @@ function ChatbotView() {
             />
           </button>
           {speechSupported && (
-            <>
+            <React.Fragment>
               <select 
                 value={speechLang} 
                 onChange={e => setSpeechLang(e.target.value)}
@@ -1472,7 +1472,7 @@ function ChatbotView() {
               }} title="Voice Input">
                 🎙️
               </button>
-            </>
+            </React.Fragment>
           )}
           <input 
             type="text" 
