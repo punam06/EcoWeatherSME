@@ -12,7 +12,10 @@ const argon2 = require('argon2');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { z } = require('zod');
-const Groq = require('groq-sdk');
+// groq-sdk exports the class as a named export AND as .default
+// require('groq-sdk') alone is NOT the constructor — must use .Groq or .default
+const _groqModule = require('groq-sdk');
+const GroqClass = _groqModule.Groq || _groqModule.default || _groqModule;
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -904,7 +907,7 @@ function getGroqClient() {
   if (!groqClient) {
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) throw new Error('GROQ_API_KEY environment variable is not set');
-    groqClient = new Groq({ apiKey });
+    groqClient = new GroqClass({ apiKey });
   }
   return groqClient;
 }
@@ -979,7 +982,7 @@ app.post('/api/agent/message', async (req, res) => {
       let cleaned = raw.trim().replace(/^```json\s*/i, '').replace(/\s*```$/, '');
       parsed = JSON.parse(cleaned);
     } catch (e) {
-      console.error('[Agent] Groq/parse failed:', e.message);
+      console.error('[Agent] Groq/parse failed:', e.message, e.stack);
     }
 
     session.history.push({ role: 'user', content: query });
