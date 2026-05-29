@@ -787,20 +787,37 @@ app.post('/api/chat', asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, error: 'Message is required' });
   }
 
+  let systemPrompt = 'You are the EcoSortha AI Agricultural Assistant for Bangladesh. You provide concise, practical, and highly relevant advice regarding climate demand intelligence, microclimate simulations, organic farming guidelines, and supply chain optimizations. Keep your answers complete but concise.';
+
+  try {
+    // Try to get Dhaka weather to provide context!
+    const apiKey = process.env.OPENWEATHER_API_KEY;
+    if (apiKey) {
+      const url = `https://api.openweathermap.org/data/2.5/weather?lat=23.8103&lon=90.4125&appid=${apiKey}&units=metric`;
+      const response = await fetch(url);
+      const data = await response.json();
+      if (data.main) {
+        systemPrompt += `\n\nCURRENT CONTEXT: The live temperature in Dhaka right now is ${data.main.temp}°C with a wind speed of ${(data.wind.speed * 3.6).toFixed(1)} km/h. If the user asks about the current weather or temperature in Dhaka, YOU MUST use this live data and not hallucinate a different number.`;
+      }
+    }
+  } catch(e) {
+    console.error('Failed to fetch weather for AI prompt:', e);
+  }
+
   try {
     const completion = await groqClient.chat.completions.create({
       model: 'llama-3.1-8b-instant',
       messages: [
         {
           role: 'system',
-          content: 'You are the EcoSortha AI Agricultural Assistant for Bangladesh. You provide concise, practical, and highly relevant advice regarding climate demand intelligence, microclimate simulations, organic farming guidelines, and supply chain optimizations.'
+          content: systemPrompt
         },
         {
           role: 'user',
           content: message
         }
       ],
-      max_tokens: 300,
+      max_tokens: 1500,
       temperature: 0.3
     });
 
