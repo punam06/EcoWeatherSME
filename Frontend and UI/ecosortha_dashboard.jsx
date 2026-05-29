@@ -517,11 +517,10 @@ function MicroclimateSimulator({ trustScore }) {
   const [baseTemp, setBaseTemp] = useState(31);
   const [zone, setZone] = useState("Mirpur");
   const [packaging, setPackaging] = useState("standard");
-  const [hour, setHour] = useState(12);
+  const [hour, setHour] = useState(new Date().getHours());
   const [windSpeed, setWindSpeed] = useState(8);
   const [zoneSearch, setZoneSearch] = useState("");
   const [isFetchingWeather, setIsFetchingWeather] = useState(false);
-  const [isFetchingMetrics, setIsFetchingMetrics] = useState(false);
   const [dvs, setDvs] = useState(0);
   const [tst, setTst] = useState(0);
   const [adjustedTemp, setAdjustedTemp] = useState(31);
@@ -529,6 +528,7 @@ function MicroclimateSimulator({ trustScore }) {
   const [isListening, setIsListening] = useState(false);
   const [speechLang, setSpeechLang] = useState("en-US");
   const [speechSupported, setSpeechSupported] = useState(true);
+  const [weatherStatus, setWeatherStatus] = useState("");
 
   const uhi = UHI_ZONES[zone] || UHI_ZONES["Mirpur"];
   const solarFactor = getSolarFactor(hour);
@@ -536,80 +536,25 @@ function MicroclimateSimulator({ trustScore }) {
 
   const filteredZones = Object.keys(UHI_ZONES).filter(z => z.toLowerCase().includes(zoneSearch.toLowerCase()));
 
-  // Fetch microclimate metrics when inputs change
+  // Recalculate DVS/TST locally whenever any input changes — instant, no external API needed
   useEffect(() => {
-    const fetchMicroclimateMetrics = async () => {
-      setIsFetchingMetrics(true);
-      try {
-        const response = await fetch(
-          "https://pdeskdcdyhbldwfgbowz.supabase.co/functions/v1/clever-responder",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              action: "microclimate-metrics",
-              trustScore,
-              zone,
-              packaging,
-              hour,
-              baseTemp,
-              windSpeed,
-            }),
-          }
-        );
-        const data = await response.json();
-        setDvs(data.dvs || 0);
-        setTst(data.tst || 0);
-        setAdjustedTemp(data.adjustedTemp || baseTemp);
-        setThermalRisk(data.thermalRisk || { value: 0.1, label: "Low", color: ACCENT.green });
-      } catch (error) {
-        console.error("Failed to fetch microclimate metrics:", error);
-        // Fallback to local calculation on error
-        const adjTemp = calcAdjustedTemp(baseTemp, zone, hour, windSpeed);
-        const risk = calcThermalRisk(adjTemp);
-        const dvsScore = calcDVS(trustScore, adjTemp);
-        const tstScore = calcTST(trustScore, zone, packaging, hour);
-        setAdjustedTemp(adjTemp);
-        setThermalRisk(risk);
-        setDvs(dvsScore);
-        setTst(tstScore);
-      } finally {
-        setIsFetchingMetrics(false);
-      }
-    };
-    
-    fetchMicroclimateMetrics();
+    const adjTemp = calcAdjustedTemp(baseTemp, zone, hour, windSpeed);
+    const risk = calcThermalRisk(adjTemp);
+    const dvsScore = calcDVS(trustScore, adjTemp);
+    const tstScore = calcTST(trustScore, zone, packaging, hour);
+    setAdjustedTemp(adjTemp);
+    setThermalRisk(risk);
+    setDvs(dvsScore);
+    setTst(tstScore);
   }, [baseTemp, zone, packaging, hour, windSpeed, trustScore]);
 
+  // On mount: detect speech language from browser locale
   useEffect(() => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       setSpeechSupported(false);
     } else {
       const locale = (navigator.languages && navigator.languages[0]) || navigator.language || "en-US";
-      if (locale.toLowerCase().startsWith("bn")) {
-        setSpeechLang("bn-BD");
-      }
-
-      // Pre-detect language based on location
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          try {
-            const { latitude, longitude } = position.coords;
-            const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`);
-            const data = await res.json();
-            if (data.countryCode === "BD") {
-              setSpeechLang("bn-BD");
-            } else if (!locale.toLowerCase().startsWith("bn")) {
-              setSpeechLang("en-US");
-            }
-          } catch (e) {
-            console.error("Failed to detect language from location", e);
-          }
-        },
-        () => console.warn("Geolocation denied/failed. Defaulting to en-US.")
-      );
+      if (locale.toLowerCase().startsWith("bn")) setSpeechLang("bn-BD");
     }
   }, []);
 
@@ -657,23 +602,68 @@ function MicroclimateSimulator({ trustScore }) {
     recognition.start();
   };
 
-  const fetchLiveWeather = async (locationQuery = null) => {
+  // Auto-detect: use browser GPS -> /api/weather by lat/lon (no Google Maps key needed)
+  // Also auto-sets dispatch hour to current local time
+  const fetchLiveWeather = async (locationQuery) => {
     setIsFetchingWeather(true);
-    const targetLocation = typeof locationQuery === "string" ? locationQuery : (zoneSearch || zone || "Dhaka");
-    try {
-      const geoRes = await window.APIClient.geocode(targetLocation);
-      if (geoRes.success && geoRes.data) {
-        const { lat, lon } = geoRes.data;
-        const weatherRes = await window.APIClient.getWeather(lat, lon);
+    setWeatherStatus("Detecting...");
+    setHour(new Date().getHours());
+
+    if (typeof locationQuery === "string") {
+      // Called from speech recognition with a zone/city name
+      try {
+        const weatherRes = await window.APIClient.getWeatherByCity(locationQuery);
         if (weatherRes.success && weatherRes.data) {
           setBaseTemp(Math.round(weatherRes.data.temperature * 10) / 10);
           setWindSpeed(Math.round(weatherRes.data.windspeed_kmh));
+          setWeatherStatus("Live: " + (weatherRes.data.name || locationQuery));
         }
+      } catch (e) {
+        console.error("Weather by city failed", e);
+        setWeatherStatus("Failed.");
       }
-    } catch (e) {
-      console.error("Failed to fetch live weather via backend", e);
+      setIsFetchingWeather(false);
+      return;
     }
-    setIsFetchingWeather(false);
+
+    // Auto-detect button: use browser GPS
+    if (!navigator.geolocation) {
+      setWeatherStatus("GPS not supported.");
+      setIsFetchingWeather(false);
+      return;
+    }
+    setWeatherStatus("Getting GPS...");
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          setWeatherStatus("Fetching weather...");
+          const weatherRes = await window.APIClient.getWeather(latitude, longitude);
+          if (weatherRes.success && weatherRes.data) {
+            setBaseTemp(Math.round(weatherRes.data.temperature * 10) / 10);
+            setWindSpeed(Math.round(weatherRes.data.windspeed_kmh));
+            setWeatherStatus("Live: " + (weatherRes.data.name || "your location"));
+          }
+        } catch (e) {
+          console.error("GPS weather fetch failed", e);
+          setWeatherStatus("Failed.");
+        }
+        setIsFetchingWeather(false);
+      },
+      async () => {
+        // GPS denied — fall back to Dhaka
+        setWeatherStatus("GPS denied, loading Dhaka...");
+        try {
+          const weatherRes = await window.APIClient.getWeather(23.8103, 90.4125);
+          if (weatherRes.success && weatherRes.data) {
+            setBaseTemp(Math.round(weatherRes.data.temperature * 10) / 10);
+            setWindSpeed(Math.round(weatherRes.data.windspeed_kmh));
+            setWeatherStatus("Live: Dhaka (fallback)");
+          }
+        } catch (e) { setWeatherStatus("Weather unavailable."); }
+        setIsFetchingWeather(false);
+      }
+    );
   };
 
   const advice = dvs >= 75
@@ -701,6 +691,11 @@ function MicroclimateSimulator({ trustScore }) {
               {isFetchingWeather ? "⏳ Fetching..." : "📡 Auto-Detect (Live)"}
             </button>
           </div>
+          {weatherStatus ? (
+            <div style={{ fontSize: 10, color: ACCENT.blue, marginBottom: 8, marginTop: -4 }}>
+              {weatherStatus}
+            </div>
+          ) : null}
           <div style={{ background: "var(--bg-input)", padding: 14, borderRadius: 10, border: "1px solid var(--border-primary)", marginBottom: 16 }}>
             <SliderRow label="Base Temperature (Regional)" min={25} max={42} step={0.5} value={baseTemp} onChange={setBaseTemp} unit="°C" color={baseTemp > 35 ? ACCENT.red : ACCENT.amber} />
             <div style={{ marginTop: 12 }}>
@@ -805,36 +800,28 @@ function MicroclimateSimulator({ trustScore }) {
 
         {/* RIGHT COLUMN */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", alignItems: "center", background: "var(--bg-input)", borderRadius: 12, border: "1px solid var(--border-primary)", minHeight: 250 }}>
-            {isFetchingMetrics ? (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 250 }}>
-                <div style={{ fontSize: 24, marginBottom: 12 }}>⏳</div>
-                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>Analyzing microclimate...</div>
-              </div>
-            ) : (
-              <React.Fragment>
-                <div style={{ position: "relative", marginBottom: 24 }}>
-                  <div style={{ background: "var(--bg-primary)", borderRadius: "50%", padding: 12 }}>
-                    <CircleArc value={dvs} color={dvsColor} size={150} strokeWidth={14} />
-                  </div>
-                  <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center" }}>
-                    <div style={{ fontSize: 36, fontWeight: 700, color: dvsColor, lineHeight: 1, fontFamily: "'JetBrains Mono', monospace" }}>{dvs}</div>
-                    <div style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 600, marginTop: 4 }}>DVS SCORE</div>
-                  </div>
-                </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, width: "100%" }}>
-                  <div style={{ background: "var(--bg-primary)", padding: "16px 0", borderRadius: 8, textAlign: "center", border: "1px solid var(--border-primary)" }}>
-                    <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Thermal Survival</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{tst} min</div>
-                  </div>
-                  <div style={{ background: "var(--bg-primary)", padding: "16px 0", borderRadius: 8, textAlign: "center", border: "1px solid var(--border-primary)" }}>
-                    <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Route Duration</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>90 min</div>
-                  </div>
-                </div>
-              </React.Fragment>
-            )}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", background: "var(--bg-input)", borderRadius: 12, border: "1px solid var(--border-primary)", minHeight: 250, padding: "20px 24px" }}>
+            <div style={{ position: "relative", marginBottom: 24 }}>
+              <div style={{ background: "var(--bg-primary)", borderRadius: "50%", padding: 12 }}>
+                <CircleArc value={dvs} color={dvsColor} size={150} strokeWidth={14} />
+              </div>
+              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center" }}>
+                <div style={{ fontSize: 36, fontWeight: 700, color: dvsColor, lineHeight: 1, fontFamily: "'JetBrains Mono', monospace" }}>{dvs}</div>
+                <div style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 600, marginTop: 4 }}>DVS SCORE</div>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, width: "100%" }}>
+              <div style={{ background: "var(--bg-primary)", padding: "16px 0", borderRadius: 8, textAlign: "center", border: "1px solid var(--border-primary)" }}>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Thermal Survival</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{tst} min</div>
+              </div>
+              <div style={{ background: "var(--bg-primary)", padding: "16px 0", borderRadius: 8, textAlign: "center", border: "1px solid var(--border-primary)" }}>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Route Duration</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>90 min</div>
+              </div>
+            </div>
           </div>
 
           <div style={{ padding: "20px 24px", background: "var(--bg-input)", borderRadius: 12, border: "1px solid var(--border-primary)" }}>
