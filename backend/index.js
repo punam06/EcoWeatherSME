@@ -789,7 +789,7 @@ app.post('/api/chat', asyncHandler(async (req, res) => {
 
   try {
     const completion = await grokClient.chat.completions.create({
-      model: 'grok-2-latest',
+      model: 'grok-beta',
       messages: [
         {
           role: 'system',
@@ -808,7 +808,7 @@ app.post('/api/chat', asyncHandler(async (req, res) => {
     res.json({ success: true, reply });
   } catch (error) {
     console.error('Grok API Error:', error);
-    res.status(500).json({ success: false, error: 'Failed to communicate with AI service' });
+    res.status(500).json({ success: false, error: 'Failed to communicate with AI service', details: error.message });
   }
 }));
 
