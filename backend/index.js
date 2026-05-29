@@ -15,7 +15,7 @@ const argon2 = require('argon2');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { z } = require('zod');
-
+const OpenAI = require('openai');
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -650,12 +650,91 @@ app.post('/api/calculate-trust-score', asyncHandler(async (req, res) => {
 
 // Get demand forecast
 app.get('/api/demand-forecast', asyncHandler(async (req, res) => {
-  const forecastPath = require('path').join(__dirname, '../public/demand-forecast-mock.json');
+  const { lat, lon } = req.query;
+
+  // If no lat/lon, return mock data as fallback
+  if (!lat || !lon) {
+    const forecastPath = require('path').join(__dirname, '../public/demand-forecast-mock.json');
+    try {
+      const forecast = require(forecastPath);
+      return res.json({ success: true, data: forecast });
+    } catch (error) {
+      return res.status(500).json({ success: false, error: 'Could not load forecast data' });
+    }
+  }
+
+  const cacheKey = `forecast_${lat}_${lon}`;
+  if (cache.weather && cache.weather.has(cacheKey)) {
+    const cached = cache.weather.get(cacheKey);
+    if (Date.now() - cached.timestamp < CACHE_TTL) {
+      return res.json({ success: true, data: cached.data });
+    }
+  }
+
+  const apiKey = process.env.OPENWEATHER_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ success: false, error: 'Weather API key missing' });
+  }
+
   try {
-    const forecast = require(forecastPath);
-    res.json({ success: true, data: forecast });
+    // OpenWeatherMap 5-day/3-hour forecast API
+    const url = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (String(data.cod) !== "200") {
+      return res.status(parseInt(data.cod)).json({ success: false, error: data.message });
+    }
+
+    // Process 3-hour chunks into daily max temperatures
+    const dailyData = {};
+    data.list.forEach(item => {
+      const date = item.dt_txt.split(' ')[0]; // "YYYY-MM-DD"
+      if (!dailyData[date]) {
+        dailyData[date] = { maxTemp: -100 };
+      }
+      if (item.main.temp_max > dailyData[date].maxTemp) {
+        dailyData[date].maxTemp = item.main.temp_max;
+      }
+    });
+
+    const forecastResults = Object.keys(dailyData).slice(0, 5).map(date => {
+      const temperature = parseFloat(dailyData[date].maxTemp.toFixed(1));
+      
+      // Base demand calculation to match the original mock data structure (deterministic pseudo-random)
+      const dateSeed = date.charCodeAt(date.length - 1) + date.charCodeAt(date.length - 2);
+      let base_demand = Math.round(130 + ((dateSeed % 10) - 5));
+      let adjusted_demand = base_demand;
+      let annotation = null;
+      
+      if (temperature > 35) {
+        adjusted_demand -= 40; // High heat reduces dispatch viability
+        annotation = "🔥 CRITICAL UHI HEATWAVE: Severe transit degradation hazard.";
+      } else if (temperature > 33) {
+        adjusted_demand -= 20;
+        annotation = "Minor heat spike begins; transit DVS warning active.";
+      } else if (temperature < 31) {
+        adjusted_demand += 10;
+        annotation = "Cooler day; excellent dispatch viability index.";
+      }
+
+      return {
+        date,
+        base_demand,
+        adjusted_demand,
+        temperature,
+        annotation
+      };
+    });
+
+    if (cache.weather) {
+      cache.weather.set(cacheKey, { timestamp: Date.now(), data: forecastResults });
+    }
+    
+    res.json({ success: true, data: forecastResults });
   } catch (error) {
-    res.status(500).json({ success: false, error: 'Could not load forecast data' });
+    console.error('Forecast error:', error);
+    res.status(500).json({ success: false, error: 'Forecast request failed' });
   }
 }));
 
@@ -691,6 +770,130 @@ app.post('/api/users', requireAuth, requireRole('admin'), asyncHandler(async (re
       return res.status(409).json({ success: false, error: 'Email already exists' });
     }
     throw error;
+  }
+}));
+
+/* ═══════════════════════════════════════════════════════════════
+   GROK AI CHATBOT (xAI via OpenAI SDK)
+   ═══════════════════════════════════════════════════════════════ */
+const grokClient = new OpenAI({
+  apiKey: process.env.GROK_API_KEY || process.env.GORK_API_KEY || process.env.GROQ_API_KEY,
+  baseURL: 'https://api.x.ai/v1' // Grok (xAI) Base URL
+});
+
+app.post('/api/chat', asyncHandler(async (req, res) => {
+  const { message } = req.body;
+  if (!message) {
+    return res.status(400).json({ success: false, error: 'Message is required' });
+  }
+
+  try {
+    const completion = await grokClient.chat.completions.create({
+      model: 'grok-beta',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are the EcoSortha AI Agricultural Assistant for Bangladesh. You provide concise, practical, and highly relevant advice regarding climate demand intelligence, microclimate simulations, organic farming guidelines, and supply chain optimizations.'
+        },
+        {
+          role: 'user',
+          content: message
+        }
+      ],
+      max_tokens: 300,
+      temperature: 0.3
+    });
+
+    const reply = completion.choices[0].message.content;
+    res.json({ success: true, reply });
+  } catch (error) {
+    console.error('Grok API Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to communicate with AI service', details: error.message });
+  }
+}));
+
+/* ═══════════════════════════════════════════════════════════════
+   WEATHER & GEOCODING PROXY
+   ═══════════════════════════════════════════════════════════════ */
+
+const cache = {
+  weather: new Map(),
+  geocode: new Map()
+};
+
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+app.get('/api/geocode', asyncHandler(async (req, res) => {
+  const { q } = req.query;
+  if (!q) return res.status(400).json({ success: false, error: 'Missing query' });
+
+  const cacheKey = q.toLowerCase();
+  if (cache.geocode.has(cacheKey)) {
+    const cached = cache.geocode.get(cacheKey);
+    if (Date.now() - cached.timestamp < CACHE_TTL) {
+      return res.json({ success: true, data: cached.data });
+    }
+  }
+
+  const apiKey = process.env.GEOCODING_API_KEY;
+  if (!apiKey) return res.status(500).json({ success: false, error: 'Geocoding API key missing' });
+
+  try {
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(q)}&key=${apiKey}`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.status !== 'OK' || !data.results.length) {
+      return res.status(404).json({ success: false, error: 'Location not found' });
+    }
+
+    const { lat, lng } = data.results[0].geometry.location;
+    const result = { lat, lon: lng, formatted_address: data.results[0].formatted_address };
+    
+    cache.geocode.set(cacheKey, { timestamp: Date.now(), data: result });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Geocoding error:', error);
+    res.status(500).json({ success: false, error: 'Geocoding request failed' });
+  }
+}));
+
+app.get('/api/weather', asyncHandler(async (req, res) => {
+  const { lat, lon } = req.query;
+  if (!lat || !lon) return res.status(400).json({ success: false, error: 'Missing lat/lon' });
+
+  const cacheKey = `${lat},${lon}`;
+  if (cache.weather.has(cacheKey)) {
+    const cached = cache.weather.get(cacheKey);
+    if (Date.now() - cached.timestamp < CACHE_TTL) {
+      return res.json({ success: true, data: cached.data });
+    }
+  }
+
+  const apiKey = process.env.OPENWEATHER_API_KEY;
+  if (!apiKey) return res.status(500).json({ success: false, error: 'Weather API key missing' });
+
+  try {
+    const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.cod !== 200) {
+      return res.status(data.cod).json({ success: false, error: data.message });
+    }
+
+    const result = {
+      temperature: data.main.temp,
+      windspeed: data.wind.speed, // OpenWeatherMap returns m/s, might need to convert to km/h? Our UI expects km/h. Let's convert: m/s * 3.6
+      windspeed_kmh: data.wind.speed * 3.6,
+      name: data.name
+    };
+
+    cache.weather.set(cacheKey, { timestamp: Date.now(), data: result });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Weather error:', error);
+    res.status(500).json({ success: false, error: 'Weather request failed' });
   }
 }));
 

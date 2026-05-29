@@ -6,9 +6,9 @@
 
 // API Client - Simple fetch wrapper for backend communication
 const IS_STATIC_FILE = window.location.protocol === 'file:';
-const API_BASE_URL = !IS_STATIC_FILE && window.location.hostname === 'localhost' 
-  ? 'http://localhost:5001' 
-  : '';
+const API_BASE_URL = !IS_STATIC_FILE && window.location.hostname === 'localhost'
+  ? 'http://localhost:5001'
+  : 'https://backsme.onrender.com';
 
 const APIClient = {
   async request(endpoint, options = {}) {
@@ -75,6 +75,12 @@ const APIClient = {
   // External APIs (Weather & Geocoding)
   geocode: (query) => APIClient.request(`/geocode?q=${encodeURIComponent(query)}`),
   getWeather: (lat, lon) => APIClient.request(`/weather?lat=${lat}&lon=${lon}`),
+
+  // Chatbot (live Grok on legacy backend)
+  chat: (message) => APIClient.request('/chat', {
+    method: 'POST',
+    body: JSON.stringify({ message }),
+  }),
 };
 
 // Utility function to initialize database connections on page load
@@ -85,7 +91,7 @@ async function initializeConnections() {
   }
 
   console.log('🔄 Initializing connections...');
-  
+
   try {
     // Test backend health
     const healthResponse = await APIClient.health();
