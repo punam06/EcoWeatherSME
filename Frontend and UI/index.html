@@ -281,15 +281,19 @@ function calcThermalRisk(adjustedTemp) {
 }
 
 function calcDVS(trustScore, adjustedTemp) {
-  const trf = adjustedTemp > 38 ? 1.0 : adjustedTemp > 35 ? 0.5 : 0.1;
-  return Math.max(0, Math.min(100, Math.round(trustScore * (1 - trf * 0.42))));
+  // Continuous thermal risk factor starting from 25°C to 40°C
+  const tempExcess = Math.max(0, adjustedTemp - 25);
+  // Linear risk scaling: 0 at 25°C, up to 1.0 at 40°C
+  const trf = Math.min(1.0, tempExcess / 15);
+  return Math.max(0, Math.min(100, Math.round(trustScore * (1 - trf * 0.45))));
 }
 
 function calcTST(trustScore, zone, packaging, hour) {
   const uhi = UHI_ZONES[zone];
   const pkgFactor = packaging === "thermal" ? 4.0 : packaging === "insulated" ? 2.0 : 1.0;
   const solarMulti = getSolarHourMultiplier(hour);
-  const raw = (trustScore * pkgFactor * uhi.baseSurvival) / (uhi.hazardMultiplier * solarMulti) * 60;
+  // TST represents realistic delivery windows (in minutes) based on IoT Trust and local hazards
+  const raw = (trustScore * pkgFactor * uhi.baseSurvival) / (uhi.hazardMultiplier * solarMulti);
   return Math.max(10, Math.round(raw));
 }
 
@@ -319,7 +323,7 @@ function GaugeArc({ value, max = 100, color, size = 140, strokeWidth = 10 }) {
 }
 
 function ScoreGauge({ value, label, size = 140 }) {
-  const color = value >= 75 ? ACCENT.green : value >= 55 ? ACCENT.amber : ACCENT.red;
+  const color = value === 0 ? "var(--text-dim)" : (value >= 75 ? ACCENT.green : value >= 55 ? ACCENT.amber : ACCENT.red);
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
       <div style={{ position: "relative", width: size, height: size / 2 + 20 }}>
@@ -610,6 +614,8 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
   const [speechSupported, setSpeechSupported] = useState(true);
   const [weatherStatus, setWeatherStatus] = useState("");
   const [isCalculating, setIsCalculating] = useState(false);
+  const [hasCalculated, setHasCalculated] = useState(false);
+  const [activeFormulaTab, setActiveFormulaTab] = useState("dvs");
   const recognitionRef = useRef(null);
 
   const uhi = UHI_ZONES[zone] || UHI_ZONES["Mirpur"];
@@ -619,31 +625,32 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
 
   const filteredZones = Object.keys(UHI_ZONES).filter(z => z.toLowerCase().includes(zoneSearch.toLowerCase()));
 
-  // Calculate viability scores
-  const handleCalculate = (isManual = false) => {
-    if (isManual) {
-      setIsCalculating(true);
-      setTimeout(() => {
-        setIsCalculating(false);
-      }, 500);
-    }
-    const adjTemp = calcAdjustedTemp(baseTemp, zone, hour, windSpeed);
-    const risk = calcThermalRisk(adjTemp);
-    const tstScore = calcTST(trustScore, zone, packaging, hour);
-    // Penalise DVS if route duration exceeds thermal survival time
-    const routePenalty = routeDuration > tstScore ? Math.min(0.5, (routeDuration - tstScore) / tstScore) : 0;
-    const baseDvs = calcDVS(trustScore, adjTemp);
-    const finalDvs = Math.max(0, Math.round(baseDvs * (1 - routePenalty)));
-    setAdjustedTemp(adjTemp);
-    setThermalRisk(risk);
-    setDvs(finalDvs);
-    setTst(tstScore);
+  // Calculate viability scores manual click trigger
+  const handleCalculate = () => {
+    setIsCalculating(true);
+    setTimeout(() => {
+      const adjTemp = calcAdjustedTemp(baseTemp, zone, hour, windSpeed);
+      const risk = calcThermalRisk(adjTemp);
+      const tstScore = calcTST(trustScore, zone, packaging, hour);
+      // Continuous route duration penalty based on safety margin relative to thermal survival time
+      const routePenalty = Math.min(0.8, (routeDuration / tstScore) * 0.3);
+      const baseDvs = calcDVS(trustScore, adjTemp);
+      const finalDvs = Math.max(0, Math.round(baseDvs * (1 - routePenalty)));
+      
+      setAdjustedTemp(adjTemp);
+      setThermalRisk(risk);
+      setDvs(finalDvs);
+      setTst(tstScore);
+      setHasCalculated(true);
+      setIsCalculating(false);
+    }, 600); // Premium calculation delay for loading transition
   };
 
-  // Run calculation in real-time as inputs change
+  // Reset calculations to zero when parameters change
   useEffect(() => {
-    handleCalculate();
-  }, [trustScore, baseTemp, zone, hour, windSpeed, routeDuration, packaging]);
+    setHasCalculated(false);
+    setDvs(0);
+  }, [trustScore, baseTemp, zone, hour, windSpeed, routeDuration, packaging, setDvs]);
 
   // On mount: fetch live Dhaka weather automatically
   useEffect(() => {
@@ -787,6 +794,15 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
     ? `CAUTION: ${zone} reaches ${adjustedTemp.toFixed(1)}°C. Dispatch heat-sensitive items before 08:00 AM only. TST: ${tst} min. Consider insulated packaging.`
     : `HIGH RISK: ${zone} at ${adjustedTemp.toFixed(1)}°C. TST only ${tst} min. Delay dispatch or upgrade to thermal-insulated bins for perishable goods.`;
 
+  const displayDvsVal = hasCalculated ? dvs : 0;
+  const displayTrustVal = hasCalculated ? trustScore : 0;
+  const displayDvsColor = hasCalculated ? dvsColor : "var(--text-dim)";
+  const displayTrustColor = hasCalculated ? trustColor : "var(--text-dim)";
+  const displayTstColor = hasCalculated ? (tst > routeDuration ? ACCENT.green : ACCENT.red) : "var(--text-dim)";
+  const displayedAdvice = hasCalculated
+    ? advice
+    : "Adjust delivery parameters on the left and click 'Calculate Viability Scores' to evaluate thermal risks and delivery viability.";
+
   return (
     <div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
@@ -924,18 +940,26 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
           </div>
 
           <button
-            onClick={() => handleCalculate(true)}
+            onClick={() => handleCalculate()}
             disabled={isCalculating}
             style={{
               width: "100%", padding: "12px", borderRadius: 10, border: "none",
-              background: isCalculating ? ACCENT.green : ACCENT.blue, color: "#fff", fontSize: 14, fontWeight: 700,
+              background: isCalculating 
+                ? ACCENT.amber 
+                : (hasCalculated ? ACCENT.green : ACCENT.blue),
+              color: "#fff", fontSize: 14, fontWeight: 700,
               cursor: isCalculating ? "wait" : "pointer", transition: "all 0.3s ease",
-              boxShadow: isCalculating ? "0 4px 14px rgba(16, 185, 129, 0.3)" : "0 4px 14px rgba(59, 130, 246, 0.3)"
+              boxShadow: isCalculating 
+                ? "0 4px 14px rgba(245, 158, 11, 0.3)" 
+                : (hasCalculated ? "0 4px 14px rgba(16, 185, 129, 0.3)" : "0 4px 14px rgba(59, 130, 246, 0.3)")
             }}
             onMouseOver={(e) => e.currentTarget.style.opacity = 0.9}
             onMouseOut={(e) => e.currentTarget.style.opacity = 1}
           >
-            {isCalculating ? "⚡ Scores Recalculated!" : "📊 Calculate Viability Scores"}
+            {isCalculating 
+              ? "⏳ Running MERM Analysis..." 
+              : (hasCalculated ? "✓ Analysis Complete!" : "📊 Calculate Viability Scores")
+            }
           </button>
         </div>
 
@@ -949,15 +973,15 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
                 <div style={{ position: "relative" }}>
                   <div style={{ background: "var(--bg-primary)", borderRadius: "50%", padding: 10 }}>
-                    <CircleArc value={dvs} color={dvsColor} size={120} strokeWidth={12} />
+                    <CircleArc value={displayDvsVal} color={displayDvsColor} size={120} strokeWidth={12} />
                   </div>
                   <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center" }}>
-                    <div style={{ fontSize: 26, fontWeight: 700, color: dvsColor, lineHeight: 1, fontFamily: "'JetBrains Mono', monospace" }}>{dvs}</div>
+                    <div style={{ fontSize: 26, fontWeight: 700, color: displayDvsColor, lineHeight: 1, fontFamily: "'JetBrains Mono', monospace" }}>{displayDvsVal}</div>
                     <div style={{ fontSize: 8, color: "var(--text-dim)", fontWeight: 600, marginTop: 2 }}>/ 100</div>
                   </div>
                 </div>
                 <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: dvsColor }}>DVS</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: displayDvsColor }}>DVS</div>
                   <div style={{ fontSize: 9, color: "var(--text-dim)" }}>Delivery Viability</div>
                 </div>
               </div>
@@ -965,15 +989,15 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
                 <div style={{ position: "relative" }}>
                   <div style={{ background: "var(--bg-primary)", borderRadius: "50%", padding: 10 }}>
-                    <CircleArc value={trustScore} color={trustColor} size={120} strokeWidth={12} />
+                    <CircleArc value={displayTrustVal} color={displayTrustColor} size={120} strokeWidth={12} />
                   </div>
                   <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center" }}>
-                    <div style={{ fontSize: 26, fontWeight: 700, color: trustColor, lineHeight: 1, fontFamily: "'JetBrains Mono', monospace" }}>{trustScore}</div>
+                    <div style={{ fontSize: 26, fontWeight: 700, color: displayTrustColor, lineHeight: 1, fontFamily: "'JetBrains Mono', monospace" }}>{displayTrustVal}</div>
                     <div style={{ fontSize: 8, color: "var(--text-dim)", fontWeight: 600, marginTop: 2 }}>/ 100</div>
                   </div>
                 </div>
                 <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: trustColor }}>TRUST</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: displayTrustColor }}>TRUST</div>
                   <div style={{ fontSize: 9, color: "var(--text-dim)" }}>IoT Batch Score</div>
                 </div>
               </div>
@@ -981,25 +1005,91 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, width: "100%" }}>
               <div style={{ background: "var(--bg-primary)", padding: "12px 0", borderRadius: 8, textAlign: "center", border: "1px solid var(--border-primary)" }}>
                 <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>Thermal Survival</div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: tst > routeDuration ? ACCENT.green : ACCENT.red, fontFamily: "'JetBrains Mono', monospace" }}>{tst} min</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: displayTstColor, fontFamily: "'JetBrains Mono', monospace" }}>
+                  {hasCalculated ? `${tst} min` : "0 min"}
+                </div>
               </div>
-              <div style={{ background: "var(--bg-primary)", padding: "12px 0", borderRadius: 8, textAlign: "center", border: `1px solid ${routeDuration > tst && tst > 0 ? ACCENT.redBorder : "var(--border-primary)"}` }}>
+              <div style={{ background: "var(--bg-primary)", padding: "12px 0", borderRadius: 8, textAlign: "center", border: `1px solid ${hasCalculated && routeDuration > tst && tst > 0 ? ACCENT.redBorder : "var(--border-primary)"}` }}>
                 <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 4 }}>Route Duration</div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: routeDuration > tst && tst > 0 ? ACCENT.red : "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace" }}>{routeDuration} min</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: hasCalculated && routeDuration > tst && tst > 0 ? ACCENT.red : "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace" }}>{routeDuration} min</div>
               </div>
             </div>
           </div>
 
           <div style={{ padding: "20px 24px", background: "var(--bg-input)", borderRadius: 12, border: "1px solid var(--border-primary)" }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 16, letterSpacing: "0.05em" }}>TST FORMULA (MERM)</div>
-            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: "var(--text-primary)", lineHeight: 1.8 }}>
-              <div style={{ color: "var(--text-secondary)" }}>TST = (Trust × Insulation)</div>
-              <div style={{ color: "var(--text-secondary)", marginLeft: 24 }}>÷ (Hazard × Solar)</div>
-              <div style={{ borderBottom: "1px solid var(--border-primary)", margin: "12px 0" }}></div>
-              <div>= ({trustScore} × {(packaging==="thermal"?4:packaging==="insulated"?2:1).toFixed(1)})</div>
-              <div>÷ ({uhi.hazardMultiplier.toFixed(1)} × {solarFactor.toFixed(1)})</div>
-              <div style={{ color: ACCENT.green, fontWeight: 600 }}>≈ {tst} min</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", letterSpacing: "0.05em" }}>FORMULA ENGINES</div>
+              <div style={{ display: "flex", gap: 4 }}>
+                {["dvs", "trust", "tst"].map(t => (
+                  <button key={t} onClick={() => setActiveFormulaTab(t)}
+                    style={{
+                      padding: "3px 8px", borderRadius: 6, border: "none",
+                      background: activeFormulaTab === t ? (hasCalculated ? displayDvsColor + "22" : "var(--bg-primary)") : "transparent",
+                      color: activeFormulaTab === t ? (hasCalculated ? displayDvsColor : "var(--text-primary)") : "var(--text-dim)",
+                      fontSize: 10, fontWeight: 700, cursor: "pointer",
+                      letterSpacing: "0.05em", transition: "all 0.25s ease",
+                      border: `1px solid ${activeFormulaTab === t ? (hasCalculated ? displayDvsColor + "44" : "var(--border-primary)") : "transparent"}`
+                    }}>
+                    {t.toUpperCase()}
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {activeFormulaTab === "dvs" && (
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "var(--text-primary)", lineHeight: 1.8 }}>
+                <div style={{ color: "var(--text-secondary)", fontWeight: 600 }}>DVS = Trust × (1 - TRF × 0.45) × (1 - Penalty)</div>
+                <div style={{ borderBottom: "1px solid var(--border-primary)", margin: "10px 0" }}></div>
+                {hasCalculated ? (
+                  <>
+                    <div style={{ color: "var(--text-muted)" }}>• Trust Score: {trustScore}</div>
+                    <div style={{ color: "var(--text-muted)" }}>• TRF: Math.min(1.0, Max(0, {adjustedTemp.toFixed(1)}°C - 25) / 15) = {(Math.min(1.0, Math.max(0, adjustedTemp - 25) / 15)).toFixed(3)}</div>
+                    <div style={{ color: "var(--text-muted)" }}>• Penalty: Math.min(0.8, ({routeDuration} / {tst}) × 0.3) = {Math.min(0.8, (routeDuration / tst) * 0.3).toFixed(2)}</div>
+                    <div style={{ borderBottom: "1px dashed var(--border-primary)", margin: "8px 0" }}></div>
+                    <div>= {trustScore} × (1 - {(Math.min(1.0, Math.max(0, adjustedTemp - 25) / 15)).toFixed(3)} × 0.45) × (1 - {Math.min(0.8, (routeDuration / tst) * 0.3).toFixed(2)})</div>
+                    <div style={{ color: displayDvsColor, fontWeight: 700, marginTop: 4 }}>≈ {dvs} / 100</div>
+                  </>
+                ) : (
+                  <div style={{ color: "var(--text-dim)", fontStyle: "italic", marginTop: 10 }}>Pending calculation...</div>
+                )}
+              </div>
+            )}
+
+            {activeFormulaTab === "trust" && (
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "var(--text-primary)", lineHeight: 1.8 }}>
+                <div style={{ color: "var(--text-secondary)", fontWeight: 600 }}>Trust = 100 - pH_err - EC_err - Temp_err ± Ratio ± Days</div>
+                <div style={{ borderBottom: "1px solid var(--border-primary)", margin: "10px 0" }}></div>
+                {hasCalculated ? (
+                  <>
+                    <div style={{ color: "var(--text-muted)" }}>• Certified Formulation Base Score</div>
+                    <div style={{ color: "var(--text-muted)" }}>• Derived from pH, EC, Temp & Storage values</div>
+                    <div style={{ borderBottom: "1px dashed var(--border-primary)", margin: "8px 0" }}></div>
+                    <div style={{ color: displayTrustColor, fontWeight: 700 }}>≈ {trustScore} / 100 (Certified IoT Batch)</div>
+                  </>
+                ) : (
+                  <div style={{ color: "var(--text-dim)", fontStyle: "italic", marginTop: 10 }}>Pending calculation...</div>
+                )}
+              </div>
+            )}
+
+            {activeFormulaTab === "tst" && (
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "var(--text-primary)", lineHeight: 1.8 }}>
+                <div style={{ color: "var(--text-secondary)", fontWeight: 600 }}>TST = (Trust × Insulation) ÷ (Hazard × Solar)</div>
+                <div style={{ borderBottom: "1px solid var(--border-primary)", margin: "10px 0" }}></div>
+                {hasCalculated ? (
+                  <>
+                    <div style={{ color: "var(--text-muted)" }}>• Insulation: {(packaging === "thermal" ? 4.0 : packaging === "insulated" ? 2.0 : 1.0).toFixed(1)}</div>
+                    <div style={{ color: "var(--text-muted)" }}>• Hazard ({zone}): {uhi.hazardMultiplier.toFixed(2)} ({uhi.hazardClass})</div>
+                    <div style={{ color: "var(--text-muted)" }}>• Solar multiplier: {solarFactor.toFixed(1)}</div>
+                    <div style={{ borderBottom: "1px dashed var(--border-primary)", margin: "8px 0" }}></div>
+                    <div>= ({trustScore} × {(packaging === "thermal" ? 4.0 : packaging === "insulated" ? 2.0 : 1.0).toFixed(1)}) ÷ ({uhi.hazardMultiplier.toFixed(2)} × {solarFactor.toFixed(1)})</div>
+                    <div style={{ color: displayTstColor, fontWeight: 700, marginTop: 4 }}>≈ {tst} min</div>
+                  </>
+                ) : (
+                  <div style={{ color: "var(--text-dim)", fontStyle: "italic", marginTop: 10 }}>Pending calculation...</div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1007,13 +1097,17 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
       {/* Advisory */}
       <div style={{
         marginTop: 14, padding: 14, borderRadius: 10,
-        border: `1px solid ${dvsColor}33`, background: dvsColor + "0A",
+        border: `1px solid ${hasCalculated ? displayDvsColor + "33" : "var(--border-primary)"}`,
+        background: hasCalculated ? displayDvsColor + "0A" : "var(--bg-input)",
         transition: "all 0.4s ease",
       }}>
-        <div style={{ fontSize: 11, color: dvsColor, fontWeight: 700, marginBottom: 5 }}>
-          {dvs >= 75 ? "✓ Smart Dispatch Advice" : dvs >= 55 ? "⚠ Smart Dispatch Advice" : "✕ High Risk Advisory"}
+        <div style={{ fontSize: 11, color: hasCalculated ? displayDvsColor : "var(--text-secondary)", fontWeight: 700, marginBottom: 5 }}>
+          {hasCalculated 
+            ? (dvs >= 75 ? "✓ Smart Dispatch Advice" : dvs >= 55 ? "⚠ Smart Dispatch Advice" : "✕ High Risk Advisory")
+            : "✦ Smart Dispatch Advisory Pending"
+          }
         </div>
-        <div style={{ fontSize: 12, color: "var(--text-primary)", lineHeight: 1.7 }}>{advice}</div>
+        <div style={{ fontSize: 12, color: hasCalculated ? "var(--text-primary)" : "var(--text-muted)", lineHeight: 1.7 }}>{displayedAdvice}</div>
       </div>
 
       <DispatchCalendar baseTemp={baseTemp} zone={zone} trustScore={trustScore} windSpeed={windSpeed} routeDuration={routeDuration} />
@@ -1792,10 +1886,7 @@ function EcoSorthaApp() {
   const [trustScore, setTrustScore] = useState(84);
   const [isRegisteringBatch, setIsRegisteringBatch] = useState(false);
   const [theme, setTheme] = useState("dark");
-  const [dvs, setDvs] = useState(() => {
-    const adjustedTemp = calcAdjustedTemp(31, "Mirpur", 12, 8);
-    return calcDVS(84, adjustedTemp);
-  });
+  const [dvs, setDvs] = useState(0);
 
   const themeVars = THEMES[theme];
 
