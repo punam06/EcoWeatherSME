@@ -8,8 +8,13 @@ if (process.env.NODE_ENV !== 'production') {
 }
 const express = require('express');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const { Pool } = require('pg');
 const { v4: uuidv4 } = require('uuid');
+const argon2 = require('argon2');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const { z } = require('zod');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -26,6 +31,24 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization']
 };
 app.use(cors(corsOptions));
+
+const apiRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many requests, please try again later.' }
+});
+app.use('/api', apiRateLimit);
+
+const ROLE_VALUES = ['processor', 'buyer', 'admin'];
+const ACCESS_TOKEN_TTL = process.env.JWT_ACCESS_TTL || '15m';
+const REFRESH_TOKEN_TTL = process.env.JWT_REFRESH_TTL || '30d';
+const ACCESS_TOKEN_SECRET = process.env.JWT_ACCESS_SECRET;
+const REFRESH_TOKEN_SECRET = process.env.JWT_REFRESH_SECRET;
+const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
+const COOKIE_SAME_SITE = process.env.COOKIE_SAME_SITE || 'lax';
+const REFRESH_COOKIE_NAME = process.env.REFRESH_COOKIE_NAME || 'refreshToken';
 
 // PostgreSQL Pool Client Initialization (optional)
 const pool = process.env.DATABASE_URL
@@ -45,6 +68,217 @@ async function queryDB(text, params = []) {
 // Error handling middleware
 const asyncHandler = (fn) => (req, res, next) => {
   return Promise.resolve(fn(req, res, next)).catch(next);
+};
+
+const registrationSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  password: z.string().min(8).max(128),
+  name: z.string().trim().min(1).max(255),
+  role: z.enum(ROLE_VALUES).optional().default('buyer')
+});
+
+const loginSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  password: z.string().min(8).max(128)
+});
+
+const refreshSchema = z.object({
+  refreshToken: z.string().min(20).optional()
+});
+
+const zoneUpsertSchema = z.object({
+  zone: z.string().trim().min(1).max(50),
+  uhi_offset: z.coerce.number(),
+  building_density: z.coerce.number().optional().default(0.5),
+  vegetation_fraction: z.coerce.number().optional().default(0.2),
+  wind_corridor_factor: z.coerce.number().optional().default(0.8),
+  thermal_mass_coefficient: z.coerce.number().optional().default(1.0)
+});
+
+const batchCreateSchema = z.object({
+  processor_id: z.string().uuid().nullable().optional(),
+  batch_number: z.string().trim().min(1).max(100),
+  feedstock_type: z.string().trim().min(1).max(100),
+  product_name: z.string().trim().min(1).max(255).optional().default('Organic Product'),
+  trust_score: z.coerce.number().min(0).max(100)
+});
+
+const batchUpdateSchema = z.object({
+  product_name: z.string().trim().min(1).max(255).optional(),
+  trust_score: z.coerce.number().min(0).max(100).optional(),
+  certificate_url: z.string().trim().url().nullable().optional(),
+  qr_code_url: z.string().trim().url().nullable().optional()
+});
+
+const readingCreateSchema = z.object({
+  pH: z.coerce.number(),
+  EC: z.coerce.number(),
+  temperature: z.coerce.number(),
+  em1_ratio: z.string().trim().min(1).max(20).optional().default('1:1:20'),
+  fermentation_days: z.coerce.number().int().min(0).max(365).optional().default(7)
+});
+
+const trustScoreSchema = z.object({
+  pH: z.coerce.number(),
+  EC: z.coerce.number(),
+  temperature: z.coerce.number(),
+  ratio: z.string().trim().optional().default('1:1:20'),
+  days: z.coerce.number().optional().default(7)
+});
+
+const adminCreateUserSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  password: z.string().min(8).max(128),
+  name: z.string().trim().min(1).max(255),
+  role: z.enum(ROLE_VALUES)
+});
+
+function parseDurationMs(input) {
+  const value = String(input).trim();
+  const match = value.match(/^(\d+)([smhd])$/i);
+  if (!match) {
+    return Number.isFinite(Number(value)) ? Number(value) * 1000 : 30 * 24 * 60 * 60 * 1000;
+  }
+  const amount = Number(match[1]);
+  const unit = match[2].toLowerCase();
+  const multipliers = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
+  return amount * multipliers[unit];
+}
+
+function sendValidationError(res, issues) {
+  return res.status(400).json({
+    success: false,
+    error: {
+      code: 'VALIDATION_ERROR',
+      message: 'Invalid request payload',
+      details: issues.map((issue) => ({
+        path: issue.path.join('.'),
+        message: issue.message
+      }))
+    }
+  });
+}
+
+function parseBody(schema, req, res) {
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    sendValidationError(res, parsed.error.issues);
+    return null;
+  }
+  return parsed.data;
+}
+
+function ensureAuthSecrets() {
+  if (!ACCESS_TOKEN_SECRET || !REFRESH_TOKEN_SECRET) {
+    const err = new Error('JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be configured');
+    err.status = 500;
+    throw err;
+  }
+}
+
+function toPublicUser(row) {
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    role: row.role,
+    created_at: row.created_at
+  };
+}
+
+function hashRefreshToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function getCookieValue(req, cookieName) {
+  const cookieHeader = req.headers.cookie;
+  if (!cookieHeader) return null;
+  const target = cookieHeader
+    .split(';')
+    .map((chunk) => chunk.trim())
+    .find((entry) => entry.startsWith(`${cookieName}=`));
+  return target ? decodeURIComponent(target.split('=').slice(1).join('=')) : null;
+}
+
+function createAccessToken(user) {
+  ensureAuthSecrets();
+  return jwt.sign(
+    { sub: user.id, role: user.role, email: user.email, type: 'access' },
+    ACCESS_TOKEN_SECRET,
+    { expiresIn: ACCESS_TOKEN_TTL }
+  );
+}
+
+function createRefreshToken(user) {
+  ensureAuthSecrets();
+  const nonce = crypto.randomBytes(32).toString('hex');
+  const jti = uuidv4();
+  const token = jwt.sign(
+    { sub: user.id, type: 'refresh', jti, nonce },
+    REFRESH_TOKEN_SECRET,
+    { expiresIn: REFRESH_TOKEN_TTL }
+  );
+  return { token, jti };
+}
+
+async function storeRefreshToken(req, userId, refreshToken) {
+  const expiresAt = new Date(Date.now() + parseDurationMs(REFRESH_TOKEN_TTL));
+  const tokenHash = hashRefreshToken(refreshToken);
+  await queryDB(
+    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, user_agent, ip_address)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [userId, tokenHash, expiresAt, req.get('user-agent') || null, req.ip || null]
+  );
+  return tokenHash;
+}
+
+function setRefreshCookie(res, refreshToken) {
+  res.cookie(REFRESH_COOKIE_NAME, refreshToken, {
+    httpOnly: true,
+    secure: COOKIE_SECURE,
+    sameSite: COOKIE_SAME_SITE,
+    maxAge: parseDurationMs(REFRESH_TOKEN_TTL),
+    path: '/api/auth'
+  });
+}
+
+async function issueAuthTokens(req, res, user) {
+  const accessToken = createAccessToken(user);
+  const { token: refreshToken } = createRefreshToken(user);
+  await storeRefreshToken(req, user.id, refreshToken);
+  setRefreshCookie(res, refreshToken);
+  return { accessToken };
+}
+
+const requireAuth = asyncHandler(async (req, res, next) => {
+  const authHeader = req.get('authorization') || '';
+  const [scheme, token] = authHeader.split(' ');
+  if (scheme !== 'Bearer' || !token) {
+    return res.status(401).json({ success: false, error: 'Missing or invalid authorization header' });
+  }
+  ensureAuthSecrets();
+
+  try {
+    const payload = jwt.verify(token, ACCESS_TOKEN_SECRET);
+    const result = await queryDB(
+      'SELECT id, email, name, role, created_at FROM users WHERE id = $1',
+      [payload.sub]
+    );
+    if (result.rows.length === 0) {
+      return res.status(401).json({ success: false, error: 'Invalid access token' });
+    }
+    req.user = result.rows[0];
+    return next();
+  } catch (error) {
+    return res.status(401).json({ success: false, error: 'Invalid or expired access token' });
+  }
+});
+
+const requireRole = (...roles) => (req, res, next) => {
+  if (!req.user || !roles.includes(req.user.role)) {
+    return res.status(403).json({ success: false, error: 'Forbidden' });
+  }
+  next();
 };
 
 /* ═══════════════════════════════════════════════════════════════
@@ -79,6 +313,154 @@ app.get('/api/test-db', asyncHandler(async (req, res) => {
 }));
 
 /* ═══════════════════════════════════════════════════════════════
+   AUTHENTICATION ENDPOINTS
+   ═══════════════════════════════════════════════════════════════ */
+
+app.post('/api/auth/register', asyncHandler(async (req, res) => {
+  const payload = parseBody(registrationSchema, req, res);
+  if (!payload) return;
+
+  const passwordHash = await argon2.hash(payload.password);
+  try {
+    const result = await queryDB(
+      `INSERT INTO users (email, password_hash, name, role)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, email, name, role, created_at`,
+      [payload.email, passwordHash, payload.name, payload.role]
+    );
+    const user = result.rows[0];
+    const { accessToken } = await issueAuthTokens(req, res, user);
+    res.status(201).json({
+      success: true,
+      data: {
+        user: toPublicUser(user),
+        access_token: accessToken,
+        token_type: 'Bearer',
+        access_token_ttl: ACCESS_TOKEN_TTL
+      }
+    });
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({ success: false, error: 'Email already exists' });
+    }
+    throw error;
+  }
+}));
+
+app.post('/api/auth/login', asyncHandler(async (req, res) => {
+  const payload = parseBody(loginSchema, req, res);
+  if (!payload) return;
+
+  const result = await queryDB(
+    'SELECT id, email, password_hash, name, role, created_at FROM users WHERE email = $1 LIMIT 1',
+    [payload.email]
+  );
+  const user = result.rows[0];
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Invalid credentials' });
+  }
+
+  let passwordOk = false;
+  try {
+    passwordOk = await argon2.verify(user.password_hash, payload.password);
+  } catch (error) {
+    passwordOk = false;
+  }
+  if (!passwordOk) {
+    return res.status(401).json({ success: false, error: 'Invalid credentials' });
+  }
+
+  const { accessToken } = await issueAuthTokens(req, res, user);
+  res.json({
+    success: true,
+    data: {
+      user: toPublicUser(user),
+      access_token: accessToken,
+      token_type: 'Bearer',
+      access_token_ttl: ACCESS_TOKEN_TTL
+    }
+  });
+}));
+
+app.post('/api/auth/refresh', asyncHandler(async (req, res) => {
+  ensureAuthSecrets();
+  const payload = parseBody(refreshSchema, req, res);
+  if (!payload) return;
+
+  const refreshToken = getCookieValue(req, REFRESH_COOKIE_NAME) || payload.refreshToken;
+  if (!refreshToken) {
+    return res.status(401).json({ success: false, error: 'Refresh token is required' });
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(refreshToken, REFRESH_TOKEN_SECRET);
+  } catch (error) {
+    return res.status(401).json({ success: false, error: 'Invalid or expired refresh token' });
+  }
+
+  const oldTokenHash = hashRefreshToken(refreshToken);
+  const result = await queryDB(
+    `SELECT rt.id, rt.user_id, u.email, u.name, u.role, u.created_at
+     FROM refresh_tokens rt
+     JOIN users u ON u.id = rt.user_id
+     WHERE rt.token_hash = $1 AND rt.revoked = false AND rt.expires_at > NOW()
+     LIMIT 1`,
+    [oldTokenHash]
+  );
+
+  if (result.rows.length === 0 || decoded.sub !== result.rows[0].user_id) {
+    return res.status(401).json({ success: false, error: 'Refresh token is invalid or revoked' });
+  }
+
+  await queryDB(
+    'UPDATE refresh_tokens SET revoked = true, revoked_at = NOW() WHERE token_hash = $1',
+    [oldTokenHash]
+  );
+
+  const user = {
+    id: result.rows[0].user_id,
+    email: result.rows[0].email,
+    name: result.rows[0].name,
+    role: result.rows[0].role,
+    created_at: result.rows[0].created_at
+  };
+  const { accessToken } = await issueAuthTokens(req, res, user);
+  res.json({
+    success: true,
+    data: {
+      user: toPublicUser(user),
+      access_token: accessToken,
+      token_type: 'Bearer',
+      access_token_ttl: ACCESS_TOKEN_TTL
+    }
+  });
+}));
+
+app.post('/api/auth/logout', asyncHandler(async (req, res) => {
+  const payload = parseBody(refreshSchema, req, res);
+  if (!payload) return;
+
+  const refreshToken = getCookieValue(req, REFRESH_COOKIE_NAME) || payload.refreshToken;
+  if (refreshToken) {
+    const tokenHash = hashRefreshToken(refreshToken);
+    await queryDB(
+      'UPDATE refresh_tokens SET revoked = true, revoked_at = NOW() WHERE token_hash = $1',
+      [tokenHash]
+    );
+  }
+
+  res.clearCookie(REFRESH_COOKIE_NAME, {
+    httpOnly: true,
+    secure: COOKIE_SECURE,
+    sameSite: COOKIE_SAME_SITE,
+    path: '/api/auth'
+  });
+
+  res.json({ success: true, message: 'Logged out' });
+}));
+
+/* ═══════════════════════════════════════════════════════════════
    MICROCLIMATE ZONE ENDPOINTS
    ═══════════════════════════════════════════════════════════════ */
 
@@ -109,12 +491,12 @@ app.get('/api/zones/:zone', asyncHandler(async (req, res) => {
 }));
 
 // Create/update zone profile
-app.post('/api/zones', asyncHandler(async (req, res) => {
-  const { zone, uhi_offset, building_density, vegetation_fraction, wind_corridor_factor, thermal_mass_coefficient } = req.body;
-  
-  if (!zone || uhi_offset === undefined) {
-    return res.status(400).json({ success: false, error: 'Missing required fields' });
-  }
+app.post('/api/zones', requireAuth, requireRole('admin'), asyncHandler(async (req, res) => {
+  const payload = parseBody(zoneUpsertSchema, req, res);
+  if (!payload) return;
+  const {
+    zone, uhi_offset, building_density, vegetation_fraction, wind_corridor_factor, thermal_mass_coefficient
+  } = payload;
 
   const result = await queryDB(`
     INSERT INTO zone_microclimate_profiles 
@@ -124,7 +506,7 @@ app.post('/api/zones', asyncHandler(async (req, res) => {
     uhi_offset = $2, building_density = $3, vegetation_fraction = $4, 
     wind_corridor_factor = $5, thermal_mass_coefficient = $6
     RETURNING *;
-  `, [zone, uhi_offset, building_density || 0.5, vegetation_fraction || 0.2, wind_corridor_factor || 0.8, thermal_mass_coefficient || 1.0]);
+  `, [zone, uhi_offset, building_density, vegetation_fraction, wind_corridor_factor, thermal_mass_coefficient]);
   
   res.status(201).json({ success: true, data: result.rows[0] });
 }));
@@ -162,26 +544,26 @@ app.get('/api/batches/:id', asyncHandler(async (req, res) => {
 }));
 
 // Create new batch
-app.post('/api/batches', asyncHandler(async (req, res) => {
-  const { processor_id, batch_number, feedstock_type, product_name, trust_score } = req.body;
-  
-  if (!batch_number || !feedstock_type || trust_score === undefined) {
-    return res.status(400).json({ success: false, error: 'Missing required fields' });
-  }
+app.post('/api/batches', requireAuth, requireRole('processor', 'admin'), asyncHandler(async (req, res) => {
+  const payload = parseBody(batchCreateSchema, req, res);
+  if (!payload) return;
+  const { processor_id, batch_number, feedstock_type, product_name, trust_score } = payload;
 
   const result = await queryDB(`
     INSERT INTO batches (processor_id, batch_number, feedstock_type, product_name, trust_score)
     VALUES ($1, $2, $3, $4, $5)
     RETURNING *;
-  `, [processor_id || null, batch_number, feedstock_type, product_name || 'Organic Product', Math.min(100, Math.max(0, trust_score))]);
+  `, [processor_id || null, batch_number, feedstock_type, product_name, trust_score]);
   
   res.status(201).json({ success: true, data: result.rows[0] });
 }));
 
 // Update batch
-app.put('/api/batches/:id', asyncHandler(async (req, res) => {
+app.put('/api/batches/:id', requireAuth, requireRole('processor', 'admin'), asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { product_name, trust_score, certificate_url, qr_code_url } = req.body;
+  const payload = parseBody(batchUpdateSchema, req, res);
+  if (!payload) return;
+  const { product_name, trust_score, certificate_url, qr_code_url } = payload;
 
   const result = await queryDB(`
     UPDATE batches 
@@ -215,19 +597,17 @@ app.get('/api/batches/:batch_id/readings', asyncHandler(async (req, res) => {
 }));
 
 // Record new IoT reading
-app.post('/api/batches/:batch_id/readings', asyncHandler(async (req, res) => {
+app.post('/api/batches/:batch_id/readings', requireAuth, requireRole('processor', 'admin'), asyncHandler(async (req, res) => {
   const { batch_id } = req.params;
-  const { pH, EC, temperature, em1_ratio, fermentation_days } = req.body;
-
-  if (pH === undefined || EC === undefined || temperature === undefined) {
-    return res.status(400).json({ success: false, error: 'Missing required IoT parameters' });
-  }
+  const payload = parseBody(readingCreateSchema, req, res);
+  if (!payload) return;
+  const { pH, EC, temperature, em1_ratio, fermentation_days } = payload;
 
   const result = await queryDB(`
     INSERT INTO iot_readings (batch_id, pH, EC, temperature, em1_ratio, fermentation_days)
     VALUES ($1, $2, $3, $4, $5, $6)
     RETURNING *;
-  `, [batch_id, pH, EC, temperature, em1_ratio || '1:1:20', fermentation_days || 7]);
+  `, [batch_id, pH, EC, temperature, em1_ratio, fermentation_days]);
   
   res.status(201).json({ success: true, data: result.rows[0] });
 }));
@@ -238,11 +618,9 @@ app.post('/api/batches/:batch_id/readings', asyncHandler(async (req, res) => {
 
 // Calculate trust score
 app.post('/api/calculate-trust-score', asyncHandler(async (req, res) => {
-  const { pH, EC, temperature, ratio, days } = req.body;
-
-  if (pH === undefined || EC === undefined || temperature === undefined) {
-    return res.status(400).json({ success: false, error: 'Missing required parameters' });
-  }
+  const payload = parseBody(trustScoreSchema, req, res);
+  if (!payload) return;
+  const { pH, EC, temperature, ratio, days } = payload;
 
   // Trust Score Calculation Logic (from frontend)
   let score = 100;
@@ -286,7 +664,7 @@ app.get('/api/demand-forecast', asyncHandler(async (req, res) => {
    ═══════════════════════════════════════════════════════════════ */
 
 // Get all users (admin only)
-app.get('/api/users', asyncHandler(async (req, res) => {
+app.get('/api/users', requireAuth, requireRole('admin'), asyncHandler(async (req, res) => {
   const result = await queryDB(
     'SELECT id, email, name, role, created_at FROM users ORDER BY created_at DESC'
   );
@@ -294,15 +672,11 @@ app.get('/api/users', asyncHandler(async (req, res) => {
 }));
 
 // Create user
-app.post('/api/users', asyncHandler(async (req, res) => {
-  const { email, name, role } = req.body;
-  
-  if (!email || !name || !role) {
-    return res.status(400).json({ success: false, error: 'Missing required fields' });
-  }
-
-  // In production, password should be hashed
-  const password_hash = 'placeholder'; // TODO: Implement proper password hashing
+app.post('/api/users', requireAuth, requireRole('admin'), asyncHandler(async (req, res) => {
+  const payload = parseBody(adminCreateUserSchema, req, res);
+  if (!payload) return;
+  const { email, password, name, role } = payload;
+  const password_hash = await argon2.hash(password);
 
   try {
     const result = await queryDB(`

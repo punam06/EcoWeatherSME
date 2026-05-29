@@ -200,6 +200,14 @@ cp .env.template .env
 ```
 *Fill in your Supabase connection strings and Anthropic/Claude API credentials.*
 
+For authentication, configure:
+- `JWT_ACCESS_SECRET`
+- `JWT_REFRESH_SECRET`
+- `JWT_ACCESS_TTL` (for example `15m`)
+- `JWT_REFRESH_TTL` (for example `30d`)
+- `COOKIE_SECURE` (`false` for local HTTP, `true` for production HTTPS)
+- `COOKIE_SAME_SITE` (recommended `lax`)
+
 ---
 
 ## 🏃 Using the Application & Test Runner
@@ -224,6 +232,27 @@ npm run seed:hazards
 
 # Seed compliance RAG standards
 npm run seed:data
+```
+
+### Authentication quick-check (Task 2)
+Use these endpoints after starting backend (`cd backend && npm start`):
+
+```bash
+# Register
+curl -i -X POST http://localhost:5001/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"new.user@example.com","password":"StrongPass123!","name":"New User"}'
+
+# Login (returns access token and sets HttpOnly refresh cookie)
+curl -i -c /tmp/eco.cookies -X POST http://localhost:5001/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin.demo@ecosortha.local","password":"DemoPass123!"}'
+
+# Refresh (rotates refresh token)
+curl -i -b /tmp/eco.cookies -c /tmp/eco.cookies -X POST http://localhost:5001/api/auth/refresh
+
+# Logout (revokes refresh token)
+curl -i -b /tmp/eco.cookies -X POST http://localhost:5001/api/auth/logout
 ```
 
 ---
