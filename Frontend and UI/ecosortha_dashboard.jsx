@@ -504,6 +504,7 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
   const [speechLang, setSpeechLang] = useState("en-US");
   const [speechSupported, setSpeechSupported] = useState(true);
   const [weatherStatus, setWeatherStatus] = useState("");
+  const [isCalculating, setIsCalculating] = useState(false);
   const recognitionRef = useRef(null);
 
   const uhi = UHI_ZONES[zone] || UHI_ZONES["Mirpur"];
@@ -513,8 +514,14 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
 
   const filteredZones = Object.keys(UHI_ZONES).filter(z => z.toLowerCase().includes(zoneSearch.toLowerCase()));
 
-  // Calculate scores only when the button is clicked or on initial mount
-  const handleCalculate = () => {
+  // Calculate viability scores
+  const handleCalculate = (isManual = false) => {
+    if (isManual) {
+      setIsCalculating(true);
+      setTimeout(() => {
+        setIsCalculating(false);
+      }, 500);
+    }
     const adjTemp = calcAdjustedTemp(baseTemp, zone, hour, windSpeed);
     const risk = calcThermalRisk(adjTemp);
     const tstScore = calcTST(trustScore, zone, packaging, hour);
@@ -812,17 +819,18 @@ function MicroclimateSimulator({ trustScore, dvs, setDvs }) {
           </div>
 
           <button
-            onClick={handleCalculate}
+            onClick={() => handleCalculate(true)}
+            disabled={isCalculating}
             style={{
               width: "100%", padding: "12px", borderRadius: 10, border: "none",
-              background: ACCENT.blue, color: "#fff", fontSize: 14, fontWeight: 700,
-              cursor: "pointer", transition: "all 0.2s ease",
-              boxShadow: "0 4px 14px rgba(59, 130, 246, 0.3)"
+              background: isCalculating ? ACCENT.green : ACCENT.blue, color: "#fff", fontSize: 14, fontWeight: 700,
+              cursor: isCalculating ? "wait" : "pointer", transition: "all 0.3s ease",
+              boxShadow: isCalculating ? "0 4px 14px rgba(16, 185, 129, 0.3)" : "0 4px 14px rgba(59, 130, 246, 0.3)"
             }}
             onMouseOver={(e) => e.currentTarget.style.opacity = 0.9}
             onMouseOut={(e) => e.currentTarget.style.opacity = 1}
           >
-            📊 Calculate Viability Scores
+            {isCalculating ? "⚡ Scores Recalculated!" : "📊 Calculate Viability Scores"}
           </button>
         </div>
 
