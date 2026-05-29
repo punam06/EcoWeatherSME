@@ -513,7 +513,7 @@ function DispatchCalendar({ baseTemp, zone, trustScore, windSpeed }) {
   );
 }
 
-function MicroclimateSimulator({ trustScore }) {
+function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDvs }) {
   const [baseTemp, setBaseTemp] = useState(31);
   const [zone, setZone] = useState("Mirpur");
   const [packaging, setPackaging] = useState("standard");
@@ -532,6 +532,7 @@ function MicroclimateSimulator({ trustScore }) {
 
   const uhi = UHI_ZONES[zone] || UHI_ZONES["Mirpur"];
   const dvsColor = dvs >= 75 ? ACCENT.green : dvs >= 55 ? ACCENT.amber : ACCENT.red;
+  const solarFactor = getSolarHourMultiplier(hour);
 
   const filteredZones = Object.keys(UHI_ZONES).filter(z => z.toLowerCase().includes(zoneSearch.toLowerCase()));
 
@@ -563,6 +564,7 @@ function MicroclimateSimulator({ trustScore }) {
         setTst(data.tst || 0);
         setAdjustedTemp(data.adjustedTemp || baseTemp);
         setThermalRisk(data.thermalRisk || { value: 0.1, label: "Low", color: ACCENT.green });
+        if (setParentDvs) setParentDvs(data.dvs || 0);
       } catch (error) {
         console.error("Failed to fetch microclimate metrics:", error);
         // Fallback to local calculation on error
@@ -574,13 +576,14 @@ function MicroclimateSimulator({ trustScore }) {
         setThermalRisk(risk);
         setDvs(dvsScore);
         setTst(tstScore);
+        if (setParentDvs) setParentDvs(dvsScore);
       } finally {
         setIsFetchingMetrics(false);
       }
     };
     
     fetchMicroclimateMetrics();
-  }, [baseTemp, zone, packaging, hour, windSpeed, trustScore]);
+  }, [baseTemp, zone, packaging, hour, windSpeed, trustScore, setParentDvs]);
 
   useEffect(() => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
@@ -2024,7 +2027,7 @@ export default function EcoSorthaApp() {
           <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
             <SectionLabel icon="🌡️" text="Delivery Viability Simulator" />
             <Card>
-              <MicroclimateSimulator trustScore={trustScore} />
+              <MicroclimateSimulator trustScore={trustScore} dvs={dvs} setDvs={setDvs} />
             </Card>
           </div>
         )}
