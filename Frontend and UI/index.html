@@ -1636,7 +1636,39 @@ function ChatbotView({ setTab }) {
   const [voiceError, setVoiceError] = useState(null);
   const [hasAttemptedVoice, setHasAttemptedVoice] = useState(false);
   const [orderContext, setOrderContext] = useState(null);
+  const [sessionId, setSessionId] = useState("");
   const fileInputRef = useRef(null);
+  const messagesEndRef = useRef(null);
+
+  // Auto-scroll to bottom of chat
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
+
+  // Initialize session on mount
+  useEffect(() => {
+    const initSession = async () => {
+      try {
+        const userStr = localStorage.getItem("user") || localStorage.getItem("farmer");
+        const user = userStr ? JSON.parse(userStr) : null;
+        
+        const response = await fetch(`${BACKEND_URL}/api/ai/chat/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ farmerId: user ? user.id : undefined })
+        });
+        const resData = await response.json();
+        if (resData.success && resData.data) {
+          setSessionId(resData.data.sessionId);
+        }
+      } catch (err) {
+        console.warn("Failed to initialize session:", err);
+      }
+    };
+    initSession();
+  }, []);
 
   useEffect(() => {
     const locale = (navigator.languages && navigator.languages[0]) || navigator.language || "en-US";
@@ -1724,6 +1756,7 @@ function ChatbotView({ setTab }) {
         body: JSON.stringify({
           query: text,
           language: speechLang.startsWith("bn") ? "bn" : "en",
+          sessionId: sessionId || undefined,
           farmerId: user ? user.id : undefined
         })
       });
@@ -1928,6 +1961,7 @@ function ChatbotView({ setTab }) {
               {voiceError}
             </div>
           )}
+          <div ref={messagesEndRef} />
         </div>
 
         {/* Quick Actions */}
