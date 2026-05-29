@@ -12,13 +12,11 @@
 import path from 'path';
 
 // ── Load environment variables ───────────────────────────────────────────────
-// In non-production, load .env from: backend/.env → root ../.env
-if (process.env.NODE_ENV !== 'production') {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const dotenv = require('dotenv');
-  dotenv.config();
-  dotenv.config({ path: path.resolve(__dirname, '..', '..', '.env') });
-}
+// Always try to load .env files — Render will use dashboard vars which override these.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const dotenv = require('dotenv');
+dotenv.config();                                              // backend/.env
+dotenv.config({ path: path.resolve(__dirname, '..', '..', '.env') }); // root .env
 
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';

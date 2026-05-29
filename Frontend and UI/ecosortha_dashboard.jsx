@@ -1555,7 +1555,10 @@ function ChatbotView() {
     }
   }, []);
 
-  const handleSend = (text, attachedFileName = null) => {
+  const IS_LOCAL_DEV_DASH = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const BACKEND_URL_DASH = IS_LOCAL_DEV_DASH ? 'http://localhost:5001' : 'https://backsme.onrender.com';
+
+  const handleSend = async (text, attachedFileName = null) => {
     if (!text.trim() && !attachedFileName) return;
     const newMsg = { 
       role: "user", 
@@ -1566,21 +1569,35 @@ function ChatbotView() {
     setMessages(prev => [...prev, newMsg]);
     setInput("");
     
-    // Mock AI response
-    setTimeout(() => {
-      let reply = "I've recorded that for you.";
-      if (attachedFileName) {
-        reply = `I've analyzed the attached file: "${attachedFileName}". The context shows a sudden spike in ambient temperature. I suggest upgrading to thermal bins for this batch.`;
-      } else if (text.toLowerCase().includes("forecast")) {
-        reply = "Currently, the Mirpur zone is experiencing a moderate thermal hazard (38.7°C). I suggest delaying heat-sensitive dispatches until 5:00 PM when the solar factor drops.";
-      } else if (text.toLowerCase().includes("suggestion")) {
-        reply = "Based on your recent batches, upgrading to Thermal-Insulated packaging will extend your Thermal Survival Time (TST) by 4x, allowing safe midday deliveries.";
-      } else if (text.toLowerCase().includes("feedback")) {
-        reply = "Thank you for the feedback. I've logged this in the ESG ledger to improve our ML demand forecasting models.";
+    try {
+      const res = await fetch(`${BACKEND_URL_DASH}/api/agent/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: text,
+          language: speechLang.startsWith("bn") ? "bn" : "en",
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        setMessages(prev => [...prev, {
+          role: "system",
+          content: data.data.message,
+          time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+        }]);
+      } else {
+        throw new Error(data.error || "Failed");
       }
-      setMessages(prev => [...prev, { role: "system", content: reply, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }]);
-    }, 1200);
+    } catch (err) {
+      console.error("Backend agent call failed:", err);
+      const isBn = speechLang.startsWith("bn");
+      const errorMsg = isBn
+        ? "⚠️ দুঃখিত, সার্ভারের সাথে সংযোগ স্থাপন করা যাচ্ছে না। অনুগ্রহ করে একটু পরে আবার চেষ্টা করুন।"
+        : "⚠️ Sorry, unable to reach the server. Please try again in a moment.";
+      setMessages(prev => [...prev, { role: "system", content: errorMsg, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }]);
+    }
   };
+
 
   const handleVoice = () => {
     if (isRecording) return;
