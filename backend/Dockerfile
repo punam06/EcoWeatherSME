@@ -11,8 +11,11 @@ RUN npm install
 # Copy source code
 COPY . .
 
+# Build the TypeScript files
+RUN npm run build
+
 # Expose backend port
 EXPOSE 5001
 
-# Start the server
-CMD ["node", "index.js"]
+# Start the compiled production server
+CMD ["npm", "start"]
