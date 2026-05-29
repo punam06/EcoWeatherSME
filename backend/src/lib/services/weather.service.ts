@@ -25,9 +25,9 @@ export interface WeatherResult {
  * Natively supports English ('en') and Bangla ('bn') weather descriptions.
  */
 export async function getWeatherByCity(cityName: string, language: 'bn' | 'en'): Promise<WeatherResult> {
-  const apiKey = process.env.OPENWEATHER_API_KEY;
+  const apiKey = process.env.WEATHER_API_KEY || process.env.OPENWEATHER_API_KEY;
   if (!apiKey) {
-    console.warn('[WeatherService] OPENWEATHER_API_KEY is missing in environment variables.');
+    console.warn('[WeatherService] WEATHER_API_KEY/OPENWEATHER_API_KEY is missing in environment variables.');
     return {
       city: cityName,
       temperature: 0,

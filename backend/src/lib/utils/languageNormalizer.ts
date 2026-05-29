@@ -4,9 +4,53 @@
  * File: src/lib/utils/languageNormalizer.ts
  *
  * Handles mixed Bangla-English inputs, phonetic translations,
- * and normalizes special characters/spaces to standard formats.
+ * dialect/accent normalizations, and space cleanups.
  * ═══════════════════════════════════════════════════════════════
  */
+
+// Dictionary mapping common regional dialect/accent terms to standard Bangla
+const DIALECT_MAP: Record<string, string> = {
+  // Chittagonian phonetic variants
+  'হঁত্তে': 'কোথা থেকে',
+  'আঁই': 'আমি',
+  'আঁরে': 'আমাকে',
+  'উয়ার': 'উপরে',
+  'বেয়াগ্গিন': 'সবকিছু',
+  'অন': 'আপনি',
+  'গইরগুম': 'করব',
+  'গম': 'ভালো',
+  'হন': 'কোন',
+  'কিত্তাল': 'কেন',
+  'হতি': 'ক্ষতি',
+  'হাল': 'খাল',
+  'হাতা': 'পাতা',
+  
+  // Sylheti phonetic variants
+  'খইবা': 'বলবেন',
+  'খৈন': 'বলেন',
+  'মাতইন': 'কথা বলেন',
+  'হুরু': 'ছোট',
+  'লাখান': 'মত',
+  'কিতাবইন্যা': 'কেমন',
+  'খানি': 'খাবার',
+  'আফনে': 'আপনি',
+  'আফনার': 'আপনার',
+  'বাফ': 'বাবা',
+  'মাতো': 'কথা বলো',
+  'হউ': 'সব',
+
+  // North Bengal (Rangpur/Rajshahi) phonetic variants
+  'হামার': 'আমার',
+  'হামাক': 'আমাকে',
+  'মোরে': 'আমাকে',
+  'তুহিন': 'তুমি',
+  'লেঙ্গুর': 'লেজ',
+  'কুনঠে': 'কোথায়',
+  'ক্যাংকরি': 'কেমন করে',
+  'ক্যাংকরে': 'কেমন করে',
+  'ব্যামো': 'অসুখ',
+  'আঁটি': 'বীজ',
+};
 
 /**
  * Normalizes input text to simplify search/matching.
@@ -61,3 +105,20 @@ export function detectLanguageFromText(text: string): 'bn' | 'en' {
   return 'en';
 }
 
+/**
+ * Normalizes regional dialects and accents (Chittagonian, Sylheti, North Bengal)
+ * into standard Bangla terms to ensure proper intent parsing and RAG retrieval accuracy.
+ */
+export function dialectNormalizer(transcript: string, detectedLocale?: string): string {
+  if (!transcript) return '';
+
+  let normalized = transcript;
+
+  // Swap known dialect variants with standard Bangla
+  for (const [dialectWord, standardWord] of Object.entries(DIALECT_MAP)) {
+    const regex = new RegExp(`(?<=^|\\s)${dialectWord}(?=\\s|$|[.,।!?])`, 'g');
+    normalized = normalized.replace(regex, standardWord);
+  }
+
+  return normalized;
+}

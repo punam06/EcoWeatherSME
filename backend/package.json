@@ -12,6 +12,7 @@
     "legacy": "node index.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.100.1",
     "@supabase/supabase-js": "^2.43.4",
     "argon2": "^0.44.0",
     "cors": "^2.8.5",

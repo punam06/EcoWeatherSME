@@ -1354,14 +1354,14 @@ function ChatbotView() {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
+    const locale = (navigator.languages && navigator.languages[0]) || navigator.language || "en-US";
+    if (locale.toLowerCase().startsWith("bn")) {
+      setSpeechLang("bn-BD");
+    }
+
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       setSpeechSupported(false);
     } else {
-      const locale = (navigator.languages && navigator.languages[0]) || navigator.language || "en-US";
-      if (locale.toLowerCase().startsWith("bn")) {
-        setSpeechLang("bn-BD");
-      }
-
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           try {
@@ -1471,7 +1471,19 @@ function ChatbotView() {
     };
 
     recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
+      const alternative = event.results[0][0];
+      const transcript = alternative.transcript;
+      const confidence = alternative.confidence ?? 1.0;
+
+      // If confidence is high, check for language override
+      if (confidence >= 0.8) {
+        if (/[\u0980-\u09FF]/.test(transcript)) {
+          setSpeechLang("bn-BD");
+        } else if (/[a-zA-Z]/.test(transcript)) {
+          setSpeechLang("en-US");
+        }
+      }
+
       setInput(transcript);
       handleSend(transcript);
     };
@@ -1583,30 +1595,28 @@ function ChatbotView() {
               style={{ display: "none" }} 
             />
           </button>
+          <select 
+            value={speechLang} 
+            onChange={e => setSpeechLang(e.target.value)}
+            style={{
+              padding: "0 10px", borderRadius: 24, border: "1px solid var(--border-primary)",
+              background: "var(--bg-input)", color: "var(--text-secondary)", fontSize: 12, outline: "none", height: 44
+            }}
+            title="Language"
+          >
+            <option value="en-US">EN</option>
+            <option value="bn-BD">BN</option>
+          </select>
           {speechSupported && (
-            <>
-              <select 
-                value={speechLang} 
-                onChange={e => setSpeechLang(e.target.value)}
-                style={{
-                  padding: "0 10px", borderRadius: 24, border: "1px solid var(--border-primary)",
-                  background: "var(--bg-input)", color: "var(--text-secondary)", fontSize: 12, outline: "none", height: 44
-                }}
-                title="Language"
-              >
-                <option value="en-US">EN</option>
-                <option value="bn-BD">BN</option>
-              </select>
-              <button onClick={handleVoice} disabled={isRecording} style={{
-                width: 44, height: 44, borderRadius: "50%", border: "none", cursor: isRecording ? "not-allowed" : "pointer",
-                background: isRecording ? ACCENT.redBg : "var(--bg-input)",
-                color: isRecording ? ACCENT.red : "var(--text-secondary)",
-                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
-                transition: "all 0.3s ease", opacity: isRecording ? 0.8 : 1
-              }} title="Voice Input">
-                🎙️
-              </button>
-            </>
+            <button onClick={handleVoice} disabled={isRecording} style={{
+              width: 44, height: 44, borderRadius: "50%", border: "none", cursor: isRecording ? "not-allowed" : "pointer",
+              background: isRecording ? ACCENT.redBg : "var(--bg-input)",
+              color: isRecording ? ACCENT.red : "var(--text-secondary)",
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
+              transition: "all 0.3s ease", opacity: isRecording ? 0.8 : 1
+            }} title="Voice Input">
+              🎙️
+            </button>
           )}
           <input 
             type="text" 

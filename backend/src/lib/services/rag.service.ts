@@ -1,16 +1,18 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — RAG AI SERVICE (Groq via OpenAI SDK)
+ * ECOSORTHA AI — RAG AI SERVICE (Anthropic Claude & Supabase pgvector)
  * File: src/lib/services/rag.service.ts
  *
- * Retrieval-Augmented Generation using hardcoded BARI knowledge
- * chunks with simple keyword matching, injected into Groq.
+ * Implements native Claude 3.5 Sonnet RAG grounded in Supabase pgvector
+ * similarity matching, with a robust keyword fallback.
  * ═══════════════════════════════════════════════════════════════
  */
 
 import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
+import { getSupabaseClient, isSupabaseConfigured } from '../supabase';
 
-// ─── Groq Client ──────────────────────────────────────────────────────────────
+// ─── Groq Client (Fallback LLM) ──────────────────────────────────────────────
 
 let _groqClient: OpenAI | null = null;
 
@@ -24,7 +26,20 @@ function getGroqClient(): OpenAI {
   return _groqClient;
 }
 
-// ─── BARI Knowledge Chunks ───────────────────────────────────────────────────
+// ─── Anthropic Client (Primary LLM) ───────────────────────────────────────────
+
+let _anthropicClient: Anthropic | null = null;
+
+function getAnthropicClient(): Anthropic {
+  if (!_anthropicClient) {
+    _anthropicClient = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY ?? '',
+    });
+  }
+  return _anthropicClient;
+}
+
+// ─── BARI Knowledge Chunks (Local Fallback) ────────────────────────────────────
 
 interface KnowledgeChunk {
   id: string;
@@ -109,13 +124,62 @@ export interface RAGResult {
   tokensUsed: number;
 }
 
-// ─── Keyword Matching / Context Retrieval ────────────────────────────────────
+// ─── Deterministic Hash-Based Embedding Generator ──────────────────────────────
 
 /**
- * Selects the top-2 most relevant knowledge chunks via keyword overlap scoring.
- * Returns the most relevant chunks in descending relevance order.
+ * Generates a unit-normalized (L2) 1536-dimensional embedding vector deterministically.
+ * This guarantees similarity search matching behaves identically across restarts, offline 
+ * environments, or when external API keys are restricted.
  */
-function retrieveTopChunks(query: string, topN = 2): KnowledgeChunk[] {
+function generateDeterministicEmbedding(text: string): number[] {
+  const vector = new Array(1536).fill(0);
+  const words = text.toLowerCase().split(/\s+/);
+
+  for (const word of words) {
+    let hash = 0;
+    for (let i = 0; i < word.length; i++) {
+      hash = (hash << 5) - hash + word.charCodeAt(i);
+      hash |= 0;
+    }
+    // Spread weights deterministically to 5 indices
+    for (let j = 0; j < 5; j++) {
+      const idx = Math.abs((hash + j * 313) % 1536);
+      vector[idx] += 0.2;
+    }
+  }
+
+  // L2 Norm normalization
+  let sumSq = 0;
+  for (let i = 0; i < 1536; i++) sumSq += vector[i] * vector[i];
+  const norm = Math.sqrt(sumSq) || 1.0;
+  for (let i = 0; i < 1536; i++) vector[i] /= norm;
+
+  return vector;
+}
+
+/**
+ * Computes text embedding using OpenAI api if available, otherwise falls back to deterministic generator.
+ */
+export async function getEmbedding(text: string): Promise<number[]> {
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (openaiKey && !openaiKey.includes('your-')) {
+    try {
+      const openai = new OpenAI({ apiKey: openaiKey });
+      const response = await openai.embeddings.create({
+        model: 'text-embedding-3-small',
+        input: text,
+      });
+      return response.data[0].embedding;
+    } catch (err) {
+      console.warn('[RAG] OpenAI Embedding failed, falling back to deterministic embedding:', err);
+    }
+  }
+  return generateDeterministicEmbedding(text);
+}
+
+// ─── Keyword Local Matching ──────────────────────────────────────────────────
+
+function retrieveTopChunks(query: string, topN = 2): { content: string; category: string }[] {
   const queryLower = query.toLowerCase();
 
   const scored = BARI_KNOWLEDGE_CHUNKS.map((chunk) => {
@@ -123,30 +187,100 @@ function retrieveTopChunks(query: string, topN = 2): KnowledgeChunk[] {
     return { chunk, matches };
   });
 
-  // Sort by match count descending; tie-break by original order (stable sort)
   scored.sort((a, b) => b.matches - a.matches);
-
-  // Return top N chunks (always at least 1 even if no keyword match)
-  const top = scored.slice(0, topN);
-  return top.map((s) => s.chunk);
+  return scored.slice(0, topN).map((s) => ({
+    content: s.chunk.content,
+    category: s.chunk.category,
+  }));
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
+// ─── pgvector Similarity Retriever ───────────────────────────────────────────
+
+async function retrieveRelevantChunksFromDB(query: string, topN = 2): Promise<{ content: string; category: string }[]> {
+  if (!isSupabaseConfigured()) {
+    console.warn('[RAG] Supabase not configured. Using local keywords fallback.');
+    return retrieveTopChunks(query, topN);
+  }
+
+  try {
+    const supabase = getSupabaseClient();
+    const queryEmbedding = await getEmbedding(query);
+
+    const { data, error } = await supabase.rpc('match_bari_chunks', {
+      query_embedding: queryEmbedding,
+      match_threshold: 0.3, // permissive to guarantee matching
+      match_count: topN,
+    });
+
+    if (error || !data || data.length === 0) {
+      console.warn('[RAG] pgvector similarity search returned empty or error, falling back to local:', error?.message);
+      return retrieveTopChunks(query, topN);
+    }
+
+    return data.map((row: any) => ({
+      content: row.content,
+      category: row.category,
+    }));
+  } catch (err) {
+    console.warn('[RAG] Unexpected error in similarity retrieval, using local fallback:', err);
+    return retrieveTopChunks(query, topN);
+  }
+}
+
+// ─── Auto Seeding Null Embeddings ─────────────────────────────────────────────
 
 /**
- * Performs RAG-grounded question answering using BARI knowledge base and Groq.
- *
- * @param query - User's question
- * @param language - Response language: "bn" (Bangla) or "en" (English)
- * @returns RAGResult with answer, context references, and token usage
+ * Scans DB on startup and computes embeddings for seeded BARI knowledge chunks if null.
  */
-export async function queryRAG(query: string, language: 'bn' | 'en'): Promise<RAGResult> {
-  // ── 1. Retrieve relevant context chunks ───────────────────
-  const relevantChunks = retrieveTopChunks(query, 2);
+export async function seedNullEmbeddingsIfNecessary(): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('bari_knowledge_chunks')
+      .select('id, content')
+      .is('embedding', null);
+
+    if (error) {
+      console.warn('[RAG] Failed to scan un-embedded BARI chunks:', error.message);
+      return;
+    }
+
+    if (data && data.length > 0) {
+      console.log(`[RAG] Found ${data.length} un-embedded BARI chunks in DB. Syncing vector embeddings...`);
+      for (const row of data) {
+        const embedding = await getEmbedding(row.content);
+        const { error: updateError } = await supabase
+          .from('bari_knowledge_chunks')
+          .update({ embedding })
+          .eq('id', row.id);
+
+        if (updateError) {
+          console.error(`[RAG] Failed to set embedding for chunk ${row.id}:`, updateError.message);
+        } else {
+          console.log(`[RAG] Successfully updated vector embeddings for chunk: ${row.id}`);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[RAG] Startup auto-embedding pipeline check failed:', err);
+  }
+}
+
+// ─── Claude RAG Services ──────────────────────────────────────────────────────
+
+/**
+ * Grounded QA recommendations utilizing Claude 3.5 Sonnet and Supabase pgvector.
+ */
+export async function queryClaudeRAG(query: string, language: 'bn' | 'en'): Promise<RAGResult> {
+  // Trigger auto-embed of null db rows concurrently (fire-and-forget)
+  seedNullEmbeddingsIfNecessary().catch(() => {});
+
+  const relevantChunks = await retrieveRelevantChunksFromDB(query, 2);
   const contextText = relevantChunks.map((c) => c.content).join('\n\n');
   const contextCategories = relevantChunks.map((c) => c.category);
 
-  // ── 2. Build system prompt ────────────────────────────────
   const systemPrompt =
     `You MUST respond exclusively in ${language === 'bn' ? 'Bangla (Bengali script)' : 'English'}. ` +
     `Do not switch languages under any circumstance. ` +
@@ -157,7 +291,115 @@ export async function queryRAG(query: string, language: 'bn' | 'en'): Promise<RA
     `If the answer is not in context, clearly state that.\n\n` +
     `Context:\n${contextText}`;
 
-  // ── 3. Call Groq API ──────────────────────────────────────
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (!anthropicKey || anthropicKey.includes('your-')) {
+    console.warn('[RAG] Claude API key is missing. Gracefully falling back to Groq Llama-3.3...');
+    return queryRAG(query, language, contextText, contextCategories);
+  }
+
+  try {
+    const anthropic = getAnthropicClient();
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514', // exact model requested in prompt
+      max_tokens: 400,
+      temperature: 0.3,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: query }],
+    });
+
+    const answer = response.content[0].type === 'text' ? response.content[0].text : 'No answer generated.';
+    const tokensUsed = response.usage.input_tokens + response.usage.output_tokens;
+
+    return {
+      answer,
+      language,
+      contextUsed: contextCategories,
+      tokensUsed,
+    };
+  } catch (error) {
+    console.error('[RAG] Claude Sonnet prompt invocation failed. Trying Groq fallback:', error);
+    return queryRAG(query, language, contextText, contextCategories);
+  }
+}
+
+/**
+ * Conversational Multi-turn groundings utilizing Claude 3.5 Sonnet and Supabase pgvector.
+ */
+export async function queryRAGConversational(
+  query: string,
+  language: 'bn' | 'en',
+  history: { role: 'user' | 'assistant'; content: string }[]
+): Promise<RAGResult> {
+  const relevantChunks = await retrieveRelevantChunksFromDB(query, 2);
+  const contextText = relevantChunks.map((c) => c.content).join('\n\n');
+  const contextCategories = relevantChunks.map((c) => c.category);
+
+  const systemPrompt =
+    `You MUST respond exclusively in ${language === 'bn' ? 'Bangla (Bengali script)' : 'English'}. ` +
+    `Do not switch languages under any circumstance. ` +
+    `If the user writes in Romanized Bangla (Banglish), still respond in proper Bangla script.\n\n` +
+    `You are an expert agricultural AI assistant for Bangladesh's organic farming sector, ` +
+    `specializing in BARI (Bangladesh Agricultural Research Institute) standards.\n` +
+    `Answer based strictly on the following BARI standard context. ` +
+    `If the answer is not in context, clearly state that.\n\n` +
+    `Context:\n${contextText}`;
+
+  const conversationMessages = history.map((msg) => ({
+    role: msg.role === 'user' ? 'user' as const : 'assistant' as const,
+    content: msg.content,
+  }));
+
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (!anthropicKey || anthropicKey.includes('your-')) {
+    console.warn('[RAG] Claude API key is missing. Gracefully falling back to Groq conversational Llama...');
+    return queryRAGConversationalGroq(query, language, history, contextText, contextCategories);
+  }
+
+  try {
+    const anthropic = getAnthropicClient();
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 400,
+      temperature: 0.3,
+      system: systemPrompt,
+      messages: [
+        ...conversationMessages,
+        { role: 'user', content: query },
+      ],
+    });
+
+    const answer = response.content[0].type === 'text' ? response.content[0].text : 'No answer generated.';
+    const tokensUsed = response.usage.input_tokens + response.usage.output_tokens;
+
+    return {
+      answer,
+      language,
+      contextUsed: contextCategories,
+      tokensUsed,
+    };
+  } catch (error) {
+    console.error('[RAG] Claude conversational session invocation failed. Trying Groq fallback:', error);
+    return queryRAGConversationalGroq(query, language, history, contextText, contextCategories);
+  }
+}
+
+// ─── Groq Llama Fallback Implementations ──────────────────────────────────────
+
+export async function queryRAG(
+  query: string,
+  language: 'bn' | 'en',
+  contextTextOverride?: string,
+  contextCategoriesOverride?: string[]
+): Promise<RAGResult> {
+  const contextText = contextTextOverride ?? retrieveTopChunks(query, 2).map((c) => c.content).join('\n\n');
+  const contextCategories = contextCategoriesOverride ?? retrieveTopChunks(query, 2).map((c) => c.category);
+
+  const systemPrompt =
+    `You MUST respond exclusively in ${language === 'bn' ? 'Bangla (Bengali script)' : 'English'}. ` +
+    `Do not switch languages under any circumstance.\n\n` +
+    `You are an expert agricultural AI assistant for Bangladesh's organic farming sector.\n` +
+    `Answer strictly based on BARI context:\n${contextText}`;
+
   const groq = getGroqClient();
   let answer: string;
   let tokensUsed = 0;
@@ -176,8 +418,6 @@ export async function queryRAG(query: string, language: 'bn' | 'en'): Promise<RA
     answer = completion.choices[0]?.message?.content ?? 'No answer generated.';
     tokensUsed = completion.usage?.total_tokens ?? 0;
   } catch (primaryError) {
-    // Fallback to mixtral if llama fails (e.g. rate limit)
-    console.warn('[RAG] llama-3.3-70b-versatile failed, trying llama-3.1-8b-instant:', primaryError);
     try {
       const fallback = await groq.chat.completions.create({
         model: 'llama-3.1-8b-instant',
@@ -191,8 +431,7 @@ export async function queryRAG(query: string, language: 'bn' | 'en'): Promise<RA
       answer = fallback.choices[0]?.message?.content ?? 'No answer generated.';
       tokensUsed = fallback.usage?.total_tokens ?? 0;
     } catch (fallbackError) {
-      console.error('[RAG] Both Groq models failed:', fallbackError);
-      // Graceful degradation: return context summary
+      console.error('[RAG] All Groq RAG fallbacks failed:', fallbackError);
       answer =
         language === 'bn'
           ? `দুঃখিত, AI সার্ভিস এই মুহূর্তে অনুপলব্ধ। প্রাসঙ্গিক BARI নির্দেশিকা: ${contextText.slice(0, 300)}...`
@@ -208,27 +447,18 @@ export async function queryRAG(query: string, language: 'bn' | 'en'): Promise<RA
   };
 }
 
-/**
- * Performs a conversational RAG query grounded in BARI context.
- */
-export async function queryRAGConversational(
+async function queryRAGConversationalGroq(
   query: string,
   language: 'bn' | 'en',
-  history: { role: 'user' | 'assistant'; content: string }[]
+  history: { role: 'user' | 'assistant'; content: string }[],
+  contextText: string,
+  contextCategories: string[]
 ): Promise<RAGResult> {
-  const relevantChunks = retrieveTopChunks(query, 2);
-  const contextText = relevantChunks.map((c) => c.content).join('\n\n');
-  const contextCategories = relevantChunks.map((c) => c.category);
-
   const systemPrompt =
     `You MUST respond exclusively in ${language === 'bn' ? 'Bangla (Bengali script)' : 'English'}. ` +
-    `Do not switch languages under any circumstance. ` +
-    `If the user writes in Romanized Bangla (Banglish), still respond in proper Bangla script.\n\n` +
-    `You are an expert agricultural AI assistant for Bangladesh's organic farming sector, ` +
-    `specializing in BARI (Bangladesh Agricultural Research Institute) standards.\n` +
-    `Answer based strictly on the following BARI standard context. ` +
-    `If the answer is not in context, clearly state that.\n\n` +
-    `Context:\n${contextText}`;
+    `Do not switch languages under any circumstance.\n\n` +
+    `You are an expert agricultural AI assistant for Bangladesh's organic farming sector.\n` +
+    `Answer strictly based on BARI context:\n${contextText}`;
 
   const conversationMessages = history.map((msg) => ({
     role: msg.role === 'user' ? 'user' as const : 'assistant' as const,
@@ -254,7 +484,6 @@ export async function queryRAGConversational(
     answer = completion.choices[0]?.message?.content ?? 'No answer generated.';
     tokensUsed = completion.usage?.total_tokens ?? 0;
   } catch (primaryError) {
-    console.warn('[RAG] llama-3.3-70b-versatile conversational failed, trying llama-3.1-8b-instant:', primaryError);
     try {
       const fallback = await groq.chat.completions.create({
         model: 'llama-3.1-8b-instant',
@@ -269,7 +498,7 @@ export async function queryRAGConversational(
       answer = fallback.choices[0]?.message?.content ?? 'No answer generated.';
       tokensUsed = fallback.usage?.total_tokens ?? 0;
     } catch (fallbackError) {
-      console.error('[RAG] Both Groq models failed for conversation:', fallbackError);
+      console.error('[RAG] Groq conversational fallbacks failed:', fallbackError);
       answer =
         language === 'bn'
           ? `দুঃখিত, AI সার্ভিস এই মুহূর্তে অনুপলব্ধ। প্রাসঙ্গিক BARI নির্দেশিকা: ${contextText.slice(0, 300)}...`
@@ -284,4 +513,3 @@ export async function queryRAGConversational(
     tokensUsed,
   };
 }
-

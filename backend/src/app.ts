@@ -141,6 +141,7 @@ app.use('/api/batch/trust-score', trustScoreRouter);
 app.use('/api/climate/dvs', climateDVSRouter);
 app.use('/api/ai/recommend', aiRecommendRouter);
 app.use('/api/agent', agentRouter);
+app.use('/api', agentRouter);
 app.use('/api/ai/chat', aiChatRouter);
 
 // ═══════════════════════════════════════════════════════════════

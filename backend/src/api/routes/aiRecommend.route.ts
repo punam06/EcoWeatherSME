@@ -4,15 +4,17 @@
  * File: src/api/routes/aiRecommend.route.ts
  *
  * POST /api/ai/recommend
- * Validates input, runs RAG query against Groq, logs to Supabase.
+ * Validates input, runs Claude RAG similarity search query, logs to Supabase.
  * ═══════════════════════════════════════════════════════════════
  */
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { AIRecommendRequestSchema } from '../schemas';
-import { queryRAG } from '../../lib/services/rag.service';
+import { queryClaudeRAG } from '../../lib/services/rag.service';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
+import { aiRateLimiter } from '../../lib/middleware/rateLimiter';
+import { isContentClean } from '../../lib/utils/moderationFilter';
 
 const router = Router();
 
@@ -22,7 +24,7 @@ const router = Router();
  * Body: { query: string, language: "bn" | "en" }
  * Response: { success: true, data: RAGResult }
  */
-router.post('/', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+router.post('/', aiRateLimiter, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     // ── 1. Validate request body ───────────────────────────
     const parsed = AIRecommendRequestSchema.safeParse(req.body);
@@ -38,10 +40,21 @@ router.post('/', async (req: Request, res: Response, next: NextFunction): Promis
 
     const { query, language } = parsed.data;
 
-    // ── 2. Run RAG query ───────────────────────────────────
-    const ragResult = await queryRAG(query, language);
+    // ── 2. Safety Moderation Filter Check ──────────────────
+    if (!isContentClean(query)) {
+      res.status(400).json({
+        success: false,
+        error: language === 'bn'
+          ? 'সংবেদনশীল বা অননুমোদিত কন্টেন্ট সনাক্ত করা হয়েছে।'
+          : 'Sensitive or disallowed content detected in message.',
+      });
+      return;
+    }
 
-    // ── 3. Async log to Supabase (fire and forget) ─────────
+    // ── 3. Run Claude RAG query ────────────────────────────
+    const ragResult = await queryClaudeRAG(query, language);
+
+    // ── 4. Async log to Supabase (fire and forget) ─────────
     if (isSupabaseConfigured()) {
       const supabase = getSupabaseClient();
       supabase
@@ -59,7 +72,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction): Promis
         });
     }
 
-    // ── 4. Return result ───────────────────────────────────
+    // ── 5. Return result ───────────────────────────────────
     res.status(200).json({
       success: true,
       data: ragResult,

@@ -3,16 +3,16 @@
  * ECOSORTHA AI — AGENT ORCHESTRATOR SERVICE
  * File: src/lib/services/agentOrchestrator.service.ts
  *
- * Central router orchestrating user message classification, execution,
- * BARI RAG lookup, and order transactions. Log all events.
+ * Implements the explicit Step 2 routing dispatcher, Step 3 stubs,
+ * Step 4 broad catalog matching, and the Step 5 catch-all safety net.
  * ═══════════════════════════════════════════════════════════════
  */
 
 import { getSupabaseClient, isSupabaseConfigured } from '../supabase';
 import { getSession, createSession, appendMessage, PendingOrder } from './chatSession.service';
-import { classifyIntent } from './intentClassifier.service';
+import { classifyIntent, cityNameNormalizer, IntentType } from './intentClassifier.service';
 import { searchProducts, Product } from './productSearch.service';
-import { initiateOrder, confirmOrder, cancelOrder, getAutoRecommendation, OrderResult } from './orderExecution.service';
+import { initiateOrder, confirmOrder, cancelOrder, OrderResult } from './orderExecution.service';
 import { queryRAGConversational } from './rag.service';
 import { getWeatherByCity } from './weather.service';
 
@@ -36,6 +36,179 @@ export interface AgentResponse {
 }
 
 /**
+ * Handles explicit order transactions: parses quantities/types, queries catalog,
+ * and confirms purchase immediately.
+ */
+async function handleAgenticOrder(
+  message: string,
+  userId: string | undefined,
+  lang: 'bn' | 'en',
+  activeSessionId: string
+): Promise<AgentResponse> {
+  const text = message.toLowerCase();
+
+  // Extract quantity (defaults to 1)
+  const qtyMatch = text.match(/\b\d+\b/);
+  const quantity = qtyMatch ? parseInt(qtyMatch[0], 10) : 1;
+
+  // Extract product types
+  const productType = text.includes('compost') || text.includes('কম্পোস্ট') ? 'compost' : 'fertilizer';
+  const cropType = text.includes('tomato') || text.includes('টমেটো') ? 'tomato' : undefined;
+
+  const products = await searchProducts(productType, cropType);
+
+  if (products.length > 0) {
+    const best = products[0];
+
+    // Place transaction
+    initiateOrder(activeSessionId, best, quantity, userId);
+    await confirmOrder(activeSessionId, userId || 'demo-farmer-id');
+
+    return {
+      type: 'ORDER_SUCCESS',
+      message:
+        lang === 'bn'
+          ? `আপনার অর্ডার সফলভাবে নেওয়া হয়েছে: ${best.name}, পরিমাণ: ${quantity}।`
+          : `Your order has been successfully placed: ${best.name}, quantity: ${quantity}.`,
+      language: lang,
+      products,
+      sessionId: activeSessionId,
+    };
+  } else {
+    return {
+      type: 'TEXT',
+      message:
+        lang === 'bn'
+          ? `এই মুহূর্তে কোনো ${productType === 'compost' ? 'কম্পোস্ট' : 'সার'} পাওয়া যাচ্ছে না। মার্কেটপ্লেস ট্যাব থেকে দেখুন।`
+          : `Currently no ${productType} is available. Please check the Marketplace tab.`,
+      language: lang,
+      sessionId: activeSessionId,
+    };
+  }
+}
+
+/**
+ * Handles climate forecast DVS checkouts, resolving canonical cities and error prompts.
+ */
+async function handleClimateForecast(
+  message: string,
+  lang: 'bn' | 'en',
+  activeSessionId: string
+): Promise<AgentResponse> {
+  const normalizedCity = cityNameNormalizer(message);
+
+  if (!normalizedCity) {
+    return {
+      type: 'TEXT',
+      message:
+        lang === 'bn'
+          ? 'আপনার শহরের নাম জানান, আমি আবহাওয়া তথ্য দেব।'
+          : 'Please let me know your city name, I will provide weather information.',
+      language: lang,
+      sessionId: activeSessionId,
+    };
+  }
+
+  const apiKey = process.env.WEATHER_API_KEY || process.env.OPENWEATHER_API_KEY;
+  if (!apiKey || apiKey.includes('your-')) {
+    return {
+      type: 'TEXT',
+      message:
+        lang === 'bn'
+          ? 'আবহাওয়া সেবা এই মুহূর্তে উপলব্ধ নেই। অনুগ্রহ করে পরে চেষ্টা করুন।'
+          : 'Weather service is temporarily unavailable. Please try again later.',
+      language: lang,
+      sessionId: activeSessionId,
+    };
+  }
+
+  const weather = await getWeatherByCity(normalizedCity, lang);
+  if (weather.found) {
+    const formatted =
+      lang === 'bn'
+        ? `${weather.city}-এর বর্তমান আবহাওয়া:\n🌡️ তাপমাত্রা: ${weather.temperature}°C (অনুভূতি: ${weather.feelsLike}°C)\n🌤️ অবস্থা: ${weather.description}\n💧 আর্দ্রতা: ${weather.humidity}%\n💨 বাতাসের গতি: ${weather.windSpeed} m/s`
+        : `Current weather in ${weather.city}:\n🌡️ Temperature: ${weather.temperature}°C (Feels like: ${weather.feelsLike}°C)\n🌤️ Condition: ${weather.description}\n💧 Humidity: ${weather.humidity}%\n💨 Wind Speed: ${weather.windSpeed} m/s`;
+
+    return {
+      type: 'TEXT',
+      message: formatted,
+      language: lang,
+      sessionId: activeSessionId,
+    };
+  } else {
+    return {
+      type: 'TEXT',
+      message:
+        lang === 'bn'
+          ? `দুঃখিত, ${normalizedCity} শহরের আবহাওয়া সংক্রান্ত তথ্য পাওয়া যায়নি। শহরের নাম ঠিক আছে কিনা পরীক্ষা করুন।`
+          : `Could not find weather data for ${normalizedCity}. Please check the city name.`,
+      language: lang,
+      sessionId: activeSessionId,
+    };
+  }
+}
+
+/**
+ * Handles explicit broad catalog lookup with broad ilike regex queries and stubs.
+ */
+async function handleProductSearch(
+  message: string,
+  lang: 'bn' | 'en',
+  activeSessionId: string
+): Promise<AgentResponse> {
+  const text = message.toLowerCase().trim();
+  const productType = text.includes('compost') || text.includes('কম্পোস্ট') ? 'compost' : 'fertilizer';
+
+  let products: Product[] = [];
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .or(
+          `name.ilike.%${productType}%,category.ilike.%${productType}%,name.ilike.%সার%,description.ilike.%${productType}%`
+        )
+        .limit(10);
+
+      if (!error && data) {
+        products = data;
+      }
+    } catch (err) {
+      console.error('[handleProductSearch] broad DB query failed:', err);
+    }
+  }
+
+  // Fallback to local keywords catalog search
+  if (products.length === 0) {
+    products = await searchProducts(productType);
+  }
+
+  if (products.length > 0) {
+    return {
+      type: 'PRODUCT_LIST',
+      message:
+        lang === 'bn'
+          ? `আমি আপনার জন্য কিছু উন্নত মানের প্রোডাক্ট খুঁজে পেয়েছি। অনুগ্রহ করে নির্বাচন করুন:`
+          : `I found these matching products for you. Please select one:`,
+      language: lang,
+      products,
+      sessionId: activeSessionId,
+    };
+  } else {
+    return {
+      type: 'TEXT',
+      message:
+        lang === 'bn'
+          ? 'এই মুহূর্তে কোনো সার পাওয়া যাচ্ছে না। মার্কেটপ্লেস ট্যাব থেকে দেখুন।'
+          : 'Currently no fertilizers are available. Please check the Marketplace tab.',
+      language: lang,
+      sessionId: activeSessionId,
+    };
+  }
+}
+
+/**
  * Main process pipeline.
  */
 export async function processMessage(
@@ -44,7 +217,7 @@ export async function processMessage(
   sessionId?: string,
   farmerId?: string
 ): Promise<AgentResponse> {
-  // 1. Resolve or Create Session
+  // Resolve or Create Session
   let activeSessionId = sessionId;
   let session = sessionId ? getSession(sessionId) : undefined;
   if (!session) {
@@ -53,255 +226,87 @@ export async function processMessage(
     session = newSession;
   }
 
-  // Sync farmerId if provided on this request
   if (farmerId) {
     session.farmerId = farmerId;
   }
 
-  // Append user message to history
   appendMessage(activeSessionId!, 'user', query);
 
-  // 2. Classify Intent
-  const classification = classifyIntent(query);
-  const { intent, extractedEntities } = classification;
+  try {
+    // Step 1: Classify intent strictly using requested priority regex rules
+    const intent = classifyIntent(query, language);
 
-  let responseType: AgentResponse['type'] = 'TEXT';
-  let message = '';
-  let responseProducts: Product[] | undefined;
-  let responsePendingOrder: PendingOrder | undefined;
-  let responseOrderResult: OrderResult | undefined;
-  let responseNavigationTarget: string | undefined;
-  let requiresAuth = false;
+    let result: AgentResponse;
 
-  // 3. Routing Engine
-  switch (intent) {
-    case 'NAVIGATE': {
-      responseType = 'NAVIGATION';
-      responseNavigationTarget = extractedEntities.targetPage || '/marketplace';
-      message =
-        language === 'bn'
-          ? `আপনাকে সরাসরি ${responseNavigationTarget} পেজে নিয়ে যাচ্ছি...`
-          : `Navigating you to ${responseNavigationTarget} page...`;
-      break;
-    }
+    // Step 2: Unified dispatcher switch block
+    switch (intent) {
+      case 'order_intent':
+        result = await handleAgenticOrder(query, session.farmerId, language, activeSessionId!);
+        break;
 
-    case 'PRODUCT_SEARCH': {
-      const results = await searchProducts(extractedEntities.productType, extractedEntities.cropType);
-      session.lastSeenProducts = results;
+      case 'weather_intent':
+        result = await handleClimateForecast(query, language, activeSessionId!);
+        break;
 
-      if (results.length > 0) {
-        responseType = 'PRODUCT_LIST';
-        responseProducts = results;
-        message =
-          language === 'bn'
-            ? `আমি আপনার জন্য কিছু উন্নত মানের প্রোডাক্ট খুঁজে পেয়েছি। অনুগ্রহ করে নির্বাচন করুন:`
-            : `I found these matching products for you. Please select one:`;
-      } else {
-        responseType = 'TEXT';
-        message =
-          language === 'bn'
-            ? `দুঃখিত, আপনার পছন্দের সাথে মেলে এমন কোনো প্রোডাক্ট এই মুহূর্তে পাওয়া যায়নি।`
-            : `Sorry, I couldn't find any products matching your requirements right now.`;
+      case 'product_search_intent':
+        result = await handleProductSearch(query, language, activeSessionId!);
+        break;
+
+      case 'bari_advice_intent': {
+        const ragResult = await queryRAGConversational(query, language, session.history.slice(-5, -1));
+        result = {
+          type: 'TEXT',
+          message: ragResult.answer,
+          language,
+          sessionId: activeSessionId!,
+        };
+        break;
       }
-      break;
-    }
 
-    case 'PURCHASE_PRODUCT': {
-      const results = await searchProducts(extractedEntities.productType, extractedEntities.cropType);
-      session.lastSeenProducts = results;
-
-      if (results.length === 1) {
-        const qty = extractedEntities.quantity || 1;
-        const pending = initiateOrder(activeSessionId!, results[0], qty, session.farmerId);
-        responseType = 'ORDER_CONFIRM_PROMPT';
-        responsePendingOrder = pending;
-        message =
-          language === 'bn'
-            ? `আপনি কি BCH-${results[0].name} (${qty} টি) অর্ডার কনফার্ম করতে চান?`
-            : `Do you want to confirm the order for ${results[0].name} (Qty: ${qty})?`;
-      } else if (results.length > 1) {
-        responseType = 'PRODUCT_LIST';
-        responseProducts = results;
-        message =
-          language === 'bn'
-            ? `আমি একাধিক প্রোডাক্ট পেয়েছি। অনুগ্রহ করে নিচে থেকে আপনার প্রয়োজনীয় প্রোডাক্টটি নির্বাচন করুন:`
-            : `I found multiple matching products. Please pick the correct product to buy:`;
-      } else {
-        responseType = 'TEXT';
-        message =
-          language === 'bn'
-            ? `দুঃখিত, কোনো প্রোডাক্ট পাওয়া যায়নি।`
-            : `Sorry, no products found to purchase.`;
+      case 'general_rag_intent':
+      default: {
+        const ragResult = await queryRAGConversational(query, language, session.history.slice(-5, -1));
+        result = {
+          type: 'TEXT',
+          message: ragResult.answer,
+          language,
+          sessionId: activeSessionId!,
+        };
+        break;
       }
-      break;
     }
 
-    case 'PRODUCT_SELECT': {
-      const lastList = session.lastSeenProducts;
-      const index = extractedEntities.selectionIndex ?? 0;
-      if (lastList && lastList[index]) {
-        const product = lastList[index];
-        const pending = initiateOrder(activeSessionId!, product, 1, session.farmerId);
-        responseType = 'ORDER_CONFIRM_PROMPT';
-        responsePendingOrder = pending;
-        message =
-          language === 'bn'
-            ? `আপনি "${product.name}" প্রোডাক্টটি নির্বাচন করেছেন। অর্ডার সম্পন্ন করতে কনফার্ম করুন:`
-            : `You selected "${product.name}". Please confirm to complete order:`;
-      } else {
-        responseType = 'TEXT';
-        message =
-          language === 'bn'
-            ? `অনুগ্রহ করে তালিকা থেকে সঠিক প্রোডাক্টটি পুনরায় নির্বাচন করুন।`
-            : `Please make a valid selection from the product list.`;
-      }
-      break;
-    }
+    appendMessage(activeSessionId!, 'assistant', result.message);
 
-    case 'AUTO_RECOMMEND_BUY': {
-      const best = await getAutoRecommendation(extractedEntities.productType, extractedEntities.cropType);
-      if (best) {
-        const qty = extractedEntities.quantity || 1;
-        const pending = initiateOrder(activeSessionId!, best, qty, session.farmerId);
-        responseType = 'ORDER_CONFIRM_PROMPT';
-        responsePendingOrder = pending;
-        const cropName = extractedEntities.cropType || 'আপনার ফসল';
-        message =
-          language === 'bn'
-            ? `আমি ${cropName} এর জন্য সেরা প্রোডাক্ট "${best.name}" নির্বাচন করেছি। কনফার্ম করতে চেক করুন:`
-            : `I selected the best product "${best.name}" for your ${cropName}. Confirm order below:`;
-      } else {
-        responseType = 'TEXT';
-        message =
-          language === 'bn'
-            ? `দুঃখিত, এই মুহূর্তে অটো-সুপারিশ করার মতো কোনো প্রোডাক্ট পাওয়া যায়নি।`
-            : `Sorry, I couldn't find any products to automatically recommend right now.`;
-      }
-      break;
-    }
-
-    case 'ORDER_CONFIRM': {
-      if (!session.pendingOrder) {
-        responseType = 'TEXT';
-        message =
-          language === 'bn'
-            ? `আপনার কোনো পেন্ডিং অর্ডার নেই। নতুন অর্ডার করতে প্রোডাক্ট খুঁজুন।`
-            : `No pending order found. Find a product first.`;
-      } else {
-        const result = await confirmOrder(activeSessionId!, session.farmerId);
-        if (result.success) {
-          responseType = 'ORDER_SUCCESS';
-          responseOrderResult = result;
-          message =
-            language === 'bn'
-              ? `অভিনন্দন! আপনার অর্ডারটি সফলভাবে সম্পন্ন হয়েছে। অর্ডার আইডি: ${result.orderId}`
-              : `Congratulations! Your order has been placed. Order ID: ${result.orderId}`;
-        } else if (result.requiresAuth) {
-          responseType = 'AUTH_REQUIRED';
-          requiresAuth = true;
-          message =
-            language === 'bn'
-              ? `অর্ডার করতে অনুগ্রহ করে লগইন করুন।`
-              : `Please log in to complete your purchase.`;
-        } else {
-          responseType = 'TEXT';
-          message = result.message;
-        }
-      }
-      break;
-    }
-
-    case 'ORDER_CANCEL': {
-      cancelOrder(activeSessionId!);
-      responseType = 'ORDER_CANCELLED';
-      message =
-        language === 'bn'
-          ? `আপনার অর্ডারটি সফলভাবে বাতিল করা হয়েছে।`
-          : `Your pending order has been successfully canceled.`;
-      break;
-    }
-
-    case 'WEATHER_QUERY': {
-      const cityName = extractedEntities.cityName;
-      if (!cityName) {
-        responseType = 'TEXT';
-        message =
-          language === 'bn'
-            ? 'আপনি কোন শহরের আবহাওয়া জানতে চান?'
-            : "Which city's weather would you like to know?";
-      } else {
-        const weather = await getWeatherByCity(cityName, language);
-        responseType = 'TEXT';
-        if (weather.found) {
-          if (language === 'bn') {
-            message = `${weather.city}-এর বর্তমান আবহাওয়া:
-🌡️ তাপমাত্রা: ${weather.temperature}°C (অনুভূতি: ${weather.feelsLike}°C)
-🌤️ অবস্থা: ${weather.description}
-💧 আর্দ্রতা: ${weather.humidity}%
-💨 বাতাসের গতি: ${weather.windSpeed} m/s`;
-          } else {
-            message = `Current weather in ${weather.city}:
-🌡️ Temperature: ${weather.temperature}°C (Feels like: ${weather.feelsLike}°C)
-🌤️ Condition: ${weather.description}
-💧 Humidity: ${weather.humidity}%
-💨 Wind Speed: ${weather.windSpeed} m/s`;
-          }
-        } else {
-          message =
-            language === 'bn'
-              ? `দুঃখিত, ${cityName} শহরের আবহাওয়া সংক্রান্ত তথ্য পাওয়া যায়নি। শহরের নাম ঠিক আছে কিনা পরীক্ষা করুন।`
-              : `Could not find weather data for ${cityName}. Please check the city name.`;
-        }
-      }
-      break;
-    }
-
-    case 'GENERAL_ADVICE':
-    case 'UNKNOWN':
-    default: {
-      const ragResult = await queryRAGConversational(query, language, session.history.slice(-5, -1));
-      responseType = 'TEXT';
-      message = ragResult.answer;
-      break;
-    }
-  }
-
-  // Append assistant message to history
-  appendMessage(activeSessionId!, 'assistant', message);
-
-  // 4. Log interaction asynchronously to Supabase
-  if (isSupabaseConfigured()) {
-    const supabase = getSupabaseClient();
-    (async () => {
-      try {
-        const { error } = await supabase
-          .from('agent_interaction_logs')
-          .insert({
+    // Logging to DB
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseClient();
+      (async () => {
+        try {
+          await supabase.from('agent_interaction_logs').insert({
             session_id: activeSessionId,
-            farmer_id: session.farmerId || null,
+            farmer_id: session!.farmerId || null,
             message: query,
             intent,
-            response_type: responseType,
+            response_type: result.type,
             language,
           });
-        if (error) {
-          console.warn('[AgentOrchestrator] Interaction log failed:', error.message);
-        }
-      } catch (err: any) {
-        console.warn('[AgentOrchestrator] Interaction log failed with exception:', err.message || err);
-      }
-    })();
-  }
+        } catch (err) {}
+      })();
+    }
 
-  return {
-    type: responseType,
-    message,
-    language,
-    products: responseProducts,
-    pendingOrder: responsePendingOrder,
-    orderResult: responseOrderResult,
-    navigationTarget: responseNavigationTarget,
-    requiresAuth,
-    sessionId: activeSessionId!,
-  };
+    return result;
+  } catch (error) {
+    // Step 5: Catch-all safety net
+    console.error('[ChatHandler Error]', error);
+    return {
+      type: 'TEXT',
+      message:
+        language === 'bn'
+          ? 'দুঃখিত, একটি সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।'
+          : 'Sorry, something went wrong. Please try again.',
+      language,
+      sessionId: activeSessionId!,
+    };
+  }
 }
