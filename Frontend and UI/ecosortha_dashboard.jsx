@@ -570,59 +570,59 @@ function MicroclimateSimulator({ trustScore }) {
     }
   }, []);
 
-  const handleListen = () => {
+  const handleListen = async () => {
     if (isListening) {
-      if (recognitionRef.current) recognitionRef.current.stop();
-      setIsListening(false);
-      return;
-    }
-    startSpeechRecognition(speechLang);
-  };
-
-  const startSpeechRecognition = (lang) => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setSpeechSupported(false);
-      return;
-    }
-    
-    // Always abort old instance before creating new one to free up Safari mic lock
-    if (recognitionRef.current) {
-      try { recognitionRef.current.abort(); } catch(e) {}
-    }
-    const recognition = new SpeechRecognition();
-    recognitionRef.current = recognition;
-    
-    recognition.lang = lang;
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      setIsListening(true);
-    };
-
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      setZoneSearch(transcript);
-      // Auto-select zone if matched
-      const matchedZone = Object.keys(UHI_ZONES).find(z => z.toLowerCase().includes(transcript.toLowerCase()));
-      if (matchedZone) {
-        setZone(matchedZone);
+      if (recognitionRef.current && recognitionRef.current.state === "recording") {
+        recognitionRef.current.stop();
       }
-      // Auto-fetch weather for spoken location
-      fetchLiveWeather(matchedZone || transcript);
-    };
-
-    recognition.onerror = (event) => {
-      console.error("Speech recognition error", event.error);
       setIsListening(false);
-    };
+      return;
+    }
 
-    recognition.onend = () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      recognitionRef.current = mediaRecorder;
+      let audioChunks = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunks.push(event.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        // Stop all tracks to release mic
+        stream.getTracks().forEach(track => track.stop());
+        
+        if (audioChunks.length === 0) return;
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        
+        try {
+          // Use Groq Whisper transcription
+          const res = await window.APIClient.transcribeAudio(audioBlob, speechLang);
+          if (res.success && res.text) {
+            const transcript = res.text.trim();
+            setZoneSearch(transcript);
+            
+            // Auto-select zone if matched
+            const matchedZone = Object.keys(UHI_ZONES).find(z => z.toLowerCase().includes(transcript.toLowerCase()));
+            if (matchedZone) {
+              setZone(matchedZone);
+            }
+            // Auto-fetch weather for spoken location
+            fetchLiveWeather(matchedZone || transcript);
+          }
+        } catch (err) {
+          console.error("Transcription error:", err);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsListening(true);
+    } catch (err) {
+      console.error("Microphone access denied or error:", err);
       setIsListening(false);
-    };
-
-    recognition.start();
+      setSpeechSupported(false); // If they deny permission
+    }
   };
 
   // Auto-detect: use browser GPS -> /api/weather by lat/lon (no Google Maps key needed)

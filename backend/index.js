@@ -781,6 +781,46 @@ const groqClient = new OpenAI({
   baseURL: 'https://api.groq.com/openai/v1' // Groq Base URL
 });
 
+app.post('/api/transcribe', express.raw({ type: 'audio/*', limit: '10mb' }), asyncHandler(async (req, res) => {
+  if (!req.body || !Buffer.isBuffer(req.body)) {
+    return res.status(400).json({ success: false, error: 'Audio file is required' });
+  }
+
+  const lang = req.query.lang || 'en-US';
+  
+  try {
+    const formData = new FormData();
+    const blob = new Blob([req.body], { type: req.headers['content-type'] || 'audio/webm' });
+    formData.append('file', blob, 'audio.webm');
+    formData.append('model', 'whisper-large-v3');
+    
+    // Whisper language codes are ISO-639-1 (e.g. 'bn' instead of 'bn-BD')
+    if (lang.startsWith('bn')) {
+      formData.append('language', 'bn');
+    }
+
+    const apiKey = process.env.GROQ_API_KEY || process.env.GROK_API_KEY || process.env.GORK_API_KEY;
+    const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: formData
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      console.error('Groq Whisper error:', data);
+      return res.status(response.status).json({ success: false, error: data.error?.message || 'Transcription failed' });
+    }
+
+    res.json({ success: true, text: data.text });
+  } catch (error) {
+    console.error('Transcription route error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+}));
+
 app.post('/api/chat', asyncHandler(async (req, res) => {
   const { message } = req.body;
   if (!message) {

@@ -80,6 +80,18 @@ const APIClient = {
     method: 'POST',
     body: JSON.stringify({ message }),
   }),
+
+  // Audio transcription (Groq Whisper)
+  transcribeAudio: (blob, lang = 'en-US') => {
+    return APIClient.request(`/transcribe?lang=${lang}`, {
+      method: 'POST',
+      body: blob,
+      headers: {
+        // Omitting Content-Type allows browser to set it or leaves it raw
+        'Content-Type': blob.type || 'audio/webm'
+      }
+    });
+  }
 };
 
 // Utility function to initialize database connections on page load
