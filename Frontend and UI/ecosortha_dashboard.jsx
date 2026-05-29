@@ -355,39 +355,14 @@ function IoTForm({ onResult }) {
   useEffect(() => {
     const fetchTrustScore = async () => {
       setIsLoading(true);
-      try {
-        const response = await fetch(
-          "https://pdeskdcdyhbldwfgbowz.supabase.co/functions/v1/clever-responder",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              action: "trust-score",
-              pH,
-              EC,
-              temp,
-              ratio,
-              days,
-            }),
-          }
-        );
-        const data = await response.json();
-        setTs(data.trustScore || 0);
-        onResult(data.trustScore || 0);
+      setTimeout(() => {
+        const score = calcTrustScore({ pH, EC, temp, ratio, days });
+        setTs(score);
+        onResult(score);
         setCertified(false);
-      } catch (error) {
-        console.error("Failed to fetch trust score:", error);
-        // Fallback to local calculation on error
-        const fallbackScore = calcTrustScore({ pH, EC, temp, ratio, days });
-        setTs(fallbackScore);
-        onResult(fallbackScore);
-      } finally {
         setIsLoading(false);
-      }
+      }, 400); 
     };
-    
     fetchTrustScore();
   }, [pH, EC, temp, ratio, days, onResult]);
 
