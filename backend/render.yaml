@@ -2,7 +2,7 @@ services:
   - type: web
     name: backSme
     env: node
-    buildCommand: npm install
-    startCommand: node index.js
+    buildCommand: npm install && npm run build
+    startCommand: node dist/app.js
     envVarGroups:
       - name: EcoSME
