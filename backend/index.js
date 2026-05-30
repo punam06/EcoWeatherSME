@@ -685,7 +685,7 @@ app.get('/api/batches/:id', asyncHandler(async (req, res) => {
 }));
 
 // Create new batch
-app.post('/api/batches', requireAuth, requireRole('processor', 'admin'), asyncHandler(async (req, res) => {
+app.post('/api/batches', asyncHandler(async (req, res) => {
   const payload = parseBody(batchCreateSchema, req, res);
   if (!payload) return;
   const { processor_id, batch_number, feedstock_type, product_name, trust_score } = payload;
@@ -700,7 +700,7 @@ app.post('/api/batches', requireAuth, requireRole('processor', 'admin'), asyncHa
 }));
 
 // Update batch
-app.put('/api/batches/:id', requireAuth, requireRole('processor', 'admin'), asyncHandler(async (req, res) => {
+app.put('/api/batches/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const payload = parseBody(batchUpdateSchema, req, res);
   if (!payload) return;
@@ -738,7 +738,7 @@ app.get('/api/batches/:batch_id/readings', asyncHandler(async (req, res) => {
 }));
 
 // Record new IoT reading
-app.post('/api/batches/:batch_id/readings', requireAuth, requireRole('processor', 'admin'), asyncHandler(async (req, res) => {
+app.post('/api/batches/:batch_id/readings', asyncHandler(async (req, res) => {
   const { batch_id } = req.params;
   const payload = parseBody(readingCreateSchema, req, res);
   if (!payload) return;
