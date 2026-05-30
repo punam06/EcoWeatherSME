@@ -16,6 +16,7 @@ const { z } = require('zod');
 // require('groq-sdk') alone is NOT the constructor — must use .Groq or .default
 const _groqModule = require('groq-sdk');
 const GroqClass = _groqModule.Groq || _groqModule.default || _groqModule;
+const QRCode = require('qrcode');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -1060,8 +1061,48 @@ app.post('/api/agent/message', async (req, res) => {
 
     let responseMessage;
     let responseType = 'TEXT';
+    let responseProducts = undefined;
 
-    if (parsed && parsed.intent === 'weather') {
+    if (parsed && parsed.intent === 'product_search') {
+      const lowerSearch = (parsed.extractedData?.productName || query || '').toLowerCase();
+      const fallbackProducts = [
+        { id: 'prod-compost', name: 'Premium Organic Compost', category: 'Agriculture', price_bdt: 240, price: '৳ 240', unit: 'Kg', seller: 'Organic SME', dvs: 94, icon: '📦' },
+        { id: 'prod-biochar', name: 'Carbon-Neutral Biochar', category: 'Agriculture', price_bdt: 150, price: '৳ 150', unit: 'Kg', seller: 'SME Co-op', dvs: 92, icon: '🌿' },
+        { id: 'prod-fertilizer', name: 'Eco-Friendly Fertilizer', category: 'Agriculture', price_bdt: 180, price: '৳ 180', unit: 'Kg', seller: 'SME Co-op', dvs: 88, icon: '🌱' }
+      ];
+      
+      let matched = fallbackProducts;
+      if (pool) {
+        try {
+          const prodRes = await queryDB('SELECT * FROM products');
+          if (prodRes && prodRes.rows.length > 0) {
+            matched = prodRes.rows.map(p => ({
+              id: p.id,
+              name: p.name,
+              category: p.category || 'Agriculture',
+              price_bdt: p.price_bdt || p.price || 150,
+              price: `৳ ${p.price_bdt || p.price || 150}`,
+              unit: p.unit || 'Kg',
+              seller: p.seller || 'SME Co-op',
+              dvs: p.dvs || 90,
+              icon: p.category === 'compost' ? '📦' : '🌱'
+            }));
+          }
+        } catch (err) {
+          console.warn('[Agent Product Search] Failed to query products:', err.message);
+        }
+      }
+
+      responseProducts = matched.filter(p => 
+        p.name.toLowerCase().includes(lowerSearch) || 
+        p.category.toLowerCase().includes(lowerSearch)
+      );
+      if (responseProducts.length === 0) {
+        responseProducts = matched.slice(0, 3);
+      }
+      responseMessage = parsed.replyMessage || (lang === 'bn' ? 'এখানে কিছু চমৎকার পণ্য রয়েছে যা আপনি দেখতে পারেন:' : 'Here are some excellent products you can view:');
+      responseType = 'PRODUCT_LIST';
+    } else if (parsed && parsed.intent === 'weather') {
       const cityInput = parsed.extractedData?.city || query;
       const normalizedCity = normalizeCity(cityInput);
       if (normalizedCity) {
@@ -1102,7 +1143,8 @@ app.post('/api/agent/message', async (req, res) => {
         pendingOrder: (parsed && parsed.intent === 'order') ? {
           productName: parsed.extractedData?.productName || '',
           quantity: parsed.extractedData?.quantity || 1
-        } : undefined
+        } : undefined,
+        products: responseProducts
       }
     });
   } catch (err) {
@@ -1183,6 +1225,41 @@ app.post('/api/orders/voice', asyncHandler(async (req, res) => {
       message: `আপনার অর্ডার সফলভাবে নেওয়া হয়েছে: ${matchedProduct.name}, পরিমাণ: ${finalQuantity}।`
     }
   });
+});
+
+app.post('/api/batches/certify', asyncHandler(async (req, res) => {
+  try {
+    const { batchId } = req.body;
+    
+    // Generate actual batch ID if none provided
+    const displayBatchId = batchId || `BCH-${Date.now().toString().slice(-6)}`;
+    
+    // Create the public verification URL
+    const verificationUrl = `https://ecosortha.build/verify/${displayBatchId}`;
+    
+    // Generate QR code data URL (Base64 image) securely on the backend
+    const qrCodeDataUrl = await QRCode.toDataURL(verificationUrl, {
+      width: 300,
+      margin: 2,
+      color: {
+        dark: '#000000',
+        light: '#ffffff'
+      }
+    });
+
+    res.json({
+      success: true,
+      data: {
+        batchId: displayBatchId,
+        verificationUrl,
+        qrCodeDataUrl,
+        certifiedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('QR Generation Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to generate cryptographic QR code' });
+  }
 }));
 
 /* ═══════════════════════════════════════════════════════════════
