@@ -64,7 +64,7 @@ graph TD
 | **Frontend UI** | React 18 (Standalone CDN), Vanilla CSS, Chart.js, Babel |
 | **Backend Core** | Node.js, Express, TypeScript, ts-node |
 | **Database & Vector Store** | Supabase (PostgreSQL with `pgvector` & RLS Policies) |
-| **AI & LLM Services** | Claude 3.5 Sonnet (Anthropic API), Web Speech API |
+| **AI & LLM Services** | Groq llama-3 70B API, Web Speech API |
 | **Security & Utilities** | jsPDF (Certificate generation), dotenv, Argon2, JSONWebTokens |
 
 ---
