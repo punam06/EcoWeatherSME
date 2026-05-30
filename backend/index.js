@@ -1038,134 +1038,137 @@ app.post('/api/agent/message', async (req, res) => {
     const session = getOrCreateSession(sessionId);
     const lang = language === 'bn' ? 'bn' : 'en';
 
-    // Build conversation history for context
-    const history = session.history.slice(-6).map(m => ({ role: m.role, content: m.content }));
-    const messages = [
-      { role: 'system', content: AGENT_SYSTEM_PROMPT },
-      ...history,
-      { role: 'user', content: query },
-    ];
+    const lowerQuery = query.toLowerCase().trim();
+    let responseMessage = null;
+    let responseType = 'TEXT';
+    let responseProducts = undefined;
+    let navigationTarget = undefined;
 
-    // Call Groq
-    let parsed = null;
-    let parseError = null;
-    try {
-      const raw = await callGroq(messages);
-      let cleaned = raw.trim().replace(/^```json\s*/i, '').replace(/\s*```$/, '');
-      parsed = JSON.parse(cleaned);
-    } catch (e) {
-      parseError = e;
-      console.error('[Agent] Groq/parse failed:', e.message, e.stack);
+    // 1. High-Performance Deterministic Navigation Check
+    if (/(marketplace|market|মার্কেটপ্লেস|বাজার|পণ্য তালিকা|প্রোডাক্ট লিস্ট)/i.test(lowerQuery)) {
+      responseType = 'NAVIGATION';
+      responseMessage = lang === 'bn' ? 'মার্কেটপ্লেসে যাওয়া হচ্ছে...' : 'Navigating to the Marketplace...';
+      navigationTarget = 'marketplace';
+    } else if (/(dashboard|ড্যাশবোর্ড|ওভারভিউ)/i.test(lowerQuery)) {
+      responseType = 'NAVIGATION';
+      responseMessage = lang === 'bn' ? 'ড্যাশবোর্ডে যাওয়া হচ্ছে...' : 'Navigating to the Dashboard...';
+      navigationTarget = 'dashboard';
+    } else if (/(batches|batch registry|অর্ডার তালিকা|অর্ডার বিবরণী)/i.test(lowerQuery)) {
+      responseType = 'NAVIGATION';
+      responseMessage = lang === 'bn' ? 'অর্ডার তালিকায় যাওয়া হচ্ছে...' : 'Navigating to the Order Registry...';
+      navigationTarget = 'batches';
     }
 
-    // Deterministic intent classifier overrides
-    const lowerQuery = query.toLowerCase().trim();
-    if (parsed) {
-      // 1. Force navigate intent if query matches navigation patterns
-      if (/(marketplace|market|মার্কেটপ্লেস|বাজার|পণ্য তালিকা|প্রোডাক্ট লিস্ট)/i.test(lowerQuery)) {
-        parsed.intent = 'navigate';
-        parsed.extractedData = parsed.extractedData || {};
-        parsed.extractedData.page = 'marketplace';
-        if (!parsed.replyMessage) {
-          parsed.replyMessage = lang === 'bn' ? 'মার্কেটপ্লেসে যাওয়া হচ্ছে...' : 'Navigating to the Marketplace...';
+    // 2. High-Performance Deterministic Product Search Check
+    if (!navigationTarget) {
+      const hasSearchVerb = /(show|find|search|খুঁজ|দেখাও|আছে কি|available|stock|দেখান|খুঁজে)/i.test(lowerQuery);
+      const hasProductKeyword = /(product|fertilizer|সার|compost|কম্পোস্ট|item|পণ্য|বায়োচার|biochar)/i.test(lowerQuery);
+      if ((hasSearchVerb && hasProductKeyword) ||
+          /^(fertilizer|সার|compost|কম্পোস্ট|product|পণ্য|biochar|বায়োচার)$/i.test(lowerQuery)) {
+        
+        const lowerProdName = lowerQuery.includes('compost') || lowerQuery.includes('কম্পোস্ট') ? 'compost' :
+                              lowerQuery.includes('biochar') || lowerQuery.includes('বায়োচার') ? 'biochar' : 'fertilizer';
+                              
+        const fallbackProducts = [
+          { id: 'prod-compost', name: 'Premium Organic Compost', category: 'Agriculture', price_bdt: 240, price: '৳ 240', unit: 'Kg', seller: 'Organic SME', dvs: 94, icon: '📦' },
+          { id: 'prod-biochar', name: 'Carbon-Neutral Biochar', category: 'Agriculture', price_bdt: 150, price: '৳ 150', unit: 'Kg', seller: 'SME Co-op', dvs: 92, icon: '🌿' },
+          { id: 'prod-fertilizer', name: 'Eco-Friendly Fertilizer', category: 'Agriculture', price_bdt: 180, price: '৳ 180', unit: 'Kg', seller: 'SME Co-op', dvs: 88, icon: '🌱' }
+        ];
+        
+        let matched = fallbackProducts;
+        if (pool) {
+          try {
+            const prodRes = await queryDB('SELECT * FROM products');
+            if (prodRes && prodRes.rows.length > 0) {
+              matched = prodRes.rows.map(p => ({
+                id: p.id,
+                name: p.name,
+                category: p.category || 'Agriculture',
+                price_bdt: p.price_bdt || p.price || 150,
+                price: `৳ ${p.price_bdt || p.price || 150}`,
+                unit: p.unit || 'Kg',
+                seller: p.seller || 'SME Co-op',
+                dvs: p.dvs || 90,
+                icon: p.category === 'compost' ? '📦' : '🌱'
+              }));
+            }
+          } catch (err) {
+            console.warn('[Agent Product Search] Failed to query products:', err.message);
+          }
         }
-      } else if (/(dashboard|ড্যাশবোর্ড|ওভারভিউ)/i.test(lowerQuery)) {
-        parsed.intent = 'navigate';
-        parsed.extractedData = parsed.extractedData || {};
-        parsed.extractedData.page = 'dashboard';
-      } else if (/(batches|batch registry|অর্ডার তালিকা|অর্ডার বিবরণী)/i.test(lowerQuery)) {
-        parsed.intent = 'navigate';
-        parsed.extractedData = parsed.extractedData || {};
-        parsed.extractedData.page = 'batches';
+
+        responseProducts = matched.filter(p => 
+          p.name.toLowerCase().includes(lowerProdName) || 
+          p.category.toLowerCase().includes(lowerProdName)
+        );
+        if (responseProducts.length === 0) {
+          responseProducts = matched.slice(0, 3);
+        }
+        
+        responseMessage = lang === 'bn' ? 'এখানে কিছু চমৎকার পণ্য রয়েছে যা আপনি দেখতে পারেন:' : 'Here are some excellent products you can view:';
+        responseType = 'PRODUCT_LIST';
       }
-      
-      // 2. Force product search intent if query matches search patterns
-      if (parsed.intent !== 'navigate' && parsed.intent !== 'order') {
-        const hasSearchVerb = /(show|find|search|খুঁজ|দেখাও|আছে কি|available|stock|দেখান|খুঁজে)/i.test(lowerQuery);
-        const hasProductKeyword = /(product|fertilizer|সার|compost|item|পণ্য|বায়োচার|biochar)/i.test(lowerQuery);
-        if ((hasSearchVerb && hasProductKeyword) ||
-            /^(fertilizer|সার|compost|কম্পোস্ট|product|পণ্য|biochar|বায়োচার)$/i.test(lowerQuery)) {
-          parsed.intent = 'product_search';
-          parsed.extractedData = parsed.extractedData || {};
-          parsed.extractedData.productName = lowerQuery.includes('compost') || lowerQuery.includes('কম্পোস্ট') ? 'compost' :
-                                            lowerQuery.includes('biochar') || lowerQuery.includes('বায়োচার') ? 'biochar' : 'fertilizer';
+    }
+
+    // 3. Conversational Fallback via Groq LLM
+    if (!navigationTarget && !responseProducts) {
+      // Build conversation history for context
+      const history = session.history.slice(-6).map(m => ({ role: m.role, content: m.content }));
+      const messages = [
+        { role: 'system', content: AGENT_SYSTEM_PROMPT },
+        ...history,
+        { role: 'user', content: query },
+      ];
+
+      let parsed = null;
+      let parseError = null;
+      try {
+        const raw = await callGroq(messages);
+        let cleaned = raw.trim().replace(/^```json\s*/i, '').replace(/\s*```$/, '');
+        parsed = JSON.parse(cleaned);
+      } catch (e) {
+        parseError = e;
+        console.error('[Agent] Groq/parse failed:', e.message, e.stack);
+      }
+
+      if (parsed && parsed.intent === 'weather') {
+        const cityInput = parsed.extractedData?.city || query;
+        const normalizedCity = normalizeCity(cityInput);
+        if (normalizedCity) {
+          const weather = await getWeather(normalizedCity, lang);
+          if (weather) {
+            responseMessage = lang === 'bn'
+              ? `${weather.city}-এর বর্তমান আবহাওয়া:\n🌡️ তাপমাত্রা: ${weather.temperature}°C (অনুভূতি: ${weather.feelsLike}°C)\n🌤️ অবস্থা: ${weather.description}\n💧 আর্দ্রতা: ${weather.humidity}%\n💨 বাতাসের গতি: ${weather.windSpeed} m/s`
+              : `Current weather in ${weather.city}:\n🌡️ Temperature: ${weather.temperature}°C (Feels like: ${weather.feelsLike}°C)\n🌤️ Condition: ${weather.description}\n💧 Humidity: ${weather.humidity}%\n💨 Wind Speed: ${weather.windSpeed} m/s`;
+          } else {
+            responseMessage = parsed.replyMessage ||
+              (lang === 'bn' ? `দুঃখিত, ${normalizedCity} শহরের আবহাওয়া তথ্য পাওয়া যায়নি।` : `Could not find weather data for ${normalizedCity}.`);
+          }
+        } else {
+          responseMessage = parsed.replyMessage ||
+            (lang === 'bn' ? 'আপনার শহরের নাম জানান, আমি আবহাওয়া তথ্য দেব।' : 'Please tell me your city name for weather information.');
         }
+      } else if (parsed && parsed.replyMessage) {
+        responseMessage = parsed.replyMessage;
+        if (parsed.intent === 'navigate') {
+          responseType = 'NAVIGATION';
+          navigationTarget = parsed.extractedData?.page || 'dashboard';
+        }
+        if (parsed.intent === 'order') {
+          responseType = 'ORDER_CONFIRM_PROMPT';
+          pendingOrder = {
+            productName: parsed.extractedData?.productName || '',
+            quantity: parsed.extractedData?.quantity || 1
+          };
+        }
+      } else {
+        responseMessage = lang === 'bn'
+          ? 'দুঃখিত, আমি বুঝতে পারিনি। অনুগ্রহ করে আবার বলুন।'
+          : `Sorry, I could not understand that. Error: ${parseError ? parseError.message : 'Unknown'}`;
       }
     }
 
     session.history.push({ role: 'user', content: query });
-
-    let responseMessage;
-    let responseType = 'TEXT';
-    let responseProducts = undefined;
-
-    if (parsed && parsed.intent === 'product_search') {
-      const lowerSearch = (parsed.extractedData?.productName || query || '').toLowerCase();
-      const fallbackProducts = [
-        { id: 'prod-compost', name: 'Premium Organic Compost', category: 'Agriculture', price_bdt: 240, price: '৳ 240', unit: 'Kg', seller: 'Organic SME', dvs: 94, icon: '📦' },
-        { id: 'prod-biochar', name: 'Carbon-Neutral Biochar', category: 'Agriculture', price_bdt: 150, price: '৳ 150', unit: 'Kg', seller: 'SME Co-op', dvs: 92, icon: '🌿' },
-        { id: 'prod-fertilizer', name: 'Eco-Friendly Fertilizer', category: 'Agriculture', price_bdt: 180, price: '৳ 180', unit: 'Kg', seller: 'SME Co-op', dvs: 88, icon: '🌱' }
-      ];
-      
-      let matched = fallbackProducts;
-      if (pool) {
-        try {
-          const prodRes = await queryDB('SELECT * FROM products');
-          if (prodRes && prodRes.rows.length > 0) {
-            matched = prodRes.rows.map(p => ({
-              id: p.id,
-              name: p.name,
-              category: p.category || 'Agriculture',
-              price_bdt: p.price_bdt || p.price || 150,
-              price: `৳ ${p.price_bdt || p.price || 150}`,
-              unit: p.unit || 'Kg',
-              seller: p.seller || 'SME Co-op',
-              dvs: p.dvs || 90,
-              icon: p.category === 'compost' ? '📦' : '🌱'
-            }));
-          }
-        } catch (err) {
-          console.warn('[Agent Product Search] Failed to query products:', err.message);
-        }
-      }
-
-      responseProducts = matched.filter(p => 
-        p.name.toLowerCase().includes(lowerSearch) || 
-        p.category.toLowerCase().includes(lowerSearch)
-      );
-      if (responseProducts.length === 0) {
-        responseProducts = matched.slice(0, 3);
-      }
-      responseMessage = parsed.replyMessage || (lang === 'bn' ? 'এখানে কিছু চমৎকার পণ্য রয়েছে যা আপনি দেখতে পারেন:' : 'Here are some excellent products you can view:');
-      responseType = 'PRODUCT_LIST';
-    } else if (parsed && parsed.intent === 'weather') {
-      const cityInput = parsed.extractedData?.city || query;
-      const normalizedCity = normalizeCity(cityInput);
-      if (normalizedCity) {
-        const weather = await getWeather(normalizedCity, lang);
-        if (weather) {
-          responseMessage = lang === 'bn'
-            ? `${weather.city}-এর বর্তমান আবহাওয়া:\n🌡️ তাপমাত্রা: ${weather.temperature}°C (অনুভূতি: ${weather.feelsLike}°C)\n🌤️ অবস্থা: ${weather.description}\n💧 আর্দ্রতা: ${weather.humidity}%\n💨 বাতাসের গতি: ${weather.windSpeed} m/s`
-            : `Current weather in ${weather.city}:\n🌡️ Temperature: ${weather.temperature}°C (Feels like: ${weather.feelsLike}°C)\n🌤️ Condition: ${weather.description}\n💧 Humidity: ${weather.humidity}%\n💨 Wind Speed: ${weather.windSpeed} m/s`;
-        } else {
-          responseMessage = parsed.replyMessage ||
-            (lang === 'bn' ? `দুঃখিত, ${normalizedCity} শহরের আবহাওয়া তথ্য পাওয়া যায়নি।` : `Could not find weather data for ${normalizedCity}.`);
-        }
-      } else {
-        responseMessage = parsed.replyMessage ||
-          (lang === 'bn' ? 'আপনার শহরের নাম জানান, আমি আবহাওয়া তথ্য দেব।' : 'Please tell me your city name for weather information.');
-      }
-    } else if (parsed && parsed.replyMessage) {
-      responseMessage = parsed.replyMessage;
-      if (parsed.intent === 'navigate') responseType = 'NAVIGATION';
-      if (parsed.intent === 'order') responseType = 'ORDER_CONFIRM_PROMPT';
-    } else {
-      // Groq parsed OK but returned no replyMessage — use a safe fallback
-      responseMessage = lang === 'bn'
-        ? 'দুঃখিত, আমি বুঝতে পারিনি। অনুগ্রহ করে আবার বলুন।'
-        : `Sorry, I could not understand that. Error: ${parseError ? parseError.message : 'Unknown'}`;
-    }
-
     session.history.push({ role: 'assistant', content: responseMessage });
 
     res.json({
@@ -1175,11 +1178,8 @@ app.post('/api/agent/message', async (req, res) => {
         message: responseMessage,
         language: lang,
         sessionId: session.sessionId,
-        navigationTarget: (parsed && parsed.intent === 'navigate') ? parsed.extractedData?.page : undefined,
-        pendingOrder: (parsed && parsed.intent === 'order') ? {
-          productName: parsed.extractedData?.productName || '',
-          quantity: parsed.extractedData?.quantity || 1
-        } : undefined,
+        navigationTarget,
+        pendingOrder,
         products: responseProducts
       }
     });
