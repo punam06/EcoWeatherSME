@@ -1993,6 +1993,27 @@ function DashboardView({ onNewBatch }) {
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   BATCH REGISTRY – module-level seed data (stable across renders)
+   ═══════════════════════════════════════════════════════════════ */
+(function() {
+  // defined at module scope so fetchBatches closures always see same reference
+  const _now = new Date();
+  const _seed = _now.getFullYear() * 100 + _now.getMonth() * 10 + _now.getDate();
+  window.__SEED_BATCHES__ = [
+    { id: `BCH-${_seed+0}`, product_name: "Bio-Slurry Concentrate",    status: "certified",  trust_score: 70+((_seed+0*7)%30),  destination_zone: "Old Dhaka",   weight_kg: 80+((_seed+0*13)%220),  created_at: new Date(Date.now()-0*18000000).toISOString() },
+    { id: `BCH-${_seed+1}`, product_name: "Biochar Granules",           status: "active",     trust_score: 70+((_seed+1*7)%30),  destination_zone: "Mirpur",      weight_kg: 80+((_seed+1*13)%220),  created_at: new Date(Date.now()-1*18000000).toISOString() },
+    { id: `BCH-${_seed+2}`, product_name: "EM-1 Bio-Culture",           status: "pending",    trust_score: 70+((_seed+2*7)%30),  destination_zone: "Gulshan",     weight_kg: 80+((_seed+2*13)%220),  created_at: new Date(Date.now()-2*18000000).toISOString() },
+    { id: `BCH-${_seed+3}`, product_name: "Organic Compost",            status: "dispatched", trust_score: 70+((_seed+3*7)%30),  destination_zone: "Savar",       weight_kg: 80+((_seed+3*13)%220),  created_at: new Date(Date.now()-3*18000000).toISOString() },
+    { id: `BCH-${_seed+4}`, product_name: "Liquid Fertiliser",          status: "delivered",  trust_score: 70+((_seed+4*7)%30),  destination_zone: "Dhanmondi",   weight_kg: 80+((_seed+4*13)%220),  created_at: new Date(Date.now()-4*18000000).toISOString() },
+    { id: `BCH-${_seed+5}`, product_name: "Thermal-Safe Vaccine Batch", status: "certified",  trust_score: 70+((_seed+5*7)%30),  destination_zone: "Uttara",      weight_kg: 80+((_seed+5*13)%220),  created_at: new Date(Date.now()-5*18000000).toISOString() },
+    { id: `BCH-${_seed+6}`, product_name: "Fresh Dairy Mix",            status: "active",     trust_score: 70+((_seed+6*7)%30),  destination_zone: "Banani",      weight_kg: 80+((_seed+6*13)%220),  created_at: new Date(Date.now()-6*18000000).toISOString() },
+    { id: `BCH-${_seed+7}`, product_name: "Carbon-Neutral Biochar",     status: "certified",  trust_score: 70+((_seed+7*7)%30),  destination_zone: "Motijheel",   weight_kg: 80+((_seed+7*13)%220),  created_at: new Date(Date.now()-7*18000000).toISOString() },
+    { id: `BCH-${_seed+8}`, product_name: "Cold-Chain Fish Paste",      status: "pending",    trust_score: 70+((_seed+8*7)%30),  destination_zone: "Jatrabari",   weight_kg: 80+((_seed+8*13)%220),  created_at: new Date(Date.now()-8*18000000).toISOString() },
+    { id: `BCH-${_seed+9}`, product_name: "Poultry Probiotic Mix",      status: "dispatched", trust_score: 70+((_seed+9*7)%30),  destination_zone: "Tejgaon",     weight_kg: 80+((_seed+9*13)%220),  created_at: new Date(Date.now()-9*18000000).toISOString() },
+  ];
+})();
+
 function BatchRegistry({ onNewBatch }) {
   const STATUS_TABS = ["All", "Pending", "Active", "Certified", "Dispatched", "Delivered"];
   const STATUS_COLORS = {
@@ -2010,35 +2031,19 @@ function BatchRegistry({ onNewBatch }) {
   const [selectedBatch, setSelected]  = useState(null);
   const [lastFetched, setLastFetched] = useState(null);
 
-  const SEED_BATCHES = (() => {
-    const now = new Date();
-    const seed = now.getFullYear() * 100 + now.getMonth() * 10 + now.getDate();
-    const statuses = ["certified", "active", "pending", "dispatched", "delivered", "certified", "active", "certified"];
-    const products = ["Bio-Slurry Concentrate", "Biochar Granules", "EM-1 Bio-Culture", "Organic Compost", "Liquid Fertiliser", "Thermal-Safe Vaccine Batch", "Fresh Dairy Mix", "Carbon-Neutral Biochar"];
-    const zones = ["Old Dhaka", "Mirpur", "Gulshan", "Savar", "Dhanmondi", "Uttara", "Banani", "Motijheel"];
-    return statuses.map((status, i) => ({
-      id: `BCH-${seed + i}`,
-      product_name: products[i],
-      status,
-      trust_score: 70 + ((seed + i * 7) % 30),
-      destination_zone: zones[i % zones.length],
-      weight_kg: 80 + ((seed + i * 13) % 220),
-      created_at: new Date(Date.now() - i * 3600000 * 5).toISOString(),
-    }));
-  })();
-
   const fetchBatches = async () => {
     setIsLoading(true);
     try {
       const res = await fetch(`${BACKEND_URL}/api/batches`);
       const json = await res.json();
       if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-        setBatches(json.data);
+        // normalise status field to lowercase so filters always work
+        setBatches(json.data.map(b => ({ ...b, status: (b.status || "").trim().toLowerCase() })));
       } else {
-        setBatches(SEED_BATCHES);
+        setBatches(window.__SEED_BATCHES__ || []);
       }
     } catch (_) {
-      setBatches(SEED_BATCHES);
+      setBatches(window.__SEED_BATCHES__ || []);
     } finally {
       setIsLoading(false);
       setLastFetched(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
@@ -2047,14 +2052,19 @@ function BatchRegistry({ onNewBatch }) {
 
   useEffect(() => { fetchBatches(); }, []);
 
+  const normalise = s => (s || "").trim().toLowerCase();
   const filtered = batches.filter(b => {
-    const tabMatch = activeTab === "All" || b.status?.toLowerCase() === activeTab.toLowerCase();
-    const searchMatch = !search || b.id?.toLowerCase().includes(search.toLowerCase()) || b.product_name?.toLowerCase().includes(search.toLowerCase()) || b.destination_zone?.toLowerCase().includes(search.toLowerCase());
+    const tabMatch = activeTab === "All" || normalise(b.status) === normalise(activeTab);
+    const q = search.toLowerCase();
+    const searchMatch = !search
+      || (b.id || "").toLowerCase().includes(q)
+      || (b.product_name || b.product || "").toLowerCase().includes(q)
+      || (b.destination_zone || b.dest || "").toLowerCase().includes(q);
     return tabMatch && searchMatch;
   });
 
   const tabCounts = STATUS_TABS.reduce((acc, t) => {
-    acc[t] = t === "All" ? batches.length : batches.filter(b => b.status?.toLowerCase() === t.toLowerCase()).length;
+    acc[t] = t === "All" ? batches.length : batches.filter(b => normalise(b.status) === normalise(t)).length;
     return acc;
   }, {});
 
