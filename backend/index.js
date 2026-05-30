@@ -1261,7 +1261,7 @@ app.post('/api/orders/voice', asyncHandler(async (req, res) => {
       message: `আপনার অর্ডার সফলভাবে নেওয়া হয়েছে: ${matchedProduct.name}, পরিমাণ: ${finalQuantity}।`
     }
   });
-});
+}));
 
 app.post('/api/batches/certify', asyncHandler(async (req, res) => {
   try {
