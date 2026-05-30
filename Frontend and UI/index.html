@@ -158,6 +158,7 @@
       outline-offset: 2px;
     }
   </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
   <div id="root"></div>
@@ -696,6 +697,107 @@ function IoTForm({ onResult }) {
               <div><span style={{ color: ACCENT.green }}>Processor:</span> #07 (anonymized)</div>
             </div>
           </div>
+          <button
+            onClick={() => {
+              const { jsPDF } = window.jspdf;
+              const doc = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4'
+              });
+              
+              // Add a border
+              doc.setDrawColor(46, 125, 50);
+              doc.setLineWidth(1.5);
+              doc.rect(5, 5, 200, 287);
+              
+              // Header
+              doc.setFont("helvetica", "bold");
+              doc.setFontSize(22);
+              doc.setTextColor(46, 125, 50);
+              doc.text("EcoSortha AI", 105, 30, { align: "center" });
+              
+              doc.setFontSize(14);
+              doc.setTextColor(15, 23, 42);
+              doc.text("CLIMATESHIELD BATCH CERTIFICATE", 105, 42, { align: "center" });
+              
+              doc.setDrawColor(200, 200, 200);
+              doc.setLineWidth(0.5);
+              doc.line(20, 48, 190, 48);
+              
+              // Content
+              doc.setFont("helvetica", "normal");
+              doc.setFontSize(12);
+              doc.setTextColor(51, 65, 85);
+              
+              let y = 60;
+              doc.setFont("helvetica", "bold");
+              doc.text("Batch ID:", 30, y);
+              doc.setFont("helvetica", "normal");
+              doc.text(batchNum, 75, y);
+              
+              y += 12;
+              doc.setFont("helvetica", "bold");
+              doc.text("BARI Trust Score:", 30, y);
+              doc.setFont("helvetica", "normal");
+              doc.text(`${ts} / 100`, 75, y);
+              
+              y += 12;
+              doc.setFont("helvetica", "bold");
+              doc.text("Parameters:", 30, y);
+              doc.setFont("helvetica", "normal");
+              doc.text(`pH: ${pH}  |  EC: ${EC} mS/cm  |  Temp: ${temp} C`, 75, y);
+              
+              y += 12;
+              doc.setFont("helvetica", "bold");
+              doc.text("Treatment Ratio:", 30, y);
+              doc.setFont("helvetica", "normal");
+              doc.text(ratio, 75, y);
+              
+              y += 12;
+              doc.setFont("helvetica", "bold");
+              doc.text("Fermentation Days:", 30, y);
+              doc.setFont("helvetica", "normal");
+              doc.text(`${days} Days`, 75, y);
+              
+              y += 12;
+              doc.setFont("helvetica", "bold");
+              doc.text("Verification Status:", 30, y);
+              doc.setFont("helvetica", "normal");
+              doc.setTextColor(46, 125, 50);
+              doc.text("VERIFIED COMPLIANT", 75, y);
+              doc.setTextColor(51, 65, 85);
+              
+              // Add the QR code image if it exists
+              if (qrCodeImg) {
+                try {
+                  doc.addImage(qrCodeImg, 'PNG', 75, y + 15, 60, 60);
+                } catch (e) {
+                  console.error("Failed to add QR image to PDF:", e);
+                }
+              }
+              
+              y += 90;
+              doc.setDrawColor(200, 200, 200);
+              doc.line(20, y, 190, y);
+              
+              y += 10;
+              doc.setFont("helvetica", "italic");
+              doc.setFontSize(10);
+              doc.setTextColor(100, 116, 139);
+              doc.text("EcoSortha AI ClimateShield — Decentralized Circular SME Compliance Network", 105, y, { align: "center" });
+              
+              doc.save(`EcoSortha_Certificate_${batchNum}.pdf`);
+            }}
+            style={{
+              marginTop: 14, width: "100%", padding: "10px", borderRadius: 8,
+              border: `1px solid ${ACCENT.green}`, background: ACCENT.greenBg,
+              color: ACCENT.green, cursor: "pointer", fontSize: 12, fontWeight: 700,
+              transition: "all 0.25s ease", textAlign: "center", display: "block"
+            }}
+          >
+            📥 Download PDF Certificate
+          </button>
         </div>
       )}
     </div>
