@@ -650,7 +650,7 @@ function IoTForm({ onResult, prefilledBatchId, prefilledDispatchZone, setPrefill
               doc.setFont("helvetica", "bold");
               doc.setFontSize(22);
               doc.setTextColor(46, 125, 50);
-              doc.text("EcoSortha AI", 105, 30, { align: "center" });
+              doc.text("CLimaLogix AI", 105, 30, { align: "center" });
               
               doc.setFontSize(14);
               doc.setTextColor(15, 23, 42);
@@ -736,9 +736,9 @@ function IoTForm({ onResult, prefilledBatchId, prefilledDispatchZone, setPrefill
               doc.setFont("helvetica", "italic");
               doc.setFontSize(10);
               doc.setTextColor(100, 116, 139);
-              doc.text("EcoSortha AI ClimateShield — Decentralized Circular SME Compliance Network", 105, y, { align: "center" });
+              doc.text("CLimaLogix AI ClimateShield — Decentralized Circular SME Compliance Network", 105, y, { align: "center" });
               
-              doc.save(`EcoSortha_Certificate_${batchNum}.pdf`);
+              doc.save(`CLimaLogix_Certificate_${batchNum}.pdf`);
             }}
             style={{
               marginTop: 14, width: "100%", padding: "10px", borderRadius: 8,
@@ -1475,7 +1475,7 @@ function ESGCard({ trustScore, dvs }) {
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>EcoSortha ESG Rating</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>CLimaLogix ESG Rating</div>
             <div style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.6 }}>
               Your agricultural supply chain operates with exceptional environmental and social compliance. 
               {!isSimulated && <span style={{ color: ACCENT.amber }}> Run simulator to refine this grade dynamically.</span>}
@@ -2470,7 +2470,7 @@ const BACKEND_URL = IS_LOCAL_DEV ? 'http://localhost:5001' : 'https://backsme.on
 
 function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerificationDispatchZone }) {
   const [messages, setMessages] = useState([
-    { role: "system", content: "Hello! I am EcoSortha AI, your voice and text-based assistant. I can provide microclimate forecasts, smart dispatch suggestions, or analyze files and context. How can I help you today?", time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }
+    { role: "system", content: "Hello! I am CLimaLogix AI, your voice and text-based assistant. I can provide microclimate forecasts, smart dispatch suggestions, or analyze files and context. How can I help you today?", time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }
   ]);
   const [input, setInput] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -2766,7 +2766,7 @@ function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerific
 
   return (
     <div style={{ animation: "fadeSlideIn 0.3s ease", height: "calc(100vh - 200px)", display: "flex", flexDirection: "column" }}>
-      <PageHeader title="EcoSortha AI Assistant" subtitle="Voice, Text & Context-Aware Microclimate Chatbot" />
+      <PageHeader title="CLimaLogix AI Assistant" subtitle="Voice, Text & Context-Aware Microclimate Chatbot" />
       
       <Card hover={false} style={{ flex: 1, display: "flex", flexDirection: "column", padding: 0, overflow: "hidden" }}>
         
@@ -2795,7 +2795,7 @@ function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerific
                 {m.content}
               </div>
               <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 6, padding: "0 4px" }}>
-                {m.role === "user" ? "You" : "EcoSortha AI"} • {m.time}
+                {m.role === "user" ? "You" : "CLimaLogix AI"} • {m.time}
               </div>
             </div>
           ))}
@@ -3313,7 +3313,7 @@ function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerifica
     {
       role: "assistant",
       type: "TEXT",
-      content: "Hello! I am your EcoSortha AI Agricultural Assistant. How can I help you with BARI compliance, product catalog searches, or order dispatches today?"
+      content: "Hello! I am your CLimaLogix AI Agricultural Assistant. How can I help you with BARI compliance, product catalog searches, or order dispatches today?"
     }
   ]);
   const [inputValue, setInputValue] = useState("");
@@ -3590,7 +3590,7 @@ function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerifica
           >
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#10B981" }}></div>
-              <span style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>EcoSortha AI Agent</span>
+              <span style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>CLimaLogix AI Agent</span>
             </div>
             
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -3835,7 +3835,7 @@ function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerifica
             {isProcessing && (
               <div style={{ display: "flex", gap: 4, padding: 8 }}>
                 <span style={{ fontSize: 14 }}>⏳</span>
-                <span style={{ fontSize: 11, color: "var(--text-dim)" }}>EcoSortha Agent thinking...</span>
+                <span style={{ fontSize: 11, color: "var(--text-dim)" }}>CLimaLogix Agent thinking...</span>
               </div>
             )}
 
@@ -3930,7 +3930,7 @@ const TABS = [
   { label: "Chatbot", icon: "💬" }
 ];
 
-function EcoSorthaApp() {
+function CLimaLogixApp() {
   const [tab, setTab] = useState(0);
   const [trustScore, setTrustScore] = useState(84);
   const [isRegisteringBatch, setIsRegisteringBatch] = useState(false);
@@ -4028,7 +4028,7 @@ function EcoSorthaApp() {
             animation: "pulseGlow 3s ease-in-out infinite",
           }}>🌱</div>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>EcoSortha AI</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>CLimaLogix AI</div>
             <div style={{ fontSize: 9, color: "var(--text-dim)", letterSpacing: "0.14em", fontWeight: 500 }}>CLIMATESHIELD · SME DASHBOARD</div>
           </div>
           {/* New SME Dropdown */}
@@ -4199,7 +4199,7 @@ function EcoSorthaApp() {
         WebkitBackdropFilter: "var(--backdrop-blur)",
       }}>
         <div style={{ fontSize: 9, color: "var(--text-dim)", letterSpacing: "0.1em", fontWeight: 500 }}>
-          ECOSORTHA AI CLIMATESHIELD · INFINITY AI BUILDFEST 2026 · TEAM GLIDERS · TRACK 4: E-COMMERCE
+          CLIMALOGIX AI CLIMATESHIELD · INFINITY AI BUILDFEST 2026 · TEAM GLIDERS · TRACK 4: E-COMMERCE
         </div>
         <div style={{ display: "flex", gap: 16, fontSize: 9, color: "var(--text-dim)" }}>
           <span>Trust Score: <span style={{ color: ACCENT.green, fontFamily: "'JetBrains Mono', monospace" }}>{trustScore}/100</span></span>
@@ -4216,7 +4216,7 @@ function EcoSorthaApp() {
   );
 }
 
-window.EcoSorthaApp = EcoSorthaApp;
+window.CLimaLogixApp = CLimaLogixApp;
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<EcoSorthaApp />);
+root.render(<CLimaLogixApp />);
