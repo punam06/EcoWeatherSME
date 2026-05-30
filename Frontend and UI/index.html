@@ -543,7 +543,7 @@ function ThemeToggle({ theme, onToggle }) {
 /* ═══════════════════════════════════════════════════════════════
    TAB 1: BATCH VERIFICATION (IoT Intake)
    ═══════════════════════════════════════════════════════════════ */
-function IoTForm({ onResult }) {
+function IoTForm({ onResult, prefilledBatchId, prefilledDispatchZone, setPrefilledBatchId, setPrefilledDispatchZone }) {
   const [pH, setPH] = useState(4.1);
   const [EC, setEC] = useState(3.4);
   const [temp, setTemp] = useState(28);
@@ -555,6 +555,54 @@ function IoTForm({ onResult }) {
   const [qrCodeImg, setQrCodeImg] = useState(null);
   const [isCertifying, setIsCertifying] = useState(false);
   const [batchNum, setBatchNum] = useState("");
+
+  const [selectedBatchId, setSelectedBatchId] = useState("");
+  const [dispatchZone, setDispatchZone] = useState("");
+  const [registeredBatches, setRegisteredBatches] = useState([]);
+
+  // Fetch registered batches to populate the Batch Selection Dropdown
+  useEffect(() => {
+    const loadBatches = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL_HTML}/api/batches`);
+        const result = await response.json();
+        if (result.success && Array.isArray(result.data)) {
+          setRegisteredBatches(result.data);
+        } else {
+          setRegisteredBatches(window.__SEED_BATCHES__ || []);
+        }
+      } catch (err) {
+        setRegisteredBatches(window.__SEED_BATCHES__ || []);
+      }
+    };
+    loadBatches();
+  }, []);
+
+  // Sync state if pre-populated from AI chatbot agent
+  useEffect(() => {
+    if (prefilledBatchId) {
+      setSelectedBatchId(prefilledBatchId);
+      
+      const matched = registeredBatches.find(b => b.id === prefilledBatchId || b.batch_number === prefilledBatchId);
+      if (matched) {
+        setDispatchZone(matched.destination_zone || matched.dest || "Old Dhaka");
+      } else if (prefilledDispatchZone) {
+        setDispatchZone(prefilledDispatchZone);
+      }
+    }
+  }, [prefilledBatchId, prefilledDispatchZone, registeredBatches]);
+
+  const handleBatchSelect = (bId) => {
+    setSelectedBatchId(bId);
+    if (setPrefilledBatchId) setPrefilledBatchId(bId);
+    
+    const matched = registeredBatches.find(b => b.id === bId || b.batch_number === bId);
+    if (matched) {
+      const zone = matched.destination_zone || matched.dest || "Old Dhaka";
+      setDispatchZone(zone);
+      if (setPrefilledDispatchZone) setPrefilledDispatchZone(zone);
+    }
+  };
 
   useEffect(() => {
     const fetchTrustScore = async () => {
@@ -603,6 +651,43 @@ function IoTForm({ onResult }) {
   return (
     <div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 18 }}>
+        {/* NEW STATEFUL BATCH ID & DISPATCH ZONE SELECTIONS */}
+        <div style={{ gridColumn: "1 / -1" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <div>
+              <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>Batch ID (Registered)</label>
+              <select 
+                value={selectedBatchId} 
+                onChange={e => handleBatchSelect(e.target.value)}
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+              >
+                <option value="">Select registered batch</option>
+                {registeredBatches.map(b => (
+                  <option key={b.id || b.batch_number} value={b.id || b.batch_number}>
+                    {b.id || b.batch_number} - {b.product_name || b.product}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>Dispatch Zone</label>
+              <select 
+                value={dispatchZone} 
+                onChange={e => { setDispatchZone(e.target.value); if (setPrefilledDispatchZone) setPrefilledDispatchZone(e.target.value); }}
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+              >
+                <option value="">Select zone</option>
+                {Object.keys(UHI_ZONES).map(z => <option key={z} value={z}>{z}</option>)}
+              </select>
+            </div>
+          </div>
+          {selectedBatchId && (
+            <div style={{ fontSize: 11, color: ACCENT.green, marginTop: 8, fontWeight: 600 }}>
+              📦 Selected Batch Product: {registeredBatches.find(b => b.id === selectedBatchId || b.batch_number === selectedBatchId)?.product_name || 'Registered Material'}
+            </div>
+          )}
+        </div>
+
         <div>
           <SliderRow label="pH Level" min={3.0} max={7.0} step={0.1} value={pH} onChange={setPH} color={ACCENT.green} />
           <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: 3.8–4.2</div>
@@ -644,11 +729,26 @@ function IoTForm({ onResult }) {
           if (ts >= 60) {
             setIsCertifying(true);
             try {
-              const res = await window.APIClient.certifyBatch({ batchId: `BCH-${Date.now().toString().slice(-6)}` });
+              const res = await window.APIClient.certifyBatch({ 
+                batchId: selectedBatchId || `BCH-${Date.now().toString().slice(-6)}`,
+                trustScore: ts
+              });
               if (res.success) {
                 setQrCodeImg(res.data.qrCodeDataUrl);
                 setBatchNum(res.data.batchId);
                 setCertified(true);
+                
+                // Sync list states locally
+                const updateLocalBatch = b => {
+                  if (b.id === res.data.batchId || b.batch_number === res.data.batchId) {
+                    return { ...b, status: 'certified', trust_score: ts };
+                  }
+                  return b;
+                };
+                if (window.__SEED_BATCHES__) {
+                  window.__SEED_BATCHES__ = window.__SEED_BATCHES__.map(updateLocalBatch);
+                }
+                setRegisteredBatches(prev => prev.map(updateLocalBatch));
               }
             } catch (err) {
               console.error("Batch certification failed:", err);
@@ -731,12 +831,28 @@ function IoTForm({ onResult }) {
               doc.setFontSize(12);
               doc.setTextColor(51, 65, 85);
               
+              const matched = registeredBatches.find(b => b.id === batchNum || b.batch_number === batchNum);
+              const pName = matched ? (matched.product_name || matched.product) : "Organic Product";
+              const pZone = dispatchZone || (matched ? (matched.destination_zone || matched.dest) : "Old Dhaka");
+
               let y = 60;
               doc.setFont("helvetica", "bold");
               doc.text("Batch ID:", 30, y);
               doc.setFont("helvetica", "normal");
               doc.text(batchNum, 75, y);
               
+              y += 12;
+              doc.setFont("helvetica", "bold");
+              doc.text("Product Name:", 30, y);
+              doc.setFont("helvetica", "normal");
+              doc.text(pName, 75, y);
+
+              y += 12;
+              doc.setFont("helvetica", "bold");
+              doc.text("Dispatch Zone:", 30, y);
+              doc.setFont("helvetica", "normal");
+              doc.text(pZone, 75, y);
+
               y += 12;
               doc.setFont("helvetica", "bold");
               doc.text("BARI Trust Score:", 30, y);
@@ -2276,6 +2392,69 @@ function BatchRegistry({ onNewBatch }) {
 }
 
 function RegisterBatch({ onCancel }) {
+  const [productName, setProductName] = useState("");
+  const [productType, setProductType] = useState("Bio-Slurry");
+  const [weight, setWeight] = useState("100");
+  const [packagingType, setPackagingType] = useState("Standard");
+  const [destinationZone, setDestinationZone] = useState("Old Dhaka");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const handleSubmit = async () => {
+    if (!productName.trim()) {
+      setErrorMsg("Product Name is required");
+      return;
+    }
+    if (destinationZone === "Select zone" || !destinationZone) {
+      setErrorMsg("Please select a valid Destination Zone");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMsg("");
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/batches`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          product_name: productName,
+          product_type: productType,
+          weight_kg: weight,
+          packaging_type: packagingType,
+          destination_zone: destinationZone,
+          batch_number: `BCH-${Date.now().toString().slice(-6)}`
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        if (window.__SEED_BATCHES__) {
+          const freshBatch = {
+            id: result.data.id || result.data.batch_number,
+            product_name: result.data.product_name,
+            status: result.data.status || 'pending',
+            trust_score: result.data.trust_score || 0,
+            destination_zone: result.data.destination_zone,
+            weight_kg: result.data.weight_kg,
+            created_at: result.data.created_at || new Date().toISOString()
+          };
+          window.__SEED_BATCHES__.unshift(freshBatch);
+        }
+        onCancel();
+      } else {
+        setErrorMsg(result.error || "Failed to create batch");
+      }
+    } catch (error) {
+      console.error("Failed to register batch:", error);
+      setErrorMsg("Network error. Unable to reach backend server.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div style={{ animation: "fadeSlideIn 0.3s ease" }}>
       <button onClick={onCancel} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: 14, marginBottom: 24, display: "flex", gap: 8, alignItems: "center", padding: 0 }}>
@@ -2285,27 +2464,61 @@ function RegisterBatch({ onCancel }) {
       
       <Card style={{ maxWidth: 700 }} hover={false}>
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          {errorMsg && (
+            <div style={{ background: "rgba(239, 68, 68, 0.1)", border: `1px solid ${ACCENT.redBorder || "#ef4444"}`, padding: "12px 16px", borderRadius: 8, color: ACCENT.red, fontSize: 13, fontWeight: 500 }}>
+              ⚠️ {errorMsg}
+            </div>
+          )}
+
           <div>
             <label style={{ display: "block", fontSize: 13, marginBottom: 8, fontWeight: 500, color: "var(--text-primary)" }}>Product Name</label>
-            <input type="text" placeholder="e.g. Premium Bio-Slurry Concentrate" style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }} />
+            <input 
+              type="text" 
+              placeholder="e.g. Premium Bio-Slurry Concentrate" 
+              value={productName}
+              onChange={e => setProductName(e.target.value)}
+              style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }} 
+            />
           </div>
+          
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
             <div>
               <label style={{ display: "block", fontSize: 13, marginBottom: 8, fontWeight: 500, color: "var(--text-primary)" }}>Product Type</label>
-              <select style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}>
+              <select 
+                value={productType}
+                onChange={e => setProductType(e.target.value)}
+                style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}
+              >
                 <option>Bio-Slurry</option>
                 <option>Biochar</option>
+                <option>EM-1 Bio-Culture</option>
+                <option>Organic Compost</option>
+                <option>Liquid Fertiliser</option>
+                <option>Thermal-Safe Vaccine Batch</option>
+                <option>Fresh Dairy Mix</option>
+                <option>Cold-Chain Fish Paste</option>
+                <option>Poultry Probiotic Mix</option>
               </select>
             </div>
             <div>
               <label style={{ display: "block", fontSize: 13, marginBottom: 8, fontWeight: 500, color: "var(--text-primary)" }}>Weight (kg)</label>
-              <input type="number" defaultValue="100" style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }} />
+              <input 
+                type="number" 
+                value={weight}
+                onChange={e => setWeight(e.target.value)}
+                style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }} 
+              />
             </div>
           </div>
+          
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
             <div>
               <label style={{ display: "block", fontSize: 13, marginBottom: 8, fontWeight: 500, color: "var(--text-primary)" }}>Packaging Type</label>
-              <select style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}>
+              <select 
+                value={packagingType}
+                onChange={e => setPackagingType(e.target.value)}
+                style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}
+              >
                 <option>Standard</option>
                 <option>Insulated</option>
                 <option>Thermal Bin</option>
@@ -2313,7 +2526,11 @@ function RegisterBatch({ onCancel }) {
             </div>
             <div>
               <label style={{ display: "block", fontSize: 13, marginBottom: 8, fontWeight: 500, color: "var(--text-primary)" }}>Destination Zone</label>
-              <select style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}>
+              <select 
+                value={destinationZone}
+                onChange={e => setDestinationZone(e.target.value)}
+                style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}
+              >
                 <option>Select zone</option>
                 {Object.keys(UHI_ZONES).map(z => <option key={z}>{z}</option>)}
               </select>
@@ -2327,7 +2544,13 @@ function RegisterBatch({ onCancel }) {
 
           <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 8 }}>
             <button onClick={onCancel} style={{ padding: "12px 24px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", cursor: "pointer", fontWeight: 500, fontSize: 14 }}>Cancel</button>
-            <button onClick={onCancel} style={{ padding: "12px 24px", borderRadius: 8, border: "none", background: ACCENT.greenDark, color: "#fff", cursor: "pointer", fontWeight: 500, fontSize: 14 }}>Create Batch</button>
+            <button 
+              onClick={handleSubmit} 
+              disabled={isSubmitting}
+              style={{ padding: "12px 24px", borderRadius: 8, border: "none", background: ACCENT.greenDark, color: "#fff", cursor: isSubmitting ? "wait" : "pointer", fontWeight: 500, fontSize: 14 }}
+            >
+              {isSubmitting ? "Registering..." : "Create Batch"}
+            </button>
           </div>
         </div>
       </Card>
@@ -2350,7 +2573,7 @@ const MOCK_PRODUCTS = [
 const IS_LOCAL_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 const BACKEND_URL = IS_LOCAL_DEV ? 'http://localhost:5001' : 'https://backsme.onrender.com';
 
-function ChatbotView({ setTab, products = [] }) {
+function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerificationDispatchZone }) {
   const [messages, setMessages] = useState([
     { role: "system", content: "Hello! I am EcoSortha AI, your voice and text-based assistant. I can provide microclimate forecasts, smart dispatch suggestions, or analyze files and context. How can I help you today?", time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }
   ]);
@@ -2503,6 +2726,12 @@ function ChatbotView({ setTab, products = [] }) {
 
         // Handle navigation routing
         if (agentResponse.type === "NAVIGATION" && agentResponse.navigationTarget) {
+          if (agentResponse.navigationTarget.toLowerCase() === 'batch_verification' && agentResponse.verifiedBatchId) {
+            setVerificationBatchId(agentResponse.verifiedBatchId);
+            if (agentResponse.verifiedDispatchZone) {
+              setVerificationDispatchZone(agentResponse.verifiedDispatchZone);
+            }
+          }
           const pageRoutes = {
             'dashboard': 0,
             'orders': 1,
@@ -3183,7 +3412,7 @@ function CustomSmeView({ products, setProducts, customSmeName, setCustomSmeName 
   );
 }
 
-function AgentPanel({ setTab, products = [] }) {
+function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerificationDispatchZone }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     {
@@ -3314,6 +3543,12 @@ function AgentPanel({ setTab, products = [] }) {
 
         // Handle navigation routing dynamically
         if (agentData.type === "NAVIGATION" && agentData.navigationTarget) {
+          if (agentData.navigationTarget.toLowerCase().includes("verification") && agentData.verifiedBatchId) {
+            setVerificationBatchId(agentData.verifiedBatchId);
+            if (agentData.verifiedDispatchZone) {
+              setVerificationDispatchZone(agentData.verifiedDispatchZone);
+            }
+          }
           setTimeout(() => {
             const target = agentData.navigationTarget.toLowerCase();
             if (target.includes("marketplace") || target.includes("market")) {
@@ -3809,6 +4044,8 @@ function EcoSorthaApp() {
   const [productsList, setProductsList] = useState(MOCK_PRODUCTS);
   const [selectedSme, setSelectedSme] = useState("green_refineries");
   const [customSmeName, setCustomSmeName] = useState("My Custom SME");
+  const [verificationBatchId, setVerificationBatchId] = useState("");
+  const [verificationDispatchZone, setVerificationDispatchZone] = useState("");
 
   // Calculate Generalized Dhaka Division Scores (averaging all zones in Dhaka Division)
   const calcGeneralizedScores = (ts) => {
@@ -3990,7 +4227,13 @@ function EcoSorthaApp() {
             <div>
               <SectionLabel icon="📡" text="Batch Sensor Verification" />
               <Card>
-                <IoTForm onResult={setTrustScore} />
+                <IoTForm 
+                  onResult={setTrustScore} 
+                  prefilledBatchId={verificationBatchId}
+                  prefilledDispatchZone={verificationDispatchZone}
+                  setPrefilledBatchId={setVerificationBatchId}
+                  setPrefilledDispatchZone={setVerificationDispatchZone}
+                />
               </Card>
             </div>
             <div>
@@ -4033,7 +4276,14 @@ function EcoSorthaApp() {
         )}
 
         {tab === 6 && <MarketplaceView products={productsList} />}
-        {tab === 7 && <ChatbotView setTab={setTab} products={productsList} />}
+        {tab === 7 && (
+          <ChatbotView 
+            setTab={setTab} 
+            products={productsList} 
+            setVerificationBatchId={setVerificationBatchId}
+            setVerificationDispatchZone={setVerificationDispatchZone}
+          />
+        )}
         {tab === 8 && selectedSme === "custom_sme" && (
           <CustomSmeView 
             products={productsList} 
@@ -4061,7 +4311,12 @@ function EcoSorthaApp() {
           <span>DVS: <span style={{ color: dvs >= 75 ? ACCENT.green : dvs >= 55 ? ACCENT.amber : ACCENT.red, fontFamily: "'JetBrains Mono', monospace" }}>{dvs}/100</span></span>
         </div>
       </footer>
-      <AgentPanel setTab={setTab} products={productsList} />
+      <AgentPanel 
+        setTab={setTab} 
+        products={productsList} 
+        setVerificationBatchId={setVerificationBatchId}
+        setVerificationDispatchZone={setVerificationDispatchZone}
+      />
     </div>
   );
 }

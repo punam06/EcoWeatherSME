@@ -628,12 +628,13 @@ const dbRequiredMiddleware = (_req: Request, res: Response) => {
   });
 };
 
-app.get('/api/batches', dbRequiredMiddleware);
-app.post('/api/batches', dbRequiredMiddleware);
-app.get('/api/batches/:id', dbRequiredMiddleware);
-app.put('/api/batches/:id', dbRequiredMiddleware);
-app.post('/api/batches/:id/readings', dbRequiredMiddleware);
-app.get('/api/batches/:id/readings', dbRequiredMiddleware);
+// Legacy stubs requiring Supabase. Commented out batches to allow our in-memory batch store fallback to work.
+// app.get('/api/batches', dbRequiredMiddleware);
+// app.post('/api/batches', dbRequiredMiddleware);
+// app.get('/api/batches/:id', dbRequiredMiddleware);
+// app.put('/api/batches/:id', dbRequiredMiddleware);
+// app.post('/api/batches/:id/readings', dbRequiredMiddleware);
+// app.get('/api/batches/:id/readings', dbRequiredMiddleware);
 app.get('/api/users', dbRequiredMiddleware);
 app.post('/api/users', dbRequiredMiddleware);
 app.post('/api/zones', dbRequiredMiddleware);
