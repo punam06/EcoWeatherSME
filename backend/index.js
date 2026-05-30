@@ -783,6 +783,71 @@ app.post('/api/calculate-trust-score', asyncHandler(async (req, res) => {
   });
 }));
 
+
+/* ═══════════════════════════════════════════════════════════════
+   ESG METRICS ENDPOINT
+   ═══════════════════════════════════════════════════════════════ */
+
+app.get('/api/esg', asyncHandler(async (req, res) => {
+  const trustScore = parseFloat(req.query.trustScore ?? '84');
+  const dvs = parseFloat(req.query.dvs ?? '72');
+
+  const eScore = Math.min(100, Math.round((trustScore * 0.5) + (dvs * 0.5)));
+  const sScore = Math.min(100, Math.round((trustScore * 0.4) + 54));
+  const gScore = Math.min(100, Math.round((trustScore * 0.6) + 38));
+  const esgScore = Math.round((eScore + sScore + gScore) / 3);
+
+  const plasticOffset = Math.round(trustScore * 0.85);
+  const carbonSeq = Math.round(trustScore * 1.4);
+  const waterSaved = Math.round(trustScore * 18.5);
+  const wasteReduced = Math.round(trustScore * 3.2);
+  const spoilagePrevented = Math.round(trustScore * 2.1 * (dvs / 100) * 40);
+
+  const metrics = {
+    e_score: eScore,
+    s_score: sScore,
+    g_score: gScore,
+    esg_score: esgScore,
+    plastic_offset_kg: plasticOffset,
+    carbon_sequestered_kg: carbonSeq,
+    water_saved_l: waterSaved,
+    waste_reduced_kg: wasteReduced,
+    trust_score: trustScore,
+    dvs_score: dvs,
+    month: new Date().toISOString(),
+    spoilage_prevented_bdt: spoilagePrevented
+  };
+
+  // Gracefully save to database if connection pool is configured
+  if (pool) {
+    try {
+      await pool.query(
+        `INSERT INTO esg_metrics 
+         (month, spoilage_prevented_bdt, plastic_offset_kg, carbon_sequestered_kg, water_saved_l, waste_reduced_kg, e_score, s_score, g_score, esg_score, trust_score, dvs_score)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [
+          metrics.month,
+          metrics.spoilage_prevented_bdt,
+          metrics.plastic_offset_kg,
+          metrics.carbon_sequestered_kg,
+          metrics.water_saved_l,
+          metrics.waste_reduced_kg,
+          metrics.e_score,
+          metrics.s_score,
+          metrics.g_score,
+          metrics.esg_score,
+          metrics.trust_score,
+          metrics.dvs_score
+        ]
+      );
+    } catch (dbErr) {
+      console.error('[ESG] Failed to log metrics to database:', dbErr.message);
+    }
+  }
+
+  res.json(metrics);
+}));
+
 /* ═══════════════════════════════════════════════════════════════
    DEMAND FORECAST ENDPOINT
    ═══════════════════════════════════════════════════════════════ */
@@ -977,11 +1042,13 @@ app.post('/api/agent/message', async (req, res) => {
 
     // Call Groq
     let parsed = null;
+    let parseError = null;
     try {
       const raw = await callGroq(messages);
       let cleaned = raw.trim().replace(/^```json\s*/i, '').replace(/\s*```$/, '');
       parsed = JSON.parse(cleaned);
     } catch (e) {
+      parseError = e;
       console.error('[Agent] Groq/parse failed:', e.message, e.stack);
     }
 
@@ -1015,7 +1082,7 @@ app.post('/api/agent/message', async (req, res) => {
       // Groq parsed OK but returned no replyMessage — use a safe fallback
       responseMessage = lang === 'bn'
         ? 'দুঃখিত, আমি বুঝতে পারিনি। অনুগ্রহ করে আবার বলুন।'
-        : 'Sorry, I could not understand that. Could you rephrase your question?';
+        : `Sorry, I could not understand that. Error: ${parseError ? parseError.message : 'Unknown'}`;
     }
 
     session.history.push({ role: 'assistant', content: responseMessage });
