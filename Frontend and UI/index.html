@@ -98,11 +98,19 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
+    html, body, #root {
+      width: 100%;
+      min-height: 100%;
+    }
     body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
+      margin: 0;
+      background: #0B0F19;
+      overflow-x: hidden;
     }
+    img, canvas, svg { max-width: 100%; }
     ::selection { background: rgba(16,185,129,0.3); color: #fff; }
 
     /* ── Scrollbar ── */
@@ -169,6 +177,104 @@
     button:focus-visible {
       outline: 2px solid #10B981;
       outline-offset: 2px;
+    }
+
+    @media (max-width: 1024px) {
+      .app-main { padding: 24px !important; }
+      .dashboard-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+      .dashboard-main-grid { grid-template-columns: 1fr !important; }
+    }
+
+    @media (max-width: 768px) {
+      .app-header {
+        padding: 12px 14px !important;
+        flex-wrap: wrap !important;
+        gap: 10px !important;
+        align-items: flex-start !important;
+      }
+      .app-header-left,
+      .app-header-right,
+      .page-header,
+      .page-header-action,
+      .dashboard-header-action {
+        width: 100% !important;
+        flex-wrap: wrap !important;
+      }
+      .sme-select-wrap {
+        margin-left: 0 !important;
+        width: 100% !important;
+      }
+      .sme-select-wrap select { width: 100% !important; }
+      .header-score-indicator {
+        width: 100% !important;
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+        padding: 8px 10px !important;
+      }
+      .header-score-gauges { margin-left: auto !important; }
+      .tab-nav {
+        padding-left: 8px !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+      }
+      .tab-button {
+        flex: 0 0 auto !important;
+        padding: 10px 12px !important;
+        font-size: 10px !important;
+      }
+      .app-main { padding: 16px 12px !important; }
+      .dashboard-stats-grid,
+      .dashboard-main-grid,
+      .tab-two-col-grid,
+      .two-col-grid,
+      [style*="grid-template-columns: 1fr 1fr"],
+      [style*="grid-template-columns: 1fr 1fr 1fr"],
+      [style*="grid-template-columns: repeat(2, 1fr)"],
+      [style*="grid-template-columns: repeat(3, 1fr)"],
+      [style*="grid-template-columns: repeat(4, 1fr)"],
+      [style*="grid-template-columns: 2fr 1fr"],
+      [style*="grid-template-columns: 1.2fr 2fr"],
+      [style*="grid-template-columns: 1.2fr 1.8fr"],
+      [style*="grid-template-columns: 240px 1fr"] {
+        grid-template-columns: 1fr !important;
+      }
+      .batch-drawer-panel {
+        width: min(100vw, 420px) !important;
+        max-width: 100vw !important;
+        padding: 20px 14px !important;
+      }
+      .register-batch-card { max-width: 100% !important; }
+      .form-actions {
+        flex-direction: column-reverse !important;
+        align-items: stretch !important;
+      }
+      .form-actions > button { width: 100% !important; }
+      .agent-panel-wrapper {
+        right: 12px !important;
+        bottom: 12px !important;
+      }
+      .agent-chat-window {
+        width: min(92vw, 360px) !important;
+        height: min(70vh, 520px) !important;
+      }
+      .app-footer {
+        padding: 10px 12px !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 8px !important;
+      }
+      .app-footer-stats {
+        width: 100% !important;
+        justify-content: space-between !important;
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .page-title { font-size: 20px !important; }
+      .page-subtitle { font-size: 12px !important; }
+      .tab-button { padding: 9px 10px !important; }
     }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -463,10 +569,11 @@ function StatusBadge({ value, type = "dvs" }) {
   );
 }
 
-function Card({ children, style = {}, hover = true }) {
+function Card({ children, style = {}, hover = true, className = "" }) {
   const [hovered, setHovered] = useState(false);
   return (
     <div
+      className={className}
       onMouseEnter={() => hover && setHovered(true)}
       onMouseLeave={() => hover && setHovered(false)}
       style={{
@@ -1923,12 +2030,12 @@ function CircleArc({ value, max = 100, color, size = 140, strokeWidth = 12 }) {
 
 function PageHeader({ title, subtitle, action }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24, padding: "0 4px" }}>
+    <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24, padding: "0 4px" }}>
       <div>
-        <h1 style={{ fontSize: 24, fontWeight: 700, margin: "0 0 6px 0", color: "var(--text-primary)" }}>{title}</h1>
-        {subtitle && <div style={{ fontSize: 14, color: "var(--text-secondary)" }}>{subtitle}</div>}
+        <h1 className="page-title" style={{ fontSize: 24, fontWeight: 700, margin: "0 0 6px 0", color: "var(--text-primary)" }}>{title}</h1>
+        {subtitle && <div className="page-subtitle" style={{ fontSize: 14, color: "var(--text-secondary)" }}>{subtitle}</div>}
       </div>
-      {action}
+      <div className="page-header-action" style={{ display: "flex", justifyContent: "flex-end" }}>{action}</div>
     </div>
   );
 }
@@ -1986,7 +2093,7 @@ function DashboardView({ onNewBatch }) {
         title="Operations Dashboard"
         subtitle="Bangladesh Climate-Resilient Circular Commerce"
         action={
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div className="dashboard-header-action" style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {lastUpdated && (
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{
@@ -2013,7 +2120,7 @@ function DashboardView({ onNewBatch }) {
       />
 
       {/* ── STAT CARDS ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 32 }}>
+      <div className="dashboard-stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 32 }}>
         {isLoading
           ? Array.from({ length: 8 }).map((_, i) => (
               <Card key={i} style={{ padding: "20px 24px" }} hover={false}>
@@ -2035,7 +2142,7 @@ function DashboardView({ onNewBatch }) {
         }
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
+      <div className="dashboard-main-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
         {/* ── THERMAL HEATMAP ── */}
         <Card hover={false}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -2334,12 +2441,12 @@ function BatchRegistry({ onNewBatch }) {
 
       {/* ── BATCH DETAIL DRAWER ── */}
       {selectedBatch && (
-        <div style={{
+        <div className="batch-drawer-overlay" style={{
           position: "fixed", inset: 0, zIndex: 200,
           display: "flex", justifyContent: "flex-end"
         }}>
           <div onClick={() => setSelected(null)} style={{ flex: 1, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }} />
-          <div style={{
+          <div className="batch-drawer-panel" style={{
             width: 420, height: "100vh", overflowY: "auto",
             background: "var(--bg-card)", borderLeft: "1px solid var(--border-primary)",
             padding: 32, animation: "fadeSlideIn 0.3s ease",
@@ -2547,7 +2654,7 @@ function RegisterBatch({ onCancel }) {
       </button>
       <PageHeader title="Register New Batch" subtitle="Submit a new bio-resource batch for certification" />
       
-      <Card style={{ maxWidth: 700 }} hover={false}>
+      <Card className="register-batch-card" style={{ maxWidth: 700 }} hover={false}>
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
           {errorMsg && (
             <div style={{ background: "rgba(239, 68, 68, 0.1)", border: `1px solid ${ACCENT.redBorder || "#ef4444"}`, padding: "12px 16px", borderRadius: 8, color: ACCENT.red, fontSize: 13, fontWeight: 500 }}>
@@ -2566,7 +2673,7 @@ function RegisterBatch({ onCancel }) {
             />
           </div>
           
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+          <div className="two-col-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
             <div>
               <label style={{ display: "block", fontSize: 13, marginBottom: 8, fontWeight: 500, color: "var(--text-primary)" }}>Product Type</label>
               <select 
@@ -2600,7 +2707,7 @@ function RegisterBatch({ onCancel }) {
             </div>
           </div>
           
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+          <div className="two-col-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
             <div>
               <label style={{ display: "block", fontSize: 13, marginBottom: 8, fontWeight: 500, color: "var(--text-primary)" }}>Packaging Type</label>
               <select 
@@ -2631,7 +2738,7 @@ function RegisterBatch({ onCancel }) {
             <div style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.5 }}>After creating your batch, submit IoT sensor readings to generate a BARI-compliant Trust Score and cryptographic QR certificate.</div>
           </div>
 
-          <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 8 }}>
+          <div className="form-actions" style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 8 }}>
             <button onClick={onCancel} style={{ padding: "12px 24px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", cursor: "pointer", fontWeight: 500, fontSize: 14 }}>Cancel</button>
             <button 
               onClick={handleSubmit} 
@@ -3707,7 +3814,7 @@ function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerifica
   };
 
   return (
-    <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 9999, fontFamily: "inherit" }}>
+    <div className="agent-panel-wrapper" style={{ position: "fixed", bottom: 24, right: 24, zIndex: 9999, fontFamily: "inherit" }}>
       {/* CSS keyframes block injected dynamically */}
       <style>{`
         @keyframes pulseGlowGreen {
@@ -3756,6 +3863,7 @@ function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerifica
       {/* Chat window panel */}
       {isOpen && (
         <div
+          className="agent-chat-window"
           style={{
             width: 360,
             height: 520,
@@ -4910,7 +5018,7 @@ function CLimaLogixApp() {
       `}</style>
 
       {/* ── HEADER ────────────────────────────────────────────── */}
-      <header style={{
+      <header className="app-header" style={{
         borderBottom: "1px solid var(--border-primary)",
         padding: "14px 28px",
         display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -4920,7 +5028,7 @@ function CLimaLogixApp() {
         position: "sticky", top: 0, zIndex: 50,
         backgroundImage: `linear-gradient(to right, ${ACCENT.green}08, transparent 50%)`,
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div className="app-header-left" style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{
             width: 36, height: 36, borderRadius: 10,
             background: `linear-gradient(135deg, ${ACCENT.greenLight}, ${ACCENT.greenDark})`,
@@ -4932,7 +5040,7 @@ function CLimaLogixApp() {
             <div style={{ fontSize: 9, color: "var(--text-dim)", letterSpacing: "0.14em", fontWeight: 500 }}>CLIMATESHIELD · SME DASHBOARD</div>
           </div>
           {/* New SME Dropdown */}
-          <div style={{ marginLeft: 24, display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-secondary)" }}>
+          <div className="sme-select-wrap" style={{ marginLeft: 24, display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-secondary)" }}>
             <span style={{ fontSize: 18 }}>⭐</span>
             <select 
               value={selectedSme}
@@ -4956,9 +5064,9 @@ function CLimaLogixApp() {
             </select>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <div className="app-header-right" style={{ display: "flex", alignItems: "center", gap: 16 }}>
           {/* Generalized Dhaka Division Score Indicator */}
-          <div style={{
+          <div className="header-score-indicator" style={{
             display: "flex", alignItems: "center", gap: 14,
             padding: "8px 14px", borderRadius: 10,
             background: "var(--bg-input)", border: "1px solid var(--border-primary)",
@@ -4971,7 +5079,7 @@ function CLimaLogixApp() {
             <span>Gen. DVS: <strong style={{ color: genDvs >= 75 ? ACCENT.green : genDvs >= 55 ? ACCENT.amber : ACCENT.red, fontFamily: "'JetBrains Mono', monospace" }}>{genDvs}</strong></span>
           </div>
 
-          <div style={{ display: "flex", gap: 10 }}>
+          <div className="header-score-gauges" style={{ display: "flex", gap: 10 }}>
             <ScoreGauge value={trustScore} label="Trust" size={76} />
             <ScoreGauge value={genDvs} label="Gen. DVS" size={76} />
           </div>
@@ -4980,7 +5088,7 @@ function CLimaLogixApp() {
       </header>
 
       {/* ── TAB BAR ───────────────────────────────────────────── */}
-      <nav style={{
+      <nav className="tab-nav" style={{
         display: "flex", gap: 2,
         borderBottom: "1px solid var(--border-primary)",
         background: "var(--bg-header)",
@@ -4989,7 +5097,7 @@ function CLimaLogixApp() {
         paddingLeft: 28,
       }}>
         {activeTabs.map((t, i) => (
-          <button key={t.label} onClick={() => setTab(i)}
+          <button className="tab-button" key={t.label} onClick={() => setTab(i)}
             style={{
               padding: "12px 18px", border: "none",
               background: tab === i ? "var(--bg-input)" : "transparent",
@@ -5008,7 +5116,7 @@ function CLimaLogixApp() {
       </nav>
 
       {/* ── CONTENT ───────────────────────────────────────────── */}
-      <main style={{ padding: "32px 48px", width: "100%", margin: "0 auto" }}>
+      <main className="app-main" style={{ padding: "32px 48px", width: "100%", margin: "0 auto" }}>
         {tab === 0 && <DashboardView onNewBatch={() => { setTab(1); setIsRegisteringBatch(true); }} />}
         
         {tab === 1 && (
@@ -5018,7 +5126,7 @@ function CLimaLogixApp() {
         )}
 
         {tab === 2 && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, animation: "fadeSlideIn 0.4s ease" }}>
+          <div className="tab-two-col-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, animation: "fadeSlideIn 0.4s ease" }}>
             <div>
               <SectionLabel icon="📡" text="Batch Sensor Verification" />
               <Card>
@@ -5093,7 +5201,7 @@ function CLimaLogixApp() {
       </main>
 
       {/* ── FOOTER ────────────────────────────────────────────── */}
-      <footer style={{
+      <footer className="app-footer" style={{
         borderTop: "1px solid var(--border-primary)",
         padding: "12px 28px",
         display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -5104,7 +5212,7 @@ function CLimaLogixApp() {
         <div style={{ fontSize: 9, color: "var(--text-dim)", letterSpacing: "0.1em", fontWeight: 500 }}>
           CLIMALOGIX AI CLIMATESHIELD · INFINITY AI BUILDFEST 2026 · TEAM GLIDERS · TRACK 4: E-COMMERCE
         </div>
-        <div style={{ display: "flex", gap: 16, fontSize: 9, color: "var(--text-dim)" }}>
+        <div className="app-footer-stats" style={{ display: "flex", gap: 16, fontSize: 9, color: "var(--text-dim)" }}>
           <span>Trust Score: <span style={{ color: ACCENT.green, fontFamily: "'JetBrains Mono', monospace" }}>{trustScore}/100</span></span>
           <span>DVS: <span style={{ color: dvs >= 75 ? ACCENT.green : dvs >= 55 ? ACCENT.amber : ACCENT.red, fontFamily: "'JetBrains Mono', monospace" }}>{dvs}/100</span></span>
         </div>
