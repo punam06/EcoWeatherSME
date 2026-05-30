@@ -1081,7 +1081,9 @@ app.post('/api/agent/message', async (req, res) => {
       
       // 2. Force product search intent if query matches search patterns
       if (parsed.intent !== 'navigate' && parsed.intent !== 'order') {
-        if (/(show|find|search|খুঁজ|দেখাও|আছে কি|available|stock|দেখান).*(product|fertilizer|সার|compost|item|পণ্য|বায়োচার|biochar)/i.test(lowerQuery) ||
+        const hasSearchVerb = /(show|find|search|খুঁজ|দেখাও|আছে কি|available|stock|দেখান|খুঁজে)/i.test(lowerQuery);
+        const hasProductKeyword = /(product|fertilizer|সার|compost|item|পণ্য|বায়োচার|biochar)/i.test(lowerQuery);
+        if ((hasSearchVerb && hasProductKeyword) ||
             /^(fertilizer|সার|compost|কম্পোস্ট|product|পণ্য|biochar|বায়োচার)$/i.test(lowerQuery)) {
           parsed.intent = 'product_search';
           parsed.extractedData = parsed.extractedData || {};
