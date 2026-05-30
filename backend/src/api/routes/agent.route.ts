@@ -226,7 +226,7 @@ router.post('/orders/voice', aiRateLimiter, async (req: Request, res: Response, 
             buyer_id: buyerId,
             product_id: typeof matchedProduct.id === 'string' && matchedProduct.id.startsWith('custom') ? null : matchedProduct.id,
             quantity: finalQuantity,
-            totalBdt,
+            total_bdt: totalBdt,
             status: 'pending'
           })
           .select('*')

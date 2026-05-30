@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS batches (
     trust_score INT NOT NULL CHECK (trust_score >= 0 AND trust_score <= 100),
     certificate_url VARCHAR(500),
     qr_code_url VARCHAR(500),
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'certified', 'dispatched', 'delivered')),
+    destination_zone VARCHAR(50),
+    weight_kg NUMERIC(10,2) DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

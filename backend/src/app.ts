@@ -33,7 +33,8 @@ import batchRouter from './api/routes/batch.route';
 import { startSessionPruningInterval } from './lib/services/chatSession.service';
 
 // ── Supabase Guard ────────────────────────────────────────────────────────────
-import { isSupabaseConfigured } from './lib/supabase';
+import argon2 from 'argon2';
+import { getSupabaseClient, isSupabaseConfigured } from './lib/supabase';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -610,10 +611,9 @@ app.post('/api/calculate-trust-score', (req: Request, res: Response) => {
 });
 
 /**
- * Legacy stubs for batches, users, IoT readings (require Supabase)
- * These return a helpful message when DB is not configured.
+ * Supabase-backed CRUD endpoints for batches, users, IoT readings, zones.
  */
-const dbRequiredMiddleware = (_req: Request, res: Response) => {
+const requireSupabase = (_req: Request, res: Response, next: NextFunction) => {
   if (!isSupabaseConfigured()) {
     res.status(503).json({
       success: false,
@@ -622,21 +622,388 @@ const dbRequiredMiddleware = (_req: Request, res: Response) => {
     });
     return;
   }
-  res.status(501).json({
-    success: false,
-    error: 'This legacy endpoint requires full Supabase setup.',
-  });
+  next();
 };
 
-app.get('/api/batches', dbRequiredMiddleware);
-app.post('/api/batches', dbRequiredMiddleware);
-app.get('/api/batches/:id', dbRequiredMiddleware);
-app.put('/api/batches/:id', dbRequiredMiddleware);
-app.post('/api/batches/:id/readings', dbRequiredMiddleware);
-app.get('/api/batches/:id/readings', dbRequiredMiddleware);
-app.get('/api/users', dbRequiredMiddleware);
-app.post('/api/users', dbRequiredMiddleware);
-app.post('/api/zones', dbRequiredMiddleware);
+const BATCH_SELECT_FIELDS = [
+  'id',
+  'processor_id',
+  'batch_number',
+  'feedstock_type',
+  'product_name',
+  'trust_score',
+  'certificate_url',
+  'qr_code_url',
+  'status',
+  'destination_zone',
+  'weight_kg',
+  'created_at',
+].join(', ');
+
+app.get('/api/batches', requireSupabase, async (req: Request, res: Response) => {
+  const limit = Math.min(Math.max(Number(req.query.limit ?? 50), 1), 200);
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('batches')
+      .select(BATCH_SELECT_FIELDS)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true, data: data ?? [], count: data?.length ?? 0 });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.post('/api/batches', requireSupabase, async (req: Request, res: Response) => {
+  const {
+    batch_number,
+    feedstock_type,
+    product_name,
+    trust_score,
+    processor_id,
+    certificate_url,
+    qr_code_url,
+    status,
+    destination_zone,
+    weight_kg,
+  } = req.body ?? {};
+
+  if (!batch_number || !feedstock_type || !product_name) {
+    res.status(400).json({
+      success: false,
+      error: 'Missing required fields: batch_number, feedstock_type, product_name',
+    });
+    return;
+  }
+
+  const parsedTrust = trust_score === undefined ? 0 : Number(trust_score);
+  if (Number.isNaN(parsedTrust)) {
+    res.status(400).json({ success: false, error: 'trust_score must be a number' });
+    return;
+  }
+
+  const parsedWeight = weight_kg === undefined || weight_kg === null ? null : Number(weight_kg);
+  if (parsedWeight !== null && Number.isNaN(parsedWeight)) {
+    res.status(400).json({ success: false, error: 'weight_kg must be a number' });
+    return;
+  }
+
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('batches')
+      .insert({
+        batch_number,
+        feedstock_type,
+        product_name,
+        trust_score: parsedTrust,
+        processor_id: processor_id ?? null,
+        certificate_url: certificate_url ?? null,
+        qr_code_url: qr_code_url ?? null,
+        status: status ?? 'pending',
+        destination_zone: destination_zone ?? null,
+        weight_kg: parsedWeight,
+      })
+      .select(BATCH_SELECT_FIELDS)
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.status(201).json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.get('/api/batches/:id', requireSupabase, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('batches')
+      .select(BATCH_SELECT_FIELDS)
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    if (!data) {
+      res.status(404).json({ success: false, error: 'Batch not found' });
+      return;
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.put('/api/batches/:id', requireSupabase, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const updates: Record<string, unknown> = {};
+
+  const allowedFields = [
+    'batch_number',
+    'feedstock_type',
+    'product_name',
+    'trust_score',
+    'processor_id',
+    'certificate_url',
+    'qr_code_url',
+    'status',
+    'destination_zone',
+    'weight_kg',
+  ];
+
+  allowedFields.forEach((field) => {
+    if (req.body?.[field] !== undefined) {
+      updates[field] = req.body[field];
+    }
+  });
+
+  if (updates.trust_score !== undefined) {
+    const parsedTrust = Number(updates.trust_score);
+    if (Number.isNaN(parsedTrust)) {
+      res.status(400).json({ success: false, error: 'trust_score must be a number' });
+      return;
+    }
+    updates.trust_score = parsedTrust;
+  }
+
+  if (updates.weight_kg !== undefined) {
+    const parsedWeight = updates.weight_kg === null ? null : Number(updates.weight_kg);
+    if (parsedWeight !== null && Number.isNaN(parsedWeight)) {
+      res.status(400).json({ success: false, error: 'weight_kg must be a number' });
+      return;
+    }
+    updates.weight_kg = parsedWeight;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ success: false, error: 'No valid fields provided for update' });
+    return;
+  }
+
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('batches')
+      .update(updates)
+      .eq('id', id)
+      .select(BATCH_SELECT_FIELDS)
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.post('/api/batches/:id/readings', requireSupabase, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { pH, EC, temperature, em1_ratio, fermentation_days } = req.body ?? {};
+
+  if (pH === undefined || EC === undefined || temperature === undefined || em1_ratio === undefined || fermentation_days === undefined) {
+    res.status(400).json({
+      success: false,
+      error: 'Missing required fields: pH, EC, temperature, em1_ratio, fermentation_days',
+    });
+    return;
+  }
+
+  const parsedPH = Number(pH);
+  const parsedEC = Number(EC);
+  const parsedTemp = Number(temperature);
+  const parsedDays = Number(fermentation_days);
+
+  if ([parsedPH, parsedEC, parsedTemp, parsedDays].some((val) => Number.isNaN(val))) {
+    res.status(400).json({ success: false, error: 'pH, EC, temperature, fermentation_days must be numbers' });
+    return;
+  }
+
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('iot_readings')
+      .insert({
+        batch_id: id,
+        ph: parsedPH,
+        ec: parsedEC,
+        temperature: parsedTemp,
+        em1_ratio,
+        fermentation_days: parsedDays,
+      })
+      .select('id, batch_id, ph, ec, temperature, em1_ratio, fermentation_days, recorded_at')
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.status(201).json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.get('/api/batches/:id/readings', requireSupabase, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const limit = Math.min(Math.max(Number(req.query.limit ?? 50), 1), 200);
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('iot_readings')
+      .select('id, batch_id, ph, ec, temperature, em1_ratio, fermentation_days, recorded_at')
+      .eq('batch_id', id)
+      .order('recorded_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true, data: data ?? [], count: data?.length ?? 0 });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.get('/api/users', requireSupabase, async (_req: Request, res: Response) => {
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, email, name, role, created_at')
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.json({ success: true, data: data ?? [], count: data?.length ?? 0 });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.post('/api/users', requireSupabase, async (req: Request, res: Response) => {
+  const { email, password, name, role } = req.body ?? {};
+  if (!email || !password || !name || !role) {
+    res.status(400).json({ success: false, error: 'Missing required fields: email, password, name, role' });
+    return;
+  }
+
+  const allowedRoles = ['processor', 'buyer', 'admin'];
+  if (!allowedRoles.includes(role)) {
+    res.status(400).json({ success: false, error: `Role must be one of: ${allowedRoles.join(', ')}` });
+    return;
+  }
+
+  try {
+    const password_hash = await argon2.hash(password);
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('users')
+      .insert({
+        email,
+        password_hash,
+        name,
+        role,
+      })
+      .select('id, email, name, role, created_at')
+      .single();
+
+    if (error) {
+      const statusCode = error.code === '23505' ? 409 : 500;
+      res.status(statusCode).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.status(201).json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.post('/api/zones', requireSupabase, async (req: Request, res: Response) => {
+  const {
+    zone,
+    uhi_offset,
+    building_density,
+    vegetation_fraction,
+    wind_corridor_factor,
+    thermal_mass_coefficient,
+  } = req.body ?? {};
+
+  if (!zone || uhi_offset === undefined || building_density === undefined || vegetation_fraction === undefined
+    || wind_corridor_factor === undefined || thermal_mass_coefficient === undefined) {
+    res.status(400).json({
+      success: false,
+      error: 'Missing required fields: zone, uhi_offset, building_density, vegetation_fraction, wind_corridor_factor, thermal_mass_coefficient',
+    });
+    return;
+  }
+
+  const parsedValues = [
+    Number(uhi_offset),
+    Number(building_density),
+    Number(vegetation_fraction),
+    Number(wind_corridor_factor),
+    Number(thermal_mass_coefficient),
+  ];
+
+  if (parsedValues.some((val) => Number.isNaN(val))) {
+    res.status(400).json({ success: false, error: 'Zone numeric fields must be numbers' });
+    return;
+  }
+
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('zone_microclimate_profiles')
+      .insert({
+        zone,
+        uhi_offset: parsedValues[0],
+        building_density: parsedValues[1],
+        vegetation_fraction: parsedValues[2],
+        wind_corridor_factor: parsedValues[3],
+        thermal_mass_coefficient: parsedValues[4],
+      })
+      .select('id, zone, uhi_offset, building_density, vegetation_fraction, wind_corridor_factor, thermal_mass_coefficient, created_at')
+      .single();
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message });
+      return;
+    }
+
+    res.status(201).json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
 
 // ═══════════════════════════════════════════════════════════════
 // GLOBAL ERROR HANDLER

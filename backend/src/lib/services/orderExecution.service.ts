@@ -78,7 +78,7 @@ export async function confirmOrder(sessionId: string, farmerId?: string): Promis
         buyer_id: actualFarmerId,
         product_id: productId,
         quantity,
-        totalBdt,
+        total_bdt: totalBdt,
         status: 'pending',
       })
       .select('id')
