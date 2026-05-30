@@ -1,17 +1,17 @@
 # 🌍 EcoSortha AI (ClimateShield)
-> **Enterprise-Grade PaaS for Climate-Resilient Circular Commerce & Organic Decision Intelligence**
+> **Enterprise-Grade PaaS for Climate-Resilient Circular Commerce & Heat-Sensitive SME Logistics**
 
-EcoSortha AI (ClimateShield) is a high-maturity, production-ready circular commerce marketplace and decision-intelligence platform engineered for Bangladesh's organic agriculture sector. By combining real-time IoT fermentation analytics, neighborhood-specific microclimate modeling (MERM), and a voice-first Bangla RAG assistant, the platform bridges the trust deficit in organic supply chains and secures delicate biological inputs against heat-induced transit spoilage in extreme urban environments.
+EcoSortha AI (ClimateShield) is a high-maturity, production-ready circular commerce marketplace and decision-intelligence platform engineered to protect and optimize Bangladesh's heat-sensitive SME product sectors (including Agro-biologicals, temperature-sensitive Retail goods, and specialized chemical/biological Manufacturing compounds). By combining real-time IoT fermentation and parameter analytics, neighborhood-specific microclimate modeling (MERM), and a voice-first Bangla RAG assistant, the platform bridges the trust deficit in supply chains and secures delicate physical assets against heat-induced transit spoilage in extreme urban environments.
 
 ---
 
 ## 🎯 The Strategic Challenge in Bangladesh
-Bangladesh's organic fertilizer market is valued at **BDT 800 Crore annually**, yet **less than 3% of products carry any verifiable certification**. The remaining 97% is traded informally, resulting in severe buyer hesitation due to pathogen and chemical contamination risks. 
+Bangladesh's heat-sensitive SME markets—ranging from organic bio-inputs to artisanal retail goods and biological manufacturing compounds—suffer from a severe quality and viability crisis. For instance, in the organic fertilizer sector alone (valued at **BDT 800 Crore annually**), **less than 3% of products carry any verifiable certification**, leaving 97% informally traded. 
 
-Additionally, organic bio-inputs are highly temperature-sensitive. Summer Urban Heat Island (UHI) spikes frequently exceed 36°C, causing **up to 40% microbial culture degradation** during transport. EcoSortha AI resolves this double-sided crisis by:
-1. **Verifying Batch Quality (At Production):** Through deterministic IoT fermentation metrics mapped to BARI (Bangladesh Agricultural Research Institute) standards.
-2. **Verifying Transit Viability (At Dispatch):** Through a proprietary Microclimate Exposure Risk Model (MERM) that predicts Thermal Survival Time (TST).
-3. **Overcoming Adoption Barriers:** By offering an inclusive, speech-enabled, natural Bangla RAG interface for semi-literate local operators.
+Additionally, these biological and chemical products are highly temperature-sensitive. Summer Urban Heat Island (UHI) spikes frequently exceed 36°C, causing **up to 40% active compound degradation** during transport. EcoSortha AI resolves this multi-sided crisis by:
+1. **Verifying Batch Quality (At Production):** Through deterministic IoT parameters (like pH, EC, Temp, Fermentation days) mapped to official benchmarks (such as BARI and national standards).
+2. **Verifying Transit Viability (At Dispatch):** Through a proprietary Microclimate Exposure Risk Model (MERM) that predicts Thermal Survival Time (TST) for all heat-sensitive shipments.
+3. **Overcoming Adoption Barriers:** By offering an inclusive, speech-enabled, natural Bangla RAG interface for semi-literate local operators across sectors.
 
 ---
 
