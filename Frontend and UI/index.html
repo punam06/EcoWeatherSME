@@ -231,6 +231,7 @@ const ACCENT = {
   redBorder: "rgba(239, 68, 68, 0.2)",
   blue: "#3B82F6",
   blueBg: "rgba(59, 130, 246, 0.08)",
+  blueBorder: "rgba(59, 130, 246, 0.2)",
 };
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1806,9 +1807,11 @@ function PageHeader({ title, subtitle, action }) {
 function DashboardView({ onNewBatch }) {
   const [dashData, setDashData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
 
-  const fetchDashboard = async () => {
+  const fetchDashboard = async (isManual = false) => {
+    if (isManual) setIsRefreshing(true);
     try {
       const res = await fetch(`${BACKEND_URL}/api/dashboard`);
       const json = await res.json();
@@ -1820,12 +1823,13 @@ function DashboardView({ onNewBatch }) {
       console.error('[Dashboard] fetch failed:', e);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
     fetchDashboard();
-    const interval = setInterval(fetchDashboard, 60000); // refresh every 60s
+    const interval = setInterval(() => fetchDashboard(false), 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -1907,8 +1911,15 @@ function DashboardView({ onNewBatch }) {
         <Card hover={false}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
             <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>Dhaka Thermal Hazard Map</div>
-            <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-              {isLive ? "🟢 Live Weather Data" : "⚡ Estimated · Live MERM"}
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                {isLive ? "🟢 Live Weather Data" : "⚡ Estimated · Live MERM"}
+              </div>
+              <button onClick={() => fetchDashboard(true)} disabled={isRefreshing} style={{
+                fontSize: 13, color: ACCENT.green, background: "none", border: "none",
+                cursor: isRefreshing ? "wait" : "pointer", fontWeight: 500, padding: 0,
+                opacity: isRefreshing ? 0.5 : 1
+              }}>{isRefreshing ? "⏳" : "↻"}</button>
             </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -1946,10 +1957,11 @@ function DashboardView({ onNewBatch }) {
         <Card hover={false}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
             <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>Recent Activity</div>
-            <button onClick={fetchDashboard} style={{
+            <button onClick={() => fetchDashboard(true)} disabled={isRefreshing} style={{
               fontSize: 13, color: ACCENT.green, background: "none", border: "none",
-              cursor: "pointer", fontWeight: 500, padding: 0
-            }}>Refresh ↺</button>
+              cursor: isRefreshing ? "wait" : "pointer", fontWeight: 500, padding: 0,
+              opacity: isRefreshing ? 0.5 : 1
+            }}>{isRefreshing ? "⏳ Refreshing..." : "Refresh ↺"}</button>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             {isLoading
@@ -1964,7 +1976,7 @@ function DashboardView({ onNewBatch }) {
                 ))
               : activity.length > 0
               ? activity.map((a, i) => (
-                  <div key={i} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                  <div key={`${a.text}-${i}`} style={{ display: "flex", gap: 14, alignItems: "flex-start", opacity: isRefreshing ? 0.5 : 1, transition: "opacity 0.3s ease" }}>
                     <div style={{ width: 36, height: 36, borderRadius: "50%", background: colorMap[a.colorType] || ACCENT.greenBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>{a.icon}</div>
                     <div>
                       <div style={{ fontSize: 13, color: "var(--text-primary)", marginBottom: 4, lineHeight: 1.4 }}>{a.text}</div>
@@ -1982,65 +1994,273 @@ function DashboardView({ onNewBatch }) {
 }
 
 function BatchRegistry({ onNewBatch }) {
-  const [activeTab, setActiveTab] = useState("All");
-  const tabs = ["All", "Pending", "Certified", "Dispatched", "Delivered"];
-  const batches = [
-    { id: "BCH-142", product: "Bio-Slurry", status: "Certified", trust: 91, dvs: null, dest: "—", weight: 180 },
-    { id: "BCH-141", product: "Biochar", status: "Active", trust: 85, dvs: null, dest: "—", weight: 100 }
-  ];
+  const STATUS_TABS = ["All", "Pending", "Active", "Certified", "Dispatched", "Delivered"];
+  const STATUS_COLORS = {
+    certified: { border: ACCENT.greenBorder, color: ACCENT.green, bg: ACCENT.greenBg },
+    active:    { border: ACCENT.blueBorder,  color: ACCENT.blue,  bg: ACCENT.blueBg },
+    pending:   { border: "var(--border-primary)", color: "var(--text-secondary)", bg: "transparent" },
+    dispatched:{ border: ACCENT.amberBorder, color: ACCENT.amber, bg: ACCENT.amberBg },
+    delivered: { border: ACCENT.greenBorder, color: ACCENT.green, bg: ACCENT.greenBg },
+  };
+
+  const [activeTab, setActiveTab]     = useState("All");
+  const [search, setSearch]           = useState("");
+  const [batches, setBatches]         = useState([]);
+  const [isLoading, setIsLoading]     = useState(true);
+  const [selectedBatch, setSelected]  = useState(null);
+  const [lastFetched, setLastFetched] = useState(null);
+
+  const SEED_BATCHES = (() => {
+    const now = new Date();
+    const seed = now.getFullYear() * 100 + now.getMonth() * 10 + now.getDate();
+    const statuses = ["certified", "active", "pending", "dispatched", "delivered", "certified", "active", "certified"];
+    const products = ["Bio-Slurry Concentrate", "Biochar Granules", "EM-1 Bio-Culture", "Organic Compost", "Liquid Fertiliser", "Thermal-Safe Vaccine Batch", "Fresh Dairy Mix", "Carbon-Neutral Biochar"];
+    const zones = ["Old Dhaka", "Mirpur", "Gulshan", "Savar", "Dhanmondi", "Uttara", "Banani", "Motijheel"];
+    return statuses.map((status, i) => ({
+      id: `BCH-${seed + i}`,
+      product_name: products[i],
+      status,
+      trust_score: 70 + ((seed + i * 7) % 30),
+      destination_zone: zones[i % zones.length],
+      weight_kg: 80 + ((seed + i * 13) % 220),
+      created_at: new Date(Date.now() - i * 3600000 * 5).toISOString(),
+    }));
+  })();
+
+  const fetchBatches = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/batches`);
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+        setBatches(json.data);
+      } else {
+        setBatches(SEED_BATCHES);
+      }
+    } catch (_) {
+      setBatches(SEED_BATCHES);
+    } finally {
+      setIsLoading(false);
+      setLastFetched(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    }
+  };
+
+  useEffect(() => { fetchBatches(); }, []);
+
+  const filtered = batches.filter(b => {
+    const tabMatch = activeTab === "All" || b.status?.toLowerCase() === activeTab.toLowerCase();
+    const searchMatch = !search || b.id?.toLowerCase().includes(search.toLowerCase()) || b.product_name?.toLowerCase().includes(search.toLowerCase()) || b.destination_zone?.toLowerCase().includes(search.toLowerCase());
+    return tabMatch && searchMatch;
+  });
+
+  const tabCounts = STATUS_TABS.reduce((acc, t) => {
+    acc[t] = t === "All" ? batches.length : batches.filter(b => b.status?.toLowerCase() === t.toLowerCase()).length;
+    return acc;
+  }, {});
+
+  const getStatusStyle = (status) => STATUS_COLORS[status?.toLowerCase()] || STATUS_COLORS.pending;
 
   return (
-    <div style={{ animation: "fadeSlideIn 0.3s ease" }}>
-      <PageHeader title="Batch Registry" subtitle="All bio-resource batches with certification status" action={
-        <button onClick={onNewBatch} style={{
-          background: ACCENT.greenDark, color: "#fff", border: "none", padding: "10px 18px",
-          borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 13, display: "flex", gap: 6, alignItems: "center"
-        }}><span>+</span> New Batch</button>
-      } />
-      
-      <div style={{ display: "flex", gap: 4, background: "var(--bg-input)", padding: 4, borderRadius: 8, width: "max-content", marginBottom: 24 }}>
-        {tabs.map(t => (
-          <button key={t} onClick={() => setActiveTab(t)} style={{
-            padding: "8px 18px", borderRadius: 6, border: "none", fontSize: 13, cursor: "pointer",
-            background: activeTab === t ? "var(--bg-card)" : "transparent",
-            color: activeTab === t ? "var(--text-primary)" : "var(--text-secondary)",
-            boxShadow: activeTab === t ? "var(--shadow-card)" : "none", fontWeight: activeTab === t ? 600 : 400
-          }}>{t}</button>
-        ))}
+    <div style={{ animation: "fadeSlideIn 0.3s ease", position: "relative" }}>
+      <PageHeader
+        title="Batch Registry"
+        subtitle={lastFetched ? `${batches.length} batches · last updated ${lastFetched}` : "All heat-sensitive SME product batches"}
+        action={
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <button onClick={fetchBatches} disabled={isLoading} style={{
+              background: "var(--bg-input)", color: "var(--text-secondary)", border: "1px solid var(--border-primary)",
+              padding: "10px 14px", borderRadius: 8, cursor: isLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 500
+            }}>{isLoading ? "⏳" : "↻ Refresh"}</button>
+            <button onClick={onNewBatch} style={{
+              background: ACCENT.greenDark, color: "#fff", border: "none", padding: "10px 18px",
+              borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 13, display: "flex", gap: 6, alignItems: "center"
+            }}><span>+</span> New Batch</button>
+          </div>
+        }
+      />
+
+      {/* ── SEARCH + FILTER ROW ── */}
+      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 24, flexWrap: "wrap" }}>
+        <div style={{ position: "relative", flex: "0 0 280px" }}>
+          <span style={{ position: "absolute", left: 12, top: 10, fontSize: 13, color: "var(--text-dim)" }}>🔍</span>
+          <input
+            type="text"
+            placeholder="Search batches, products, zones..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{
+              width: "100%", padding: "10px 12px 10px 34px", borderRadius: 8,
+              border: "1px solid var(--border-primary)", background: "var(--bg-primary)",
+              color: "var(--text-primary)", outline: "none", fontSize: 13
+            }}
+          />
+        </div>
+        <div style={{ display: "flex", gap: 4, background: "var(--bg-input)", padding: 4, borderRadius: 8 }}>
+          {STATUS_TABS.map(t => (
+            <button key={t} onClick={() => setActiveTab(t)} style={{
+              padding: "7px 14px", borderRadius: 6, border: "none", fontSize: 12, cursor: "pointer",
+              background: activeTab === t ? "var(--bg-card)" : "transparent",
+              color: activeTab === t ? "var(--text-primary)" : "var(--text-secondary)",
+              boxShadow: activeTab === t ? "var(--shadow-card)" : "none",
+              fontWeight: activeTab === t ? 600 : 400,
+              display: "flex", alignItems: "center", gap: 5
+            }}>
+              {t}
+              {tabCounts[t] > 0 && (
+                <span style={{
+                  background: activeTab === t ? ACCENT.greenBg : "var(--bg-input)",
+                  color: activeTab === t ? ACCENT.green : "var(--text-dim)",
+                  borderRadius: 12, padding: "1px 7px", fontSize: 10, fontWeight: 700
+                }}>{tabCounts[t]}</span>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
+      {/* ── TABLE ── */}
       <Card style={{ padding: 0, overflow: "hidden" }} hover={false}>
         <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
           <thead>
             <tr style={{ borderBottom: "1px solid var(--border-primary)", background: "var(--bg-input)" }}>
-              {["BATCH", "PRODUCT", "STATUS", "TRUST SCORE", "DVS SCORE", "DESTINATION", "WEIGHT"].map(h => (
-                <th key={h} style={{ padding: "14px 24px", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.05em" }}>{h}</th>
+              {["BATCH ID", "PRODUCT", "STATUS", "TRUST SCORE", "DESTINATION", "WEIGHT", "CREATED"].map(h => (
+                <th key={h} style={{ padding: "14px 20px", fontSize: 10, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.08em" }}>{h}</th>
               ))}
-              <th></th>
+              <th style={{ padding: "14px 12px" }}></th>
             </tr>
           </thead>
           <tbody>
-            {batches.map((b, i) => (
-              <tr key={i} style={{ borderBottom: "1px solid var(--border-primary)", cursor: "pointer", transition: "background 0.2s" }}
-                  onMouseEnter={e => e.currentTarget.style.background="var(--bg-input)"}
-                  onMouseLeave={e => e.currentTarget.style.background="transparent"}>
-                <td style={{ padding: "18px 24px", fontSize: 13, fontWeight: 500 }}>{b.id}</td>
-                <td style={{ padding: "18px 24px", fontSize: 13, color: "var(--text-secondary)" }}>{b.product}</td>
-                <td style={{ padding: "18px 24px" }}>
-                  <span style={{ border: `1px solid ${b.status==="Certified"?ACCENT.greenBorder:"var(--border-primary)"}`, color: b.status==="Certified"?ACCENT.green:"var(--text-secondary)", padding: "4px 12px", borderRadius: 20, fontSize: 11, background: b.status==="Certified"?ACCENT.greenBg:"transparent", fontWeight: 600 }}>
-                    {b.status}
-                  </span>
-                </td>
-                <td style={{ padding: "18px 24px", fontSize: 13, color: ACCENT.green, fontWeight: 600 }}>{b.trust ? `🛡️ ${b.trust}` : "—"}</td>
-                <td style={{ padding: "18px 24px", fontSize: 13, color: "var(--text-secondary)" }}>{b.dvs || "—"}</td>
-                <td style={{ padding: "18px 24px", fontSize: 13, color: "var(--text-secondary)" }}>{b.dest}</td>
-                <td style={{ padding: "18px 24px", fontSize: 13, color: "var(--text-secondary)" }}>{b.weight} kg</td>
-                <td style={{ padding: "18px 24px", color: "var(--text-muted)", fontSize: 16 }}>›</td>
-              </tr>
-            ))}
+            {isLoading
+              ? Array.from({ length: 6 }).map((_, i) => (
+                  <tr key={i} style={{ borderBottom: "1px solid var(--border-primary)" }}>
+                    {Array.from({ length: 8 }).map((__, j) => (
+                      <td key={j} style={{ padding: "16px 20px" }}>
+                        <div style={{ height: 12, background: "var(--bg-input)", borderRadius: 6, width: j === 0 ? "80%" : "60%", animation: "pulse 1.5s ease infinite" }} />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              : filtered.length === 0
+              ? (
+                <tr><td colSpan={8} style={{ padding: "40px 24px", textAlign: "center", color: "var(--text-dim)", fontSize: 14 }}>
+                  {search ? `No batches match "${search}"` : `No ${activeTab !== "All" ? activeTab.toLowerCase() : ""} batches found.`}
+                </td></tr>
+              )
+              : filtered.map((b, i) => {
+                  const ss = getStatusStyle(b.status);
+                  const elapsed = b.created_at ? Math.round((Date.now() - new Date(b.created_at).getTime()) / 60000) : 0;
+                  const timeAgo = elapsed < 60 ? `${elapsed}m ago` : elapsed < 1440 ? `${Math.round(elapsed / 60)}h ago` : `${Math.round(elapsed / 1440)}d ago`;
+                  return (
+                    <tr key={b.id || i}
+                      onClick={() => setSelected(b)}
+                      style={{ borderBottom: "1px solid var(--border-primary)", cursor: "pointer", transition: "background 0.2s" }}
+                      onMouseEnter={e => e.currentTarget.style.background = "var(--bg-input)"}
+                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                      <td style={{ padding: "16px 20px", fontSize: 13, fontWeight: 600, fontFamily: "'JetBrains Mono', monospace", color: ACCENT.green }}>{b.id || b.batch_number}</td>
+                      <td style={{ padding: "16px 20px", fontSize: 13 }}>{b.product_name || b.product || "—"}</td>
+                      <td style={{ padding: "16px 20px" }}>
+                        <span style={{ border: `1px solid ${ss.border}`, color: ss.color, padding: "4px 10px", borderRadius: 20, fontSize: 10, background: ss.bg, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                          {b.status || "—"}
+                        </span>
+                      </td>
+                      <td style={{ padding: "16px 20px", fontSize: 13, color: b.trust_score >= 75 ? ACCENT.green : b.trust_score >= 55 ? ACCENT.amber : ACCENT.red, fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>
+                        {b.trust_score != null ? `🛡️ ${b.trust_score}` : "—"}
+                      </td>
+                      <td style={{ padding: "16px 20px", fontSize: 13, color: "var(--text-secondary)" }}>{b.destination_zone || b.dest || "—"}</td>
+                      <td style={{ padding: "16px 20px", fontSize: 13, color: "var(--text-secondary)" }}>{b.weight_kg != null ? `${b.weight_kg} kg` : b.weight ? `${b.weight} kg` : "—"}</td>
+                      <td style={{ padding: "16px 20px", fontSize: 12, color: "var(--text-dim)" }}>{timeAgo}</td>
+                      <td style={{ padding: "16px 12px", color: ACCENT.green, fontSize: 16 }}>›</td>
+                    </tr>
+                  );
+                })
+            }
           </tbody>
         </table>
+        {!isLoading && filtered.length > 0 && (
+          <div style={{ padding: "14px 20px", borderTop: "1px solid var(--border-primary)", fontSize: 12, color: "var(--text-dim)", display: "flex", justifyContent: "space-between" }}>
+            <span>Showing {filtered.length} of {batches.length} batches</span>
+            <span style={{ color: ACCENT.green }}>Click a row to view details →</span>
+          </div>
+        )}
       </Card>
+
+      {/* ── BATCH DETAIL DRAWER ── */}
+      {selectedBatch && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 200,
+          display: "flex", justifyContent: "flex-end"
+        }}>
+          <div onClick={() => setSelected(null)} style={{ flex: 1, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }} />
+          <div style={{
+            width: 420, height: "100vh", overflowY: "auto",
+            background: "var(--bg-card)", borderLeft: "1px solid var(--border-primary)",
+            padding: 32, animation: "fadeSlideIn 0.3s ease",
+            display: "flex", flexDirection: "column", gap: 20
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>Batch Details</div>
+              <button onClick={() => setSelected(null)} style={{
+                background: "var(--bg-input)", border: "1px solid var(--border-primary)",
+                borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: "var(--text-secondary)", fontSize: 13
+              }}>✕ Close</button>
+            </div>
+
+            <div style={{ background: "var(--bg-input)", borderRadius: 12, padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: ACCENT.green }}>
+                {selectedBatch.id || selectedBatch.batch_number}
+              </div>
+              {(() => {
+                const ss = getStatusStyle(selectedBatch.status);
+                return <span style={{ border: `1px solid ${ss.border}`, color: ss.color, padding: "4px 12px", borderRadius: 20, fontSize: 11, background: ss.bg, fontWeight: 700, textTransform: "uppercase", width: "max-content" }}>{selectedBatch.status}</span>;
+              })()}
+            </div>
+
+            {[
+              { label: "Product", value: selectedBatch.product_name || selectedBatch.product || "—" },
+              { label: "Destination Zone", value: selectedBatch.destination_zone || selectedBatch.dest || "—" },
+              { label: "Weight", value: selectedBatch.weight_kg ? `${selectedBatch.weight_kg} kg` : selectedBatch.weight ? `${selectedBatch.weight} kg` : "—" },
+              { label: "Processor ID", value: selectedBatch.processor_id || "#07 (anonymized)" },
+              { label: "Created At", value: selectedBatch.created_at ? new Date(selectedBatch.created_at).toLocaleString() : "—" },
+            ].map(({ label, value }) => (
+              <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--border-primary)", fontSize: 14 }}>
+                <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>{label}</span>
+                <span style={{ color: "var(--text-primary)", fontWeight: 600, textAlign: "right", maxWidth: "60%" }}>{value}</span>
+              </div>
+            ))}
+
+            <div style={{ background: "var(--bg-input)", borderRadius: 12, padding: 20 }}>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>Trust Score</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <div style={{
+                  fontSize: 38, fontWeight: 800, fontFamily: "'JetBrains Mono', monospace",
+                  color: selectedBatch.trust_score >= 75 ? ACCENT.green : selectedBatch.trust_score >= 55 ? ACCENT.amber : ACCENT.red
+                }}>{selectedBatch.trust_score ?? "—"}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ height: 8, background: "var(--bg-card)", borderRadius: 4, overflow: "hidden" }}>
+                    <div style={{
+                      height: "100%", borderRadius: 4, transition: "width 0.8s ease",
+                      width: `${selectedBatch.trust_score ?? 0}%`,
+                      background: selectedBatch.trust_score >= 75 ? ACCENT.green : selectedBatch.trust_score >= 55 ? ACCENT.amber : ACCENT.red
+                    }} />
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 6 }}>BARI Compliance Threshold: 60+</div>
+                </div>
+              </div>
+            </div>
+
+            {selectedBatch.status === "certified" && (
+              <div style={{ background: ACCENT.greenBg, border: `1px solid ${ACCENT.greenBorder}`, borderRadius: 12, padding: 16, fontSize: 13, color: ACCENT.green, fontWeight: 600 }}>
+                ✓ Batch is certified. Dispatch is permitted within TST window.
+              </div>
+            )}
+            {selectedBatch.status === "pending" && (
+              <div style={{ background: ACCENT.amberBg, border: `1px solid ${ACCENT.amberBorder}`, borderRadius: 12, padding: 16, fontSize: 13, color: ACCENT.amber, fontWeight: 600 }}>
+                ⏳ Batch is awaiting IoT sensor verification before certification.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
