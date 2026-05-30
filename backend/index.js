@@ -1043,6 +1043,7 @@ app.post('/api/agent/message', async (req, res) => {
     let responseType = 'TEXT';
     let responseProducts = undefined;
     let navigationTarget = undefined;
+    let pendingOrder = undefined;
 
     // 1. High-Performance Deterministic Navigation Check
     if (/(marketplace|market|মার্কেটপ্লেস|বাজার|পণ্য তালিকা|প্রোডাক্ট লিস্ট)/i.test(lowerQuery)) {
