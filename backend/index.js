@@ -323,20 +323,22 @@ app.get('/api/test-db', asyncHandler(async (req, res) => {
 }));
 
 app.get('/api/test-groq', asyncHandler(async (req, res) => {
-  const apiKey = process.env.GROQ_API_KEY;
+  const rawApiKey = process.env.GROQ_API_KEY;
+  const apiKey = rawApiKey ? rawApiKey.trim() : null;
   const report = {
     env: process.env.NODE_ENV,
-    apiKeyConfigured: Boolean(apiKey),
-    apiKeyLength: apiKey ? apiKey.length : 0,
-    apiKeyPrefix: apiKey ? apiKey.substring(0, 8) : 'none',
-    apiKeySuffix: apiKey ? apiKey.substring(apiKey.length - 4) : 'none',
+    apiKeyConfigured: Boolean(rawApiKey),
+    apiKeyLength: rawApiKey ? rawApiKey.length : 0,
+    apiKeyPrefix: rawApiKey ? rawApiKey.substring(0, 8) : 'none',
+    apiKeySuffix: rawApiKey ? rawApiKey.substring(rawApiKey.length - 4) : 'none',
+    trimmedKeyLength: apiKey ? apiKey.length : 0,
   };
 
   if (!apiKey) {
     return res.status(500).json({ success: false, message: 'GROQ_API_KEY not configured', report });
   }
 
-  // 1. Test raw fetch to api.groq.com
+  // 1. Test raw fetch to api.groq.com (with trimmed key)
   try {
     const rawRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -364,7 +366,7 @@ app.get('/api/test-groq', asyncHandler(async (req, res) => {
     };
   }
 
-  // 2. Test groq-sdk
+  // 2. Test groq-sdk (with trimmed key)
   try {
     const tempGroq = new GroqClass({ apiKey });
     const completion = await tempGroq.chat.completions.create({
@@ -1036,8 +1038,9 @@ Rules:
 let groqClient = null;
 function getGroqClient() {
   if (!groqClient) {
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) throw new Error('GROQ_API_KEY environment variable is not set');
+    const rawApiKey = process.env.GROQ_API_KEY;
+    if (!rawApiKey) throw new Error('GROQ_API_KEY environment variable is not set');
+    const apiKey = rawApiKey.trim();
     groqClient = new GroqClass({ apiKey });
   }
   return groqClient;
