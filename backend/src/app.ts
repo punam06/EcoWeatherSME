@@ -652,10 +652,17 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   });
 });
 
+// GET /docs redirect to frontend docs tab
+app.get('/docs', (req: Request, res: Response) => {
+  const frontendUrl = process.env.FRONTEND_URL || 'https://ecoweathersme.onrender.com';
+  res.redirect(`${frontendUrl}/?tab=docs`);
+});
+
 // 404 catch-all
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ success: false, error: 'Route not found' });
 });
+
 
 // ═══════════════════════════════════════════════════════════════
 // SERVER START

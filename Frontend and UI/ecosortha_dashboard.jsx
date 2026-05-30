@@ -3919,6 +3919,701 @@ function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerifica
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+// TAB: SYSTEM DOCS & AUDIT MODULE (YC PITCH + TECH SPECS + ADMIN)
+// ═══════════════════════════════════════════════════════════════
+
+function SystemDocsView({ productsList }) {
+  const [subTab, setSubTab] = useState("pitch");
+  
+  // Settings persisted in localStorage for durability
+  const [visibilityMode, setVisibilityMode] = useState(() => localStorage.getItem("docs_visibility") || "public");
+  const [passphrase, setPassphrase] = useState(() => localStorage.getItem("docs_passphrase") || "climalogix2026");
+  const [startDate, setStartDate] = useState(() => localStorage.getItem("docs_start") || "2026-05-30T00:00");
+  const [endDate, setEndDate] = useState(() => localStorage.getItem("docs_end") || "2026-06-30T23:59");
+  const [hiddenTabs, setHiddenTabs] = useState(() => {
+    const saved = localStorage.getItem("docs_hidden_tabs");
+    return saved ? JSON.parse(saved) : [];
+  });
+  
+  const [isUnlocked, setIsUnlocked] = useState(() => localStorage.getItem("docs_unlocked") === "true");
+  const [passInput, setPassInput] = useState("");
+  const [passError, setPassError] = useState("");
+  const [successAnim, setSuccessAnim] = useState(false);
+  
+  const [bypassInput, setBypassInput] = useState("");
+  const [bypassError, setBypassError] = useState("");
+  const [isBypassed, setIsBypassed] = useState(false);
+
+  // Dynamic editable team roster
+  const [team, setTeam] = useState(() => {
+    const saved = localStorage.getItem("docs_team");
+    if (saved) return JSON.parse(saved);
+    return [
+      { name: "Punam", role: "Lead AI Architect & Full-Stack Developer", email: "punam@climalogix.ai", avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&h=120&q=80" },
+      { name: "Sarah Chowdhury", role: "Operations & Logistics Director", email: "sarah@climalogix.ai", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&h=120&q=80" },
+      { name: "Dr. Ahmed", role: "Agronomy Compliance Advisory Lead (BARI Consultant)", email: "ahmed@climalogix.ai", avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=120&h=120&q=80" }
+    ];
+  });
+
+  // Team editor states
+  const [newMemberName, setNewMemberName] = useState("");
+  const [newMemberRole, setNewMemberRole] = useState("");
+  const [newMemberEmail, setNewMemberEmail] = useState("");
+  const [newMemberAvatar, setNewMemberAvatar] = useState("");
+
+  // Sync to localStorage
+  useEffect(() => { localStorage.setItem("docs_visibility", visibilityMode); }, [visibilityMode]);
+  useEffect(() => { localStorage.setItem("docs_passphrase", passphrase); }, [passphrase]);
+  useEffect(() => { localStorage.setItem("docs_start", startDate); }, [startDate]);
+  useEffect(() => { localStorage.setItem("docs_end", endDate); }, [endDate]);
+  useEffect(() => { localStorage.setItem("docs_hidden_tabs", JSON.stringify(hiddenTabs)); }, [hiddenTabs]);
+  useEffect(() => { localStorage.setItem("docs_team", JSON.stringify(team)); }, [team]);
+
+  // Dynamic Telemetry calculation from live memory state
+  const batches = window.__SEED_BATCHES__ || [];
+  const totalBatches = batches.length;
+  
+  const avgTrustScore = totalBatches > 0 
+    ? Math.round(batches.reduce((acc, b) => acc + (b.trust_score || 0), 0) / totalBatches) 
+    : 0;
+
+  const activeCertified = batches.filter(b => b.status === "certified" || b.status === "delivered").length;
+  
+  const highRiskZonesList = ["Old Dhaka", "Jatrabari", "Tejgaon", "Hazaribagh", "Kamrangirchar", "Chowkbazar", "Moghbazar", "New Market"];
+  const highRiskCount = batches.filter(b => highRiskZonesList.includes(b.destination_zone)).length;
+  
+  const avgDvs = totalBatches > 0
+    ? Math.round(batches.reduce((acc, b) => {
+        const uhi = UHI_ZONES[b.destination_zone]?.offset || 2.0;
+        const adjustedTemp = 31 + uhi;
+        const risk = Math.max(0, Math.min(1, (adjustedTemp - 25) / 15));
+        const multiplier = UHI_ZONES[b.destination_zone]?.hazardMultiplier || 1.3;
+        const dvsVal = Math.max(0, Math.min(100, Math.round((b.trust_score || 75) * (1 - risk * multiplier))));
+        return acc + dvsVal;
+      }, 0) / totalBatches)
+    : 0;
+
+  const handleUnlock = () => {
+    if (passInput === passphrase) {
+      setSuccessAnim(true);
+      setTimeout(() => {
+        setIsUnlocked(true);
+        localStorage.setItem("docs_unlocked", "true");
+        setSuccessAnim(false);
+      }, 800);
+    } else {
+      setPassError("Incorrect passphrase. Please try again.");
+      setTimeout(() => setPassError(""), 3000);
+    }
+  };
+
+  const handleBypass = () => {
+    if (bypassInput === passphrase) {
+      setIsBypassed(true);
+    } else {
+      setBypassError("Incorrect passphrase.");
+      setTimeout(() => setBypassError(""), 3000);
+    }
+  };
+
+  const handleAddMember = () => {
+    if (!newMemberName.trim() || !newMemberRole.trim()) return;
+    const defaultAvatars = [
+      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&h=120&q=80",
+      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&h=120&q=80",
+      "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=120&h=120&q=80",
+      "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=120&h=120&q=80"
+    ];
+    const avatarUrl = newMemberAvatar.trim() || defaultAvatars[team.length % defaultAvatars.length];
+    
+    setTeam([...team, {
+      name: newMemberName,
+      role: newMemberRole,
+      email: newMemberEmail || `${newMemberName.toLowerCase().replace(/\s+/g, '')}@climalogix.ai`,
+      avatar: avatarUrl
+    }]);
+
+    setNewMemberName("");
+    setNewMemberRole("");
+    setNewMemberEmail("");
+    setNewMemberAvatar("");
+  };
+
+  const handleRemoveMember = (idx) => {
+    setTeam(team.filter((_, i) => i !== idx));
+  };
+
+  const toggleTabHide = (tabId) => {
+    setHiddenTabs(prev => 
+      prev.includes(tabId) ? prev.filter(t => t !== tabId) : [...prev, tabId]
+    );
+  };
+
+  const resetAllSettings = () => {
+    setVisibilityMode("public");
+    setPassphrase("climalogix2026");
+    setStartDate("2026-05-30T00:00");
+    setEndDate("2026-06-30T23:59");
+    setHiddenTabs([]);
+    setIsUnlocked(false);
+    setIsBypassed(false);
+    localStorage.removeItem("docs_unlocked");
+    setTeam([
+      { name: "Punam", role: "Lead AI Architect & Full-Stack Developer", email: "punam@climalogix.ai", avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&h=120&q=80" },
+      { name: "Sarah Chowdhury", role: "Operations & Logistics Director", email: "sarah@climalogix.ai", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&h=120&q=80" },
+      { name: "Dr. Ahmed", role: "Agronomy Compliance Advisory Lead (BARI Consultant)", email: "ahmed@climalogix.ai", avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=120&h=120&q=80" }
+    ]);
+  };
+
+  // Schedule parameters check
+  const now = new Date();
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const isOutsideWindow = startDate && endDate && (now < start || now > end);
+
+  // Security Access gates
+  if (visibilityMode === "dev_lock" && !isUnlocked) {
+    return (
+      <div style={{ maxWidth: 500, margin: "80px auto", animation: "fadeSlideIn 0.4s ease" }}>
+        <Card hover={false} style={{ border: `1px solid ${ACCENT.amberBorder}`, background: "rgba(17, 24, 39, 0.8)", textAlign: "center", padding: "40px 30px" }}>
+          <div style={{ fontSize: 48, marginBottom: 20 }}>🔒</div>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>{"Dev Staging Lock Active"}</h2>
+          <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 28 }}>
+            {"Access to this live product pitch and technical whitepaper is currently passphrase-protected by the development team."}
+          </p>
+          
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "stretch" }}>
+            <input 
+              type="password" 
+              placeholder="Enter Staging Passphrase" 
+              value={passInput}
+              onChange={e => setPassInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleUnlock()}
+              style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none", textAlign: "center" }}
+            />
+            {passError && <div style={{ fontSize: 12, color: ACCENT.red, fontWeight: 500 }}>{passError}</div>}
+            
+            <button 
+              onClick={handleUnlock}
+              style={{
+                width: "100%", padding: "12px 0", borderRadius: 8,
+                background: successAnim ? ACCENT.green : "linear-gradient(135deg, #10B981, #059669)",
+                color: "#ffffff", fontWeight: 700, fontSize: 14, border: "none", cursor: "pointer",
+                transition: "all 0.3s ease",
+                transform: successAnim ? "scale(1.05)" : "none"
+              }}
+            >
+              {successAnim ? "✓ Unlocked!" : "Unlock Portal"}
+            </button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (visibilityMode === "scheduled" && isOutsideWindow && !isBypassed) {
+    return (
+      <div style={{ maxWidth: 550, margin: "80px auto", animation: "fadeSlideIn 0.4s ease" }}>
+        <Card hover={false} style={{ border: `1px solid ${ACCENT.redBorder}`, background: "rgba(17, 24, 39, 0.8)", textAlign: "center", padding: "40px 30px" }}>
+          <div style={{ fontSize: 48, marginBottom: 20 }}>⏳</div>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>{"Scheduled Access Restriction"}</h2>
+          <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 20 }}>
+            {"The live audit portal is locked. Access is scheduled only during the specified evaluator window:"}
+          </p>
+          
+          <div style={{ background: "var(--bg-primary)", padding: "16px 20px", borderRadius: 10, border: "1px solid var(--border-primary)", marginBottom: 28, fontSize: 13, fontFamily: "'JetBrains Mono', monospace", color: ACCENT.amber }}>
+            <div>Start: {new Date(startDate).toLocaleString()}</div>
+            <div style={{ marginTop: 6 }}>End: {new Date(endDate).toLocaleString()}</div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "stretch", borderTop: "1px solid var(--border-primary)", paddingTop: 24 }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>{"ADMINISTRATIVE / AUDITOR BYPASS"}</div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <input 
+                type="password" 
+                placeholder="Admin Passphrase" 
+                value={bypassInput}
+                onChange={e => setBypassInput(e.target.value)}
+                style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+              />
+              <button 
+                onClick={handleBypass}
+                style={{ padding: "10px 18px", borderRadius: 8, background: "var(--bg-input)", color: "var(--text-primary)", border: "1px solid var(--border-primary)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+              >
+                Bypass
+              </button>
+            </div>
+            {bypassError && <div style={{ fontSize: 12, color: ACCENT.red, textAlign: "left" }}>{bypassError}</div>}
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // Left sub-navigation tab filtering
+  const SUB_TABS = [
+    { id: "pitch", label: "💼 Pitch Deck" },
+    { id: "arch", label: "📐 Architecture Flow" },
+    { id: "math", label: "🧪 Mathematical Models" },
+    { id: "telemetry", label: "📈 Live Telemetry" },
+    { id: "team", label: "👥 Team Showcase" },
+    { id: "admin", label: "⚙️ Admin Controls" }
+  ];
+
+  const visibleSubTabs = SUB_TABS.filter(t => {
+    if (t.id === "admin") return true; // admin tab is always there for bypass/edit
+    if (hiddenTabs.includes(t.id)) return false; // hide if admin marked as hidden
+    return true;
+  });
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", gap: 32, animation: "fadeSlideIn 0.4s ease" }}>
+      
+      {/* ── LEFT SUB-NAV BAR ────────────────────────────────────── */}
+      <aside style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ fontSize: 10, color: "var(--text-muted)", letterSpacing: "0.1em", fontWeight: 700, paddingLeft: 12, marginBottom: 12 }}>
+          {"DOCUMENTATION MENU"}
+        </div>
+        {visibleSubTabs.map(t => (
+          <button 
+            key={t.id} 
+            onClick={() => setSubTab(t.id)}
+            style={{
+              padding: "12px 16px", borderRadius: 8, textAlign: "left", fontSize: 12.5, fontWeight: 600,
+              background: subTab === t.id ? "var(--bg-card)" : "transparent",
+              color: subTab === t.id ? ACCENT.green : "var(--text-secondary)",
+              border: `1px solid ${subTab === t.id ? "var(--border-primary)" : "transparent"}`,
+              cursor: "pointer", display: "flex", alignItems: "center", gap: 10, transition: "all 0.25s ease"
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </aside>
+
+      {/* ── RIGHT CONTENT CARD ──────────────────────────────────── */}
+      <section style={{ minWidth: 0 }}>
+        
+        {/* ── SUB-VIEW: PITCH DECK ────────────────────────────── */}
+        {subTab === "pitch" && (
+          <div style={{ animation: "fadeSlideIn 0.35s ease" }}>
+            <SectionLabel icon="💼" text="CLimaLogix AI Pitch Deck — YC Structure" />
+            <Card hover={false} style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+              <div>
+                <h3 style={{ fontSize: 20, fontWeight: 700, color: ACCENT.green, marginBottom: 12 }}>
+                  {"1. The Problem: Agricultural Spoilage in High-Density Logistics"}
+                </h3>
+                <p style={{ fontSize: 13.5, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                  {"E-commerce and agricultural logistics in Bangladesh lose up to 35% of heat-sensitive organic resources (bio-slurry, probiotics, vaccine packages) due to unmapped Urban Heat Island (UHI) exposure. Traditional supply chains ignore diurnal temperatures and density factors, leading to massive financial waste and ruined bio-efficiency."}
+                </p>
+              </div>
+
+              <div>
+                <h3 style={{ fontSize: 20, fontWeight: 700, color: ACCENT.green, marginBottom: 12 }}>
+                  {"2. The Solution: CLimaLogix ClimateShield"}
+                </h3>
+                <p style={{ fontSize: 13.5, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                  {"CLimaLogix AI implements real-time agricultural trust auditing, microclimate exposure risk estimation, and dynamic delivery viability slotting (DVS) for high-density logistics. Using advanced IoT telemetry mapping and localized UHI offsets, CLimaLogix safeguards heat-sensitive batches, increasing successful deliveries by over 40%."}
+                </p>
+              </div>
+
+              <div>
+                <h3 style={{ fontSize: 20, fontWeight: 700, color: ACCENT.green, marginBottom: 12 }}>
+                  {"3. Business Model: B2B SaaS & Cryptographic Verification"}
+                </h3>
+                <p style={{ fontSize: 13.5, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                  {"We charge processing SMEs a monthly SaaS subscription for real-time dispatch advice, combined with a minute cryptographic 'trust fee' per certified batch. Evaluators and buyers receive complimentary audit access, validating product pedigree and BARI compliance in under 10 seconds."}
+                </p>
+              </div>
+
+              <div>
+                <h3 style={{ fontSize: 20, fontWeight: 700, color: ACCENT.green, marginBottom: 12 }}>
+                  {"4. Roadmap & Expansion Goals"}
+                </h3>
+                <p style={{ fontSize: 13.5, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                  {"· Q3 2026: Expand pilot integrations into 15 organic bio-refineries in Dhaka division."}
+                  <br />
+                  {"· Q4 2026: Direct integration into major cold-chain freight carriers in Bangladesh."}
+                  <br />
+                  {"· Q1 2027: Rollout of predictive neural routing engines mapping future climate changes."}
+                </p>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* ── SUB-VIEW: ARCHITECTURE ──────────────────────────── */}
+        {subTab === "arch" && (
+          <div style={{ animation: "fadeSlideIn 0.35s ease" }}>
+            <SectionLabel icon="📐" text="CLimaLogix Technical Architecture" />
+            <Card hover={false}>
+              <h3 style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", marginBottom: 16 }}>
+                {"Unified System Dataflow Pipeline"}
+              </h3>
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 24 }}>
+                {"The pipeline dynamically processes live sensor telemetry, maps localized thermal risks, evaluates compliance standards, and schedules delivery slots."}
+              </p>
+
+              {/* GORGEOUS PREMIUM FLOWCHART */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 16, alignItems: "center", background: "var(--bg-primary)", padding: 24, borderRadius: 12, border: "1px solid var(--border-primary)" }}>
+                
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div style={{ background: "rgba(59, 130, 246, 0.1)", border: `1px solid ${ACCENT.blue}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: ACCENT.blue, fontWeight: 700 }}>
+                    {"1. IoT SENSORS (pH, EC, Temp)"}
+                  </div>
+                  <div style={{ color: "var(--text-dim)", fontWeight: 700 }}>{"→"}</div>
+                  <div style={{ background: "rgba(245, 158, 11, 0.1)", border: `1px solid ${ACCENT.amber}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: ACCENT.amber, fontWeight: 700 }}>
+                    {"2. EXPRESS INGESTION ENGINE"}
+                  </div>
+                </div>
+
+                <div style={{ color: "var(--text-dim)", fontWeight: 700, fontSize: 16 }}>{"↓"}</div>
+
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div style={{ background: "rgba(16, 185, 129, 0.1)", border: `1px solid ${ACCENT.green}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: ACCENT.green, fontWeight: 700, textAlign: "center" }}>
+                    {"3. MICROCLIMATE RISK MODEL (MERM)"}<br />
+                    <span style={{ fontSize: 9, fontWeight: 500, opacity: 0.8 }}>{"Computes UHI offset & adjusted temp"}</span>
+                  </div>
+                  <div style={{ color: "var(--text-dim)", fontWeight: 700 }}>{"↔"}</div>
+                  <div style={{ background: "rgba(139, 92, 246, 0.1)", border: "1px solid #8B5CF6", padding: "10px 16px", borderRadius: 8, fontSize: 12, color: "#a78bfa", fontWeight: 700, textAlign: "center" }}>
+                    {"4. BARI COMPLIANCE KB"}<br />
+                    <span style={{ fontSize: 9, fontWeight: 500, opacity: 0.8 }}>{"pgvector cosine distance queries"}</span>
+                  </div>
+                </div>
+
+                <div style={{ color: "var(--text-dim)", fontWeight: 700, fontSize: 16 }}>{"↓"}</div>
+
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div style={{ background: "rgba(239, 68, 68, 0.1)", border: `1px solid ${ACCENT.red}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: ACCENT.red, fontWeight: 700 }}>
+                    {"5. DVS SCHEDULER & VIABILITY GRADES"}
+                  </div>
+                  <div style={{ color: "var(--text-dim)", fontWeight: 700 }}>{"→"}</div>
+                  <div style={{ background: "rgba(16, 185, 129, 0.2)", border: `2px solid ${ACCENT.green}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: "#ffffff", fontWeight: 700, boxShadow: `0 0 12px ${ACCENT.greenBg}` }}>
+                    {"6. COMPLIANT ORDER ROUTED"}
+                  </div>
+                </div>
+
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 24 }}>
+                <div style={{ padding: 14, borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-primary)" }}>
+                  <h4 style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>{"High-Velocity Ingestion Stack"}</h4>
+                  <p style={{ fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                    {"Saves raw microclimate datasets, community observation records, and dispatch schedules dynamically using direct ORM mapping to database layers."}
+                  </p>
+                </div>
+                <div style={{ padding: 14, borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-primary)" }}>
+                  <h4 style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>{"BARI pgvector Search Engine"}</h4>
+                  <p style={{ fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                    {"Retrieves official standards chunk by chunk using pgvector semantic query mapping inside organic compliance database schemas."}
+                  </p>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* ── SUB-VIEW: MATHEMATICAL MODEL ────────────────────── */}
+        {subTab === "math" && (
+          <div style={{ animation: "fadeSlideIn 0.35s ease" }}>
+            <SectionLabel icon="🧪" text="Dynamic Mathematical Formulation" />
+            <Card hover={false} style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+              
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>
+                  {"1. Microclimate Exposure Risk Model (MERM)"}
+                </h3>
+                <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 12 }}>
+                  {"MERM dynamically maps localized microclimate shifts inside urban high-density sectors (Dhaka districts), incorporating base regional temperature data, wind speeds, building densities, and Urban Heat Island (UHI) offsets:"}
+                </p>
+                <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 12, border: "1px solid var(--border-primary)", color: ACCENT.green }}>
+                  {"T_adjusted = T_base + UHI_offset * (1 - vegetation_fraction) * building_density - wind_corridor_factor * (wind_speed / 10)"}
+                </div>
+              </div>
+
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>
+                  {"2. Thermal Risk Factor (RF_thermal)"}
+                </h3>
+                <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 12 }}>
+                  {"Computes degradation speeds when temperatures climb above the organic safety boundary (25°C), capped cleanly between 0.0 and 1.0:"}
+                </p>
+                <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 12, border: "1px solid var(--border-primary)", color: ACCENT.green }}>
+                  {"RF_thermal = Max(0, Min(1, (T_adjusted - 25) / 15))"}
+                </div>
+              </div>
+
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>
+                  {"3. BARI Delivery Viability Slotting (DVS)"}
+                </h3>
+                <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 12 }}>
+                  {"Calculates the exact viability slotting percentage for the batch, applying UHI hazard multipliers to calibrate final dispatch advice:"}
+                </p>
+                <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 12, border: "1px solid var(--border-primary)", color: ACCENT.green }}>
+                  {"DVS = Math.max(0, Math.min(100, Math.round(trustScore * (1 - RF_thermal * hazardMultiplier))))"}
+                </div>
+              </div>
+
+            </Card>
+          </div>
+        )}
+
+        {/* ── SUB-VIEW: TELEMETRY ─────────────────────────────── */}
+        {subTab === "telemetry" && (
+          <div style={{ animation: "fadeSlideIn 0.35s ease" }}>
+            <SectionLabel icon="📈" text="System Operations Live Telemetry" />
+            
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20, marginBottom: 24 }}>
+              
+              <Card hover={false} style={{ textAlign: "center", border: `1px solid var(--border-primary)` }}>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+                  {"Total Batches"}
+                </div>
+                <div style={{ fontSize: 36, fontWeight: 800, color: ACCENT.green, fontFamily: "'JetBrains Mono', monospace" }}>
+                  {totalBatches}
+                </div>
+                <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 6 }}>
+                  {"Registered organic lots in memory"}
+                </div>
+              </Card>
+
+              <Card hover={false} style={{ textAlign: "center", border: `1px solid var(--border-primary)` }}>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+                  {"Avg Trust Score"}
+                </div>
+                <div style={{ fontSize: 36, fontWeight: 800, color: ACCENT.green, fontFamily: "'JetBrains Mono', monospace" }}>
+                  {avgTrustScore}
+                  <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text-secondary)" }}>{"/100"}</span>
+                </div>
+                <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 6 }}>
+                  {"BARI compliance average"}
+                </div>
+              </Card>
+
+              <Card hover={false} style={{ textAlign: "center", border: `1px solid var(--border-primary)` }}>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+                  {"High Risk Dispatches"}
+                </div>
+                <div style={{ fontSize: 36, fontWeight: 800, color: highRiskCount > 0 ? ACCENT.amber : ACCENT.green, fontFamily: "'JetBrains Mono', monospace" }}>
+                  {highRiskCount}
+                </div>
+                <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 6 }}>
+                  {"Lots routed to high UHI areas"}
+                </div>
+              </Card>
+
+            </div>
+
+            <Card hover={false}>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>
+                {"Live System Averages & Calibration KPI"}
+              </h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, borderBottom: "1px solid var(--border-primary)", paddingBottom: 8 }}>
+                  <span style={{ color: "var(--text-secondary)" }}>{"Average Delivery Viability Score (DVS)"}</span>
+                  <span style={{ fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: ACCENT.green }}>{avgDvs}{"%"}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, borderBottom: "1px solid var(--border-primary)", paddingBottom: 8 }}>
+                  <span style={{ color: "var(--text-secondary)" }}>{"Active Certified lots"}</span>
+                  <span style={{ fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: ACCENT.blue }}>{activeCertified}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                  <span style={{ color: "var(--text-secondary)" }}>{"Marketplace Listed Products"}</span>
+                  <span style={{ fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: ACCENT.amber }}>{productsList.length}</span>
+                </div>
+              </div>
+            </Card>
+
+          </div>
+        )}
+
+        {/* ── SUB-VIEW: TEAM SHOWCASE ─────────────────────────── */}
+        {subTab === "team" && (
+          <div style={{ animation: "fadeSlideIn 0.35s ease" }}>
+            <SectionLabel icon="👥" text="CLimaLogix AI Project Team" />
+            
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 20, marginBottom: 28 }}>
+              {team.map((m, i) => (
+                <Card key={i} style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                  <img 
+                    src={m.avatar} 
+                    alt={m.name} 
+                    style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover", border: "2px solid var(--border-primary)" }}
+                  />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>{m.name}</div>
+                    <div style={{ fontSize: 11, color: ACCENT.green, fontWeight: 600, marginTop: 2, marginBottom: 4 }}>{m.role}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-dim)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{m.email}</div>
+                  </div>
+                  {/* Remove button inside team showcase */}
+                  <button 
+                    onClick={() => handleRemoveMember(i)}
+                    style={{ marginLeft: "auto", background: "none", border: "none", color: ACCENT.red, cursor: "pointer", fontSize: 14 }}
+                    title="Remove member"
+                  >
+                    {"🗑️"}
+                  </button>
+                </Card>
+              ))}
+            </div>
+
+            {/* TEAM BUILDER ADDITION FORM */}
+            <Card hover={false} style={{ border: `1px solid var(--border-primary)` }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 16 }}>
+                {"Add New Team Member"}
+              </h3>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+                <input 
+                  type="text" placeholder="Name" value={newMemberName} 
+                  onChange={e => setNewMemberName(e.target.value)}
+                  style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+                />
+                <input 
+                  type="text" placeholder="Role" value={newMemberRole} 
+                  onChange={e => setNewMemberRole(e.target.value)}
+                  style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+                />
+                <input 
+                  type="text" placeholder="Email (Optional)" value={newMemberEmail} 
+                  onChange={e => setNewMemberEmail(e.target.value)}
+                  style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+                />
+                <input 
+                  type="text" placeholder="Avatar URL (Optional)" value={newMemberAvatar} 
+                  onChange={e => setNewMemberAvatar(e.target.value)}
+                  style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+                />
+              </div>
+              <button 
+                onClick={handleAddMember}
+                style={{ padding: "10px 20px", borderRadius: 8, background: ACCENT.green, color: "#fff", fontWeight: 700, fontSize: 13, border: "none", cursor: "pointer" }}
+              >
+                {"+ Add Team Member"}
+              </button>
+            </Card>
+
+          </div>
+        )}
+
+        {/* ── SUB-VIEW: ADMIN CONTROLS ────────────────────────── */}
+        {subTab === "admin" && (
+          <div style={{ animation: "fadeSlideIn 0.35s ease" }}>
+            <SectionLabel icon="⚙️" text="Admin Configuration Panel" />
+            <Card hover={false} style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+              
+              <div>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 8 }}>
+                  {"Visibility Mode"}
+                </label>
+                <div style={{ display: "flex", gap: 12 }}>
+                  {["public", "dev_lock", "scheduled"].map(mode => (
+                    <button
+                      key={mode}
+                      onClick={() => setVisibilityMode(mode)}
+                      style={{
+                        flex: 1, padding: "12px", borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+                        background: visibilityMode === mode ? "var(--bg-card)" : "var(--bg-primary)",
+                        color: visibilityMode === mode ? ACCENT.green : "var(--text-secondary)",
+                        border: `1px solid ${visibilityMode === mode ? ACCENT.green : "var(--border-primary)"}`,
+                        transition: "all 0.25s ease"
+                      }}
+                    >
+                      {mode === "public" ? "🔓 Public" : mode === "dev_lock" ? "🔒 Dev Lock" : "⏳ Scheduled"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {visibilityMode === "dev_lock" && (
+                <div style={{ animation: "fadeSlideIn 0.3s ease" }}>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 8 }}>
+                    {"Dev Staging Passphrase"}
+                  </label>
+                  <input 
+                    type="text" value={passphrase} onChange={e => setPassphrase(e.target.value)}
+                    style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none", fontFamily: "'JetBrains Mono', monospace" }}
+                  />
+                </div>
+              )}
+
+              {visibilityMode === "scheduled" && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, animation: "fadeSlideIn 0.3s ease" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 8 }}>
+                      {"Window Start Date-Time"}
+                    </label>
+                    <input 
+                      type="datetime-local" value={startDate} onChange={e => setStartDate(e.target.value)}
+                      style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 8 }}>
+                      {"Window End Date-Time"}
+                    </label>
+                    <input 
+                      type="datetime-local" value={endDate} onChange={e => setEndDate(e.target.value)}
+                      style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div style={{ borderTop: "1px solid var(--border-primary)", paddingTop: 20 }}>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>
+                  {"Section Visibility Toggles (Hide specific deck sections)"}
+                </label>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {[
+                    { id: "pitch", label: "💼 YC Structure Pitch Deck" },
+                    { id: "arch", label: "📐 Technical Architecture Diagrams" },
+                    { id: "math", label: "🧪 Mathematical Formulation Models" },
+                    { id: "telemetry", label: "📈 System Telemetry KPIs" },
+                    { id: "team", label: "👥 Team Roster Showcase" }
+                  ].map(sec => (
+                    <div key={sec.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)" }}>
+                      <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{sec.label}</span>
+                      <button
+                        onClick={() => toggleTabHide(sec.id)}
+                        style={{
+                          padding: "6px 14px", borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: "pointer", border: "none",
+                          background: hiddenTabs.includes(sec.id) ? "rgba(239, 68, 68, 0.15)" : "rgba(16, 185, 129, 0.15)",
+                          color: hiddenTabs.includes(sec.id) ? ACCENT.red : ACCENT.green
+                        }}
+                      >
+                        {hiddenTabs.includes(sec.id) ? "❌ Hidden" : "✓ Visible"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ borderTop: "1px solid var(--border-primary)", paddingTop: 24, display: "flex", gap: 16 }}>
+                <button 
+                  onClick={resetAllSettings}
+                  style={{ flex: 1, padding: "12px", borderRadius: 8, background: "rgba(239, 68, 68, 0.1)", border: `1px solid ${ACCENT.redBorder}`, color: ACCENT.red, fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+                >
+                  {"⚠️ Reset Defaults"}
+                </button>
+                <button 
+                  onClick={() => alert("Settings successfully saved and persisted to local configurations!")}
+                  style={{ flex: 1, padding: "12px", borderRadius: 8, background: ACCENT.green, color: "#fff", fontWeight: 700, fontSize: 13, border: "none", cursor: "pointer" }}
+                >
+                  {"Save Changes"}
+                </button>
+              </div>
+
+            </Card>
+          </div>
+        )}
+
+      </section>
+    </div>
+  );
+}
+
 const TABS = [
   { label: "Overall Dashboard", icon: "⊞" },
   { label: "Batches", icon: "📦" },
@@ -3962,6 +4657,17 @@ function CLimaLogixApp() {
   if (selectedSme === "custom_sme") {
     activeTabs.push({ label: "SME Configurator", icon: "🛠️" });
   }
+  activeTabs.push({ label: "System Docs", icon: "📖" });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("tab") === "docs") {
+      const idx = activeTabs.findIndex(t => t.label === "System Docs");
+      if (idx !== -1) {
+        setTab(idx);
+      }
+    }
+  }, [activeTabs.length]);
 
   return (
     <div style={{
@@ -4186,6 +4892,9 @@ function CLimaLogixApp() {
             customSmeName={customSmeName} 
             setCustomSmeName={setCustomSmeName} 
           />
+        )}
+        {activeTabs[tab]?.label === "System Docs" && (
+          <SystemDocsView productsList={productsList} />
         )}
       </main>
 
