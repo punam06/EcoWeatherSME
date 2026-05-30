@@ -2018,7 +2018,7 @@ const MOCK_PRODUCTS = [
 const IS_LOCAL_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 const BACKEND_URL = IS_LOCAL_DEV ? 'http://localhost:5001' : 'https://backsme.onrender.com';
 
-function ChatbotView({ setTab }) {
+function ChatbotView({ setTab, products = [] }) {
   const [messages, setMessages] = useState([
     { role: "system", content: "Hello! I am EcoSortha AI, your voice and text-based assistant. I can provide microclimate forecasts, smart dispatch suggestions, or analyze files and context. How can I help you today?", time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }
   ]);
@@ -2113,7 +2113,8 @@ function ChatbotView({ setTab }) {
           body: JSON.stringify({
             productName: orderContext.productName,
             quantity: orderContext.quantity,
-            farmerId: user ? user.id : undefined
+            farmerId: user ? user.id : undefined,
+            customProducts: products.filter(p => p.isCustom)
           })
         });
         const voiceData = await voiceRes.json();
@@ -2149,7 +2150,8 @@ function ChatbotView({ setTab }) {
           query: text,
           language: speechLang.startsWith("bn") ? "bn" : "en",
           sessionId: currentSessionId,
-          farmerId: user ? user.id : undefined
+          farmerId: user ? user.id : undefined,
+          customProducts: products.filter(p => p.isCustom)
         })
       });
       const data = await res.json();
@@ -2438,14 +2440,14 @@ function ChatbotView({ setTab }) {
   );
 }
 
-function MarketplaceView() {
+function MarketplaceView({ products = MOCK_PRODUCTS }) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [minDvs, setMinDvs] = useState(0);
 
   const categories = ["All", "Agriculture", "Pharmaceuticals", "Food & Dairy", "Food & Seafood", "Chemicals"];
 
-  const filteredProducts = MOCK_PRODUCTS.filter(p => {
+  const filteredProducts = products.filter(p => {
     if (category !== "All" && p.category !== category) return false;
     if (p.dvs < minDvs) return false;
     if (search && !p.name.toLowerCase().includes(search.toLowerCase()) && !p.seller.toLowerCase().includes(search.toLowerCase())) return false;
@@ -2533,8 +2535,242 @@ function MarketplaceView() {
   );
 }
 
+function CustomSmeView({ products, setProducts, customSmeName, setCustomSmeName }) {
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState("Agriculture");
+  const [price, setPrice] = useState("");
+  const [unit, setUnit] = useState("Kg");
+  const [dvs, setDvs] = useState(90);
+  const [icon, setIcon] = useState("🌱");
+  const [error, setError] = useState("");
 
-function AgentPanel({ setTab }) {
+  const categories = ["Agriculture", "Pharmaceuticals", "Food & Dairy", "Food & Seafood", "Chemicals"];
+  const icons = ["🌱", "🌾", "🌿", "📦", "🥛", "🐟", "⚕️", "💉", "🧪", "🍎", "🧀", "🍯"];
+
+  const handleAddProduct = (e) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      setError("Product Name is required");
+      return;
+    }
+    if (!price.trim() || isNaN(price)) {
+      setError("Please enter a valid price (number)");
+      return;
+    }
+    setError("");
+
+    const newProd = {
+      id: Date.now(),
+      name: name.trim(),
+      category,
+      price: `৳ ${Number(price).toLocaleString()}`,
+      unit,
+      seller: customSmeName,
+      dvs: Number(dvs),
+      icon,
+      badge: "Custom SME",
+      isCustom: true
+    };
+
+    setProducts(prev => [newProd, ...prev]);
+    setName("");
+    setPrice("");
+  };
+
+  const handleDeleteProduct = (id) => {
+    setProducts(prev => prev.filter(p => p.id !== id));
+  };
+
+  const customProducts = products.filter(p => p.isCustom);
+
+  return (
+    <div style={{ animation: "fadeSlideIn 0.3s ease", display: "grid", gridTemplateColumns: "1.2fr 1.8fr", gap: 30, marginBottom: 80 }}>
+      {/* Left Column: Brand & Add Form */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+        <SectionLabel icon="🛠️" text="SME Brand Configuration" />
+        <Card hover={false} style={{ padding: "24px" }}>
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 8 }}>SME BRAND NAME</label>
+            <input 
+              type="text" 
+              value={customSmeName} 
+              onChange={e => setCustomSmeName(e.target.value)}
+              style={{
+                width: "100%", padding: "12px 16px", borderRadius: 8,
+                border: "1px solid var(--border-primary)", background: "var(--bg-primary)",
+                color: "var(--text-primary)", fontSize: 14, outline: "none",
+                transition: "border-color 0.2s ease"
+              }}
+              placeholder="e.g. Dhaka Eco Farms"
+            />
+            <small style={{ display: "block", marginTop: 6, color: "var(--text-dim)", fontSize: 11 }}>This name will automatically appear as the seller of your custom products.</small>
+          </div>
+        </Card>
+
+        <SectionLabel icon="➕" text="Register Custom Product" />
+        <Card hover={false} style={{ padding: "24px" }}>
+          <form onSubmit={handleAddProduct} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {error && (
+              <div style={{ padding: "10px 12px", borderRadius: 6, background: ACCENT.redBg, color: ACCENT.red, fontSize: 12, border: `1px solid ${ACCENT.redBorder}` }}>
+                ⚠️ {error}
+              </div>
+            )}
+
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>PRODUCT NAME</label>
+              <input 
+                type="text" 
+                value={name} 
+                onChange={e => setName(e.target.value)}
+                style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}
+                placeholder="e.g. Super Biochar"
+              />
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>CATEGORY</label>
+                <select 
+                  value={category} 
+                  onChange={e => setCategory(e.target.value)}
+                  style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none", cursor: "pointer" }}
+                >
+                  {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>UNIT</label>
+                <select 
+                  value={unit} 
+                  onChange={e => setUnit(e.target.value)}
+                  style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none", cursor: "pointer" }}
+                >
+                  <option value="Kg">Kg</option>
+                  <option value="L">L</option>
+                  <option value="Vial">Vial</option>
+                  <option value="Box">Box</option>
+                  <option value="Pack">Pack</option>
+                  <option value="Ton">Ton</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>PRICE (৳ BDT)</label>
+                <input 
+                  type="text" 
+                  value={price} 
+                  onChange={e => setPrice(e.target.value)}
+                  style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}
+                  placeholder="e.g. 120"
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>BASE DVS SCORE</label>
+                <input 
+                  type="number" 
+                  min="0" max="100"
+                  value={dvs} 
+                  onChange={e => setDvs(Number(e.target.value))}
+                  style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 8 }}>SELECT EMOJI ICON</label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {icons.map(ico => (
+                  <button 
+                    key={ico} 
+                    type="button"
+                    onClick={() => setIcon(ico)}
+                    style={{
+                      width: 40, height: 40, borderRadius: 8, border: icon === ico ? `2px solid ${ACCENT.green}` : "1px solid var(--border-primary)",
+                      background: icon === ico ? ACCENT.greenBg : "var(--bg-primary)", fontSize: 18, cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s ease"
+                    }}
+                  >
+                    {ico}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button 
+              type="submit"
+              style={{
+                width: "100%", padding: "14px", borderRadius: 8, border: "none",
+                background: `linear-gradient(135deg, ${ACCENT.greenLight}, ${ACCENT.greenDark})`,
+                color: "#fff", cursor: "pointer", fontWeight: 600, fontSize: 14, marginTop: 8,
+                transition: "transform 0.2s ease, opacity 0.2s ease",
+                boxShadow: "0 4px 12px rgba(16,185,129,0.2)"
+              }}
+              onMouseEnter={e => e.currentTarget.style.transform = "translateY(-1px)"}
+              onMouseLeave={e => e.currentTarget.style.transform = "translateY(0)"}
+            >
+              Add Product to Catalog
+            </button>
+          </form>
+        </Card>
+      </div>
+
+      {/* Right Column: Custom Products List */}
+      <div>
+        <SectionLabel icon="📦" text="Live Custom Products Catalog" />
+        <Card hover={false} style={{ padding: "24px", minHeight: 400 }}>
+          {customProducts.length === 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-dim)", paddingTop: 80 }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>🛠️</div>
+              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: "var(--text-secondary)" }}>No Custom Products Yet</div>
+              <div style={{ fontSize: 13, textAlign: "center", maxWidth: 320, lineHeight: 1.5 }}>Configure your brand name on the left and add your first custom product. It will instantly show up here and in the Marketplace!</div>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
+              {customProducts.map(p => (
+                <div 
+                  key={p.id} 
+                  style={{
+                    display: "flex", alignItems: "center", gap: 16, padding: "16px", borderRadius: 10,
+                    border: "1px solid var(--border-primary)", background: "var(--bg-primary)",
+                    transition: "all 0.2s ease", position: "relative"
+                  }}
+                >
+                  <div style={{ fontSize: 32 }}>{p.icon}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>{p.name}</span>
+                      <span style={{ fontSize: 9, background: ACCENT.greenBg, color: ACCENT.green, padding: "2px 6px", borderRadius: 4, fontWeight: 700, border: `1px solid ${ACCENT.greenBorder}` }}>CUSTOM</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 2 }}>Category: <strong>{p.category}</strong> · Seller: <strong>{p.seller}</strong></div>
+                    <div style={{ fontSize: 13, color: ACCENT.green, fontWeight: 600, marginTop: 4 }}>{p.price} <span style={{ color: "var(--text-dim)", fontSize: 11, fontWeight: 400 }}>/ {p.unit}</span> · DVS: <span style={{ color: p.dvs >= 75 ? ACCENT.green : ACCENT.amber }}>{p.dvs}</span></div>
+                  </div>
+                  <button 
+                    onClick={() => handleDeleteProduct(p.id)}
+                    style={{
+                      padding: "8px 12px", borderRadius: 6, border: `1px solid ${ACCENT.redBorder}`,
+                      background: "transparent", color: ACCENT.red, cursor: "pointer", fontSize: 12, fontWeight: 500,
+                      transition: "all 0.2s ease"
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = ACCENT.redBg; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function AgentPanel({ setTab, products = [] }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     {
@@ -2635,7 +2871,8 @@ function AgentPanel({ setTab }) {
           query: text,
           language,
           sessionId: sessionId || undefined,
-          farmerId: user ? user.id : undefined
+          farmerId: user ? user.id : undefined,
+          customProducts: products.filter(p => p.isCustom)
         })
       });
       const resData = await response.json();
@@ -3156,6 +3393,9 @@ function EcoSorthaApp() {
   const [isRegisteringBatch, setIsRegisteringBatch] = useState(false);
   const [theme, setTheme] = useState("dark");
   const [dvs, setDvs] = useState(72);
+  const [productsList, setProductsList] = useState(MOCK_PRODUCTS);
+  const [selectedSme, setSelectedSme] = useState("green_refineries");
+  const [customSmeName, setCustomSmeName] = useState("My Custom SME");
 
   // Calculate Generalized Dhaka Division Scores (averaging all zones in Dhaka Division)
   const calcGeneralizedScores = (ts) => {
@@ -3172,6 +3412,11 @@ function EcoSorthaApp() {
   const genDvs = calcGeneralizedScores(trustScore);
 
   const themeVars = THEMES[theme];
+
+  const activeTabs = [...TABS];
+  if (selectedSme === "custom_sme") {
+    activeTabs.push({ label: "SME Configurator", icon: "🛠️" });
+  }
 
   return (
     <div style={{
@@ -3244,12 +3489,25 @@ function EcoSorthaApp() {
           {/* New SME Dropdown */}
           <div style={{ marginLeft: 24, display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-secondary)" }}>
             <span style={{ fontSize: 18 }}>⭐</span>
-            <select style={{
-              background: "transparent", color: "var(--text-primary)", border: "none",
-              outline: "none", cursor: "pointer", fontSize: 14, fontWeight: 500
-            }}>
-              <option>Green Refineries Ltd. (SME)</option>
-              <option>Agro Eco SME</option>
+            <select 
+              value={selectedSme}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedSme(val);
+                if (val === "custom_sme") {
+                  setTab(8);
+                } else {
+                  setTab(0);
+                }
+              }}
+              style={{
+                background: "transparent", color: "var(--text-primary)", border: "none",
+                outline: "none", cursor: "pointer", fontSize: 14, fontWeight: 500
+              }}
+            >
+              <option value="green_refineries">Green Refineries Ltd. (SME)</option>
+              <option value="agro_eco">Agro Eco SME</option>
+              <option value="custom_sme">🛠️ {customSmeName || "Custom SME"} (Configurator)</option>
             </select>
           </div>
         </div>
@@ -3285,7 +3543,7 @@ function EcoSorthaApp() {
         WebkitBackdropFilter: "var(--backdrop-blur)",
         paddingLeft: 28,
       }}>
-        {TABS.map((t, i) => (
+        {activeTabs.map((t, i) => (
           <button key={t.label} onClick={() => setTab(i)}
             style={{
               padding: "12px 18px", border: "none",
@@ -3361,11 +3619,17 @@ function EcoSorthaApp() {
           </div>
         )}
 
-        {tab === 6 && <MarketplaceView />}
-        {tab === 7 && <ChatbotView setTab={setTab} />}
+        {tab === 6 && <MarketplaceView products={productsList} />}
+        {tab === 7 && <ChatbotView setTab={setTab} products={productsList} />}
+        {tab === 8 && selectedSme === "custom_sme" && (
+          <CustomSmeView 
+            products={productsList} 
+            setProducts={setProductsList} 
+            customSmeName={customSmeName} 
+            setCustomSmeName={setCustomSmeName} 
+          />
+        )}
       </main>
-
-
 
       {/* ── FOOTER ────────────────────────────────────────────── */}
       <footer style={{
@@ -3384,7 +3648,7 @@ function EcoSorthaApp() {
           <span>DVS: <span style={{ color: dvs >= 75 ? ACCENT.green : dvs >= 55 ? ACCENT.amber : ACCENT.red, fontFamily: "'JetBrains Mono', monospace" }}>{dvs}/100</span></span>
         </div>
       </footer>
-      <AgentPanel setTab={setTab} />
+      <AgentPanel setTab={setTab} products={productsList} />
     </div>
   );
 }

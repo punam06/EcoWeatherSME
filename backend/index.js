@@ -1030,7 +1030,7 @@ app.delete('/api/ai/chat/end', (req, res) => {
 // POST /api/agent/message — main chatbot endpoint
 app.post('/api/agent/message', async (req, res) => {
   try {
-    const { query, language, sessionId } = req.body;
+    const { query, language, sessionId, customProducts } = req.body;
     if (!query || !query.trim()) {
       return res.status(400).json({ success: false, error: 'query is required' });
     }
@@ -1060,15 +1060,58 @@ app.post('/api/agent/message', async (req, res) => {
       navigationTarget = 'batches';
     }
 
+    // Parse and format custom products if provided
+    let customProdsFormatted = [];
+    if (Array.isArray(customProducts)) {
+      customProdsFormatted = customProducts.map(p => {
+        let priceBdt = 150;
+        if (p.price) {
+          if (typeof p.price === 'number') {
+            priceBdt = p.price;
+          } else {
+            const matches = p.price.match(/\d+([.,]\d+)?/);
+            if (matches) {
+              priceBdt = parseFloat(matches[0].replace(/,/g, ''));
+            }
+          }
+        }
+        return {
+          id: p.id || `custom-${p.name}`,
+          name: p.name,
+          category: p.category || 'Agriculture',
+          price_bdt: priceBdt,
+          price: typeof p.price === 'string' && p.price.startsWith('৳') ? p.price : `৳ ${priceBdt}`,
+          unit: p.unit || 'Kg',
+          seller: p.seller || 'My Custom SME',
+          dvs: p.dvs || 90,
+          icon: p.icon || '🌱',
+          badge: p.badge || null
+        };
+      });
+    }
+
     // 2. High-Performance Deterministic Product Search Check
     if (!navigationTarget) {
       const hasSearchVerb = /(show|find|search|খুঁজ|দেখাও|আছে কি|available|stock|দেখান|খুঁজে)/i.test(lowerQuery);
       const hasProductKeyword = /(product|fertilizer|সার|compost|কম্পোস্ট|item|পণ্য|বায়োচার|biochar)/i.test(lowerQuery);
-      if ((hasSearchVerb && hasProductKeyword) ||
-          /^(fertilizer|সার|compost|কম্পোস্ট|product|পণ্য|biochar|বায়োচার)$/i.test(lowerQuery)) {
+      
+      let matchedCustomProduct = null;
+      if (Array.isArray(customProducts)) {
+        matchedCustomProduct = customProducts.find(p => lowerQuery.includes(p.name.toLowerCase()));
+      }
+
+      if ((hasSearchVerb && hasProductKeyword) || matchedCustomProduct ||
+          /^(fertilizer|সার|compost|কম্পোস্ট|product|পণ্য|biochar|বায়োচার)$/i.test(lowerQuery) ||
+          (hasSearchVerb && Array.isArray(customProducts) && customProducts.some(p => lowerQuery.includes(p.name.toLowerCase())))) {
         
-        const lowerProdName = lowerQuery.includes('compost') || lowerQuery.includes('কম্পোস্ট') ? 'compost' :
-                              lowerQuery.includes('biochar') || lowerQuery.includes('বায়োচার') ? 'biochar' : 'fertilizer';
+        let searchKeyword = 'fertilizer';
+        if (lowerQuery.includes('compost') || lowerQuery.includes('কম্পোস্ট')) {
+          searchKeyword = 'compost';
+        } else if (lowerQuery.includes('biochar') || lowerQuery.includes('বায়োচার')) {
+          searchKeyword = 'biochar';
+        } else if (matchedCustomProduct) {
+          searchKeyword = matchedCustomProduct.name.toLowerCase();
+        }
                               
         const fallbackProducts = [
           { id: 'prod-compost', name: 'Premium Organic Compost', category: 'Agriculture', price_bdt: 240, price: '৳ 240', unit: 'Kg', seller: 'Organic SME', dvs: 94, icon: '📦' },
@@ -1076,12 +1119,12 @@ app.post('/api/agent/message', async (req, res) => {
           { id: 'prod-fertilizer', name: 'Eco-Friendly Fertilizer', category: 'Agriculture', price_bdt: 180, price: '৳ 180', unit: 'Kg', seller: 'SME Co-op', dvs: 88, icon: '🌱' }
         ];
         
-        let matched = fallbackProducts;
+        let matched = [...customProdsFormatted, ...fallbackProducts];
         if (pool) {
           try {
             const prodRes = await queryDB('SELECT * FROM products');
             if (prodRes && prodRes.rows.length > 0) {
-              matched = prodRes.rows.map(p => ({
+              const dbProds = prodRes.rows.map(p => ({
                 id: p.id,
                 name: p.name,
                 category: p.category || 'Agriculture',
@@ -1092,6 +1135,7 @@ app.post('/api/agent/message', async (req, res) => {
                 dvs: p.dvs || 90,
                 icon: p.category === 'compost' ? '📦' : '🌱'
               }));
+              matched = [...customProdsFormatted, ...dbProds, ...fallbackProducts];
             }
           } catch (err) {
             console.warn('[Agent Product Search] Failed to query products:', err.message);
@@ -1099,8 +1143,8 @@ app.post('/api/agent/message', async (req, res) => {
         }
 
         responseProducts = matched.filter(p => 
-          p.name.toLowerCase().includes(lowerProdName) || 
-          p.category.toLowerCase().includes(lowerProdName)
+          p.name.toLowerCase().includes(searchKeyword) || 
+          p.category.toLowerCase().includes(searchKeyword)
         );
         if (responseProducts.length === 0) {
           responseProducts = matched.slice(0, 3);
@@ -1115,8 +1159,13 @@ app.post('/api/agent/message', async (req, res) => {
     if (!navigationTarget && !responseProducts) {
       // Build conversation history for context
       const history = session.history.slice(-6).map(m => ({ role: m.role, content: m.content }));
+      
+      const customProductsContext = Array.isArray(customProducts) && customProducts.length > 0
+        ? `Here is the current customized SME product catalog you can help users order:\n` + customProducts.map(p => `- ${p.name} (${p.category}): Price: ${p.price}, Unit: ${p.unit}, Seller: ${p.seller}, DVS Score: ${p.dvs}`).join('\n')
+        : '';
+      
       const messages = [
-        { role: 'system', content: AGENT_SYSTEM_PROMPT },
+        { role: 'system', content: AGENT_SYSTEM_PROMPT + (customProductsContext ? `\n\n${customProductsContext}` : '') },
         ...history,
         { role: 'user', content: query },
       ];
@@ -1191,45 +1240,80 @@ app.post('/api/agent/message', async (req, res) => {
 });
 
 app.post('/api/orders/voice', asyncHandler(async (req, res) => {
-  const { productName, quantity, farmerId } = req.body;
+  const { productName, quantity, farmerId, customProducts } = req.body;
   const finalQuantity = typeof quantity === 'number' ? quantity : parseInt(quantity || '1', 10) || 1;
   const buyerId = farmerId || 'demo-farmer-id';
 
-  // Fallback products catalog
-  const fallbackProducts = [
-    { id: 'prod-compost', name: 'Premium Organic Compost', price_bdt: 240 },
-    { id: 'prod-biochar', name: 'Carbon-Neutral Biochar', price_bdt: 150 },
-    { id: 'prod-fertilizer', name: 'Eco-Friendly Fertilizer', price_bdt: 180 }
-  ];
-
-  let matchedProduct = fallbackProducts[0];
   const lowerSearch = (productName || 'compost').toLowerCase();
-  
-  if (pool) {
-    try {
-      // 1. Try querying products table
-      const prodRes = await queryDB('SELECT * FROM products');
-      if (prodRes && prodRes.rows.length > 0) {
-        const found = prodRes.rows.find(p => 
-          p.name.toLowerCase().includes(lowerSearch) || 
-          (p.description && p.description.toLowerCase().includes(lowerSearch))
-        );
-        if (found) {
-          matchedProduct = {
-            id: found.id,
-            name: found.name,
-            price_bdt: found.price_bdt || found.price || 150
-          };
+  let matchedProduct = null;
+
+  // Try matching custom products first
+  if (Array.isArray(customProducts)) {
+    const foundCustom = customProducts.find(p => 
+      p.name.toLowerCase().includes(lowerSearch) || 
+      lowerSearch.includes(p.name.toLowerCase())
+    );
+    if (foundCustom) {
+      let priceBdt = 150;
+      if (foundCustom.price) {
+        if (typeof foundCustom.price === 'number') {
+          priceBdt = foundCustom.price;
         } else {
-          matchedProduct = {
-            id: prodRes.rows[0].id,
-            name: prodRes.rows[0].name,
-            price_bdt: prodRes.rows[0].price_bdt || prodRes.rows[0].price || 150
-          };
+          const matches = foundCustom.price.match(/\d+([.,]\d+)?/);
+          if (matches) {
+            priceBdt = parseFloat(matches[0].replace(/,/g, ''));
+          }
         }
       }
-    } catch (err) {
-      console.warn('[Orders Voice] Failed to query product catalog from database:', err.message);
+      matchedProduct = {
+        id: foundCustom.id || `custom-${foundCustom.name}`,
+        name: foundCustom.name,
+        price_bdt: priceBdt
+      };
+    }
+  }
+
+  if (!matchedProduct) {
+    // Fallback products catalog
+    const fallbackProducts = [
+      { id: 'prod-compost', name: 'Premium Organic Compost', price_bdt: 240 },
+      { id: 'prod-biochar', name: 'Carbon-Neutral Biochar', price_bdt: 150 },
+      { id: 'prod-fertilizer', name: 'Eco-Friendly Fertilizer', price_bdt: 180 }
+    ];
+
+    matchedProduct = fallbackProducts[0];
+    
+    if (pool) {
+      try {
+        // 1. Try querying products table
+        const prodRes = await queryDB('SELECT * FROM products');
+        if (prodRes && prodRes.rows.length > 0) {
+          const found = prodRes.rows.find(p => 
+            p.name.toLowerCase().includes(lowerSearch) || 
+            (p.description && p.description.toLowerCase().includes(lowerSearch))
+          );
+          if (found) {
+            matchedProduct = {
+              id: found.id,
+              name: found.name,
+              price_bdt: found.price_bdt || found.price || 150
+            };
+          } else {
+            matchedProduct = {
+              id: prodRes.rows[0].id,
+              name: prodRes.rows[0].name,
+              price_bdt: prodRes.rows[0].price_bdt || prodRes.rows[0].price || 150
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('[Orders Voice] Failed to query product catalog from database:', err.message);
+      }
+    } else {
+      const foundFallback = fallbackProducts.find(p => p.name.toLowerCase().includes(lowerSearch));
+      if (foundFallback) {
+        matchedProduct = foundFallback;
+      }
     }
   }
 
@@ -1259,10 +1343,10 @@ app.post('/api/orders/voice', asyncHandler(async (req, res) => {
       productName: matchedProduct.name,
       quantity: finalQuantity,
       totalBdt,
-      message: `আপনার অর্ডার সফলভাবে নেওয়া হয়েছে: ${matchedProduct.name}, পরিমাণ: ${finalQuantity}।`
+      message: `আপনার অর্ডার সফলভাবে নেওয়া হয়েছে: ${matchedProduct.name}, পরিমাণ: ${finalQuantity}।`
     }
   });
-}));
+});
 
 app.post('/api/batches/certify', asyncHandler(async (req, res) => {
   try {
