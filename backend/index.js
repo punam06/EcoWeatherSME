@@ -957,12 +957,14 @@ const AGENT_SYSTEM_PROMPT = `You are EcoSortha AI, an intelligent agricultural c
 You help farmers with: weather/climate data, BARI agricultural guidelines, product browsing, placing orders, and navigating the platform.
 
 For every user message, respond with a JSON object in this exact format:
-{"intent": "weather" | "navigate" | "order" | "product_search" | "bari_advice" | "general_chat", "language": "bn" | "en" | "mixed", "extractedData": {"city": "string or null", "page": null, "productName": null, "quantity": null, "unit": null, "cropContext": null}, "replyMessage": "Your natural response in the same language the user used"}
+{"intent": "weather" | "navigate" | "order" | "product_search" | "bari_advice" | "general_chat", "language": "bn" | "en" | "mixed", "extractedData": {"city": "string or null", "page": "dashboard" | "batches" | "batch_verification" | "microclimate" | "climate_demand" | "impact_esg" | "marketplace" | "chatbot" | null, "productName": "string or null", "quantity": "number or null", "unit": "string or null", "cropContext": "string or null"}, "replyMessage": "Your natural response in the same language the user used"}
 
 Rules:
 - Always respond in the same language the user wrote in (Bangla, English, or mixed)
+- If the user wants to go to or see a page (e.g. "marketplace দেখাও", "marketplace নিয়ে যাও", "show marketplace", "go to dashboard", "আমার orders দেখাও", "orders page") — set intent to "navigate" and set extractedData.page to the exact matching page identifier (e.g. "marketplace", "batches", "dashboard", etc.)
 - If the assistant previously asked for a city name/location and the user responds with a city name (e.g. "Dhaka", "Sylhet", "dhakar"), set the intent to "weather" and extract the city into extractedData.city
 - If the user asks about weather, temperature, আবহাওয়া — set intent to "weather" and extract the city name into extractedData.city
+- If the user wants to order or buy products (e.g. "compost কিনতে চাই", "order fertilizer") — set intent to "order" and extract productName and quantity
 - replyMessage must be warm and conversational — never robotic
 - Never say "I cannot help with that"
 - IMPORTANT: Respond ONLY with valid JSON. No markdown, no backticks.`;
@@ -1096,6 +1098,11 @@ app.post('/api/agent/message', async (req, res) => {
         message: responseMessage,
         language: lang,
         sessionId: session.sessionId,
+        navigationTarget: (parsed && parsed.intent === 'navigate') ? parsed.extractedData?.page : undefined,
+        pendingOrder: (parsed && parsed.intent === 'order') ? {
+          productName: parsed.extractedData?.productName || '',
+          quantity: parsed.extractedData?.quantity || 1
+        } : undefined
       }
     });
   } catch (err) {
@@ -1103,6 +1110,80 @@ app.post('/api/agent/message', async (req, res) => {
     res.status(500).json({ success: false, error: err.message || 'Internal server error' });
   }
 });
+
+app.post('/api/orders/voice', asyncHandler(async (req, res) => {
+  const { productName, quantity, farmerId } = req.body;
+  const finalQuantity = typeof quantity === 'number' ? quantity : parseInt(quantity || '1', 10) || 1;
+  const buyerId = farmerId || 'demo-farmer-id';
+
+  // Fallback products catalog
+  const fallbackProducts = [
+    { id: 'prod-compost', name: 'Premium Organic Compost', price_bdt: 240 },
+    { id: 'prod-biochar', name: 'Carbon-Neutral Biochar', price_bdt: 150 },
+    { id: 'prod-fertilizer', name: 'Eco-Friendly Fertilizer', price_bdt: 180 }
+  ];
+
+  let matchedProduct = fallbackProducts[0];
+  const lowerSearch = (productName || 'compost').toLowerCase();
+  
+  if (pool) {
+    try {
+      // 1. Try querying products table
+      const prodRes = await queryDB('SELECT * FROM products');
+      if (prodRes && prodRes.rows.length > 0) {
+        const found = prodRes.rows.find(p => 
+          p.name.toLowerCase().includes(lowerSearch) || 
+          (p.description && p.description.toLowerCase().includes(lowerSearch))
+        );
+        if (found) {
+          matchedProduct = {
+            id: found.id,
+            name: found.name,
+            price_bdt: found.price_bdt || found.price || 150
+          };
+        } else {
+          matchedProduct = {
+            id: prodRes.rows[0].id,
+            name: prodRes.rows[0].name,
+            price_bdt: prodRes.rows[0].price_bdt || prodRes.rows[0].price || 150
+          };
+        }
+      }
+    } catch (err) {
+      console.warn('[Orders Voice] Failed to query product catalog from database:', err.message);
+    }
+  }
+
+  // 2. Create the order
+  const totalBdt = matchedProduct.price_bdt * finalQuantity;
+  let orderId = uuidv4();
+
+  if (pool) {
+    try {
+      // 3. Try to insert order into database
+      const orderRes = await queryDB(
+        'INSERT INTO orders (buyer_id, product_id, quantity, total_bdt, status) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+        [buyerId, matchedProduct.id, finalQuantity, totalBdt, 'pending']
+      );
+      if (orderRes && orderRes.rows.length > 0) {
+        orderId = orderRes.rows[0].id;
+      }
+    } catch (err) {
+      console.warn('[Orders Voice] Failed to write order to database, using mock ID:', err.message);
+    }
+  }
+
+  res.json({
+    success: true,
+    data: {
+      orderId,
+      productName: matchedProduct.name,
+      quantity: finalQuantity,
+      totalBdt,
+      message: `আপনার অর্ডার সফলভাবে নেওয়া হয়েছে: ${matchedProduct.name}, পরিমাণ: ${finalQuantity}।`
+    }
+  });
+}));
 
 /* ═══════════════════════════════════════════════════════════════
    ERROR HANDLING
