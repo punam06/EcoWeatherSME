@@ -1058,6 +1058,39 @@ app.post('/api/agent/message', async (req, res) => {
       console.error('[Agent] Groq/parse failed:', e.message, e.stack);
     }
 
+    // Deterministic intent classifier overrides
+    const lowerQuery = query.toLowerCase().trim();
+    if (parsed) {
+      // 1. Force navigate intent if query matches navigation patterns
+      if (/(marketplace|market|মার্কেটপ্লেস|বাজার|পণ্য তালিকা|প্রোডাক্ট লিস্ট)/i.test(lowerQuery)) {
+        parsed.intent = 'navigate';
+        parsed.extractedData = parsed.extractedData || {};
+        parsed.extractedData.page = 'marketplace';
+        if (!parsed.replyMessage) {
+          parsed.replyMessage = lang === 'bn' ? 'মার্কেটপ্লেসে যাওয়া হচ্ছে...' : 'Navigating to the Marketplace...';
+        }
+      } else if (/(dashboard|ড্যাশবোর্ড|ওভারভিউ)/i.test(lowerQuery)) {
+        parsed.intent = 'navigate';
+        parsed.extractedData = parsed.extractedData || {};
+        parsed.extractedData.page = 'dashboard';
+      } else if (/(batches|batch registry|অর্ডার তালিকা|অর্ডার বিবরণী)/i.test(lowerQuery)) {
+        parsed.intent = 'navigate';
+        parsed.extractedData = parsed.extractedData || {};
+        parsed.extractedData.page = 'batches';
+      }
+      
+      // 2. Force product search intent if query matches search patterns
+      if (parsed.intent !== 'navigate' && parsed.intent !== 'order') {
+        if (/(show|find|search|খুঁজ|দেখাও|আছে কি|available|stock|দেখান).*(product|fertilizer|সার|compost|item|পণ্য|বায়োচার|biochar)/i.test(lowerQuery) ||
+            /^(fertilizer|সার|compost|কম্পোস্ট|product|পণ্য|biochar|বায়োচার)$/i.test(lowerQuery)) {
+          parsed.intent = 'product_search';
+          parsed.extractedData = parsed.extractedData || {};
+          parsed.extractedData.productName = lowerQuery.includes('compost') || lowerQuery.includes('কম্পোস্ট') ? 'compost' :
+                                            lowerQuery.includes('biochar') || lowerQuery.includes('বায়োচার') ? 'biochar' : 'fertilizer';
+        }
+      }
+    }
+
     session.history.push({ role: 'user', content: query });
 
     let responseMessage;
