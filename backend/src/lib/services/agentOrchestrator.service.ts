@@ -260,7 +260,8 @@ interface AgentParsedResult {
 
 async function queryLLMIntent(
   query: string,
-  history: { role: 'user' | 'assistant'; content: string }[]
+  history: { role: 'user' | 'assistant'; content: string }[],
+  customProductsContext?: string
 ): Promise<AgentParsedResult> {
   const conversationHistory = history.slice(-6).map((m) => ({
     role: m.role === 'user' ? ('user' as const) : ('assistant' as const),
@@ -275,7 +276,7 @@ async function queryLLMIntent(
     const completion = await groq.chat.completions.create({
       model: GROQ_MODEL,
       messages: [
-        { role: 'system', content: AGENT_SYSTEM_PROMPT },
+        { role: 'system', content: AGENT_SYSTEM_PROMPT + (customProductsContext ? `\n\n${customProductsContext}` : '') },
         ...messages,
       ],
       temperature: 0.3,
@@ -323,7 +324,8 @@ export async function processMessage(
   query: string,
   language: 'bn' | 'en',
   sessionId?: string,
-  farmerId?: string
+  farmerId?: string,
+  customProducts?: any[]
 ): Promise<AgentResponse> {
   // Resolve or Create Session
   let activeSessionId = sessionId;
@@ -338,8 +340,13 @@ export async function processMessage(
     session.farmerId = farmerId;
   }
 
+  // Format custom products for context
+  const customProductsContext = Array.isArray(customProducts) && customProducts.length > 0
+    ? `Here is the current customized SME product catalog you can help users order:\n` + customProducts.map((p: any) => `- ${p.name} (${p.category || 'Agriculture'}): Price: ${p.price}, Unit: ${p.unit || 'Kg'}, DVS Score: ${p.dvs || 90}, Seller: ${p.seller || 'Custom SME'}`).join('\n')
+    : '';
+
   // Query LLM Intent Layer
-  const llmResult = await queryLLMIntent(query, session.history);
+  const llmResult = await queryLLMIntent(query, session.history, customProductsContext);
 
   appendMessage(activeSessionId!, 'user', query);
 

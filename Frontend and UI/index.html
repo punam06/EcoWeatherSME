@@ -2543,6 +2543,7 @@ function CustomSmeView({ products, setProducts, customSmeName, setCustomSmeName 
   const [dvs, setDvs] = useState(90);
   const [icon, setIcon] = useState("🌱");
   const [error, setError] = useState("");
+  const [editingProduct, setEditingProduct] = useState(null);
 
   const categories = ["Agriculture", "Pharmaceuticals", "Food & Dairy", "Food & Seafood", "Chemicals"];
   const icons = ["🌱", "🌾", "🌿", "📦", "🥛", "🐟", "⚕️", "💉", "🧪", "🍎", "🧀", "🍯"];
@@ -2559,22 +2560,61 @@ function CustomSmeView({ products, setProducts, customSmeName, setCustomSmeName 
     }
     setError("");
 
-    const newProd = {
-      id: Date.now(),
-      name: name.trim(),
-      category,
-      price: `৳ ${Number(price).toLocaleString()}`,
-      unit,
-      seller: customSmeName,
-      dvs: Number(dvs),
-      icon,
-      badge: "Custom SME",
-      isCustom: true
-    };
+    if (editingProduct) {
+      // Edit mode: update existing custom product
+      setProducts(prev => prev.map(p => p.id === editingProduct.id ? {
+        ...p,
+        name: name.trim(),
+        category,
+        price: `৳ ${Number(price).toLocaleString()}`,
+        unit,
+        dvs: Number(dvs),
+        icon
+      } : p));
+      handleCancelEdit();
+    } else {
+      // Add mode: create new custom product
+      const newProd = {
+        id: Date.now(),
+        name: name.trim(),
+        category,
+        price: `৳ ${Number(price).toLocaleString()}`,
+        unit,
+        seller: customSmeName,
+        dvs: Number(dvs),
+        icon,
+        badge: "Custom SME",
+        isCustom: true
+      };
 
-    setProducts(prev => [newProd, ...prev]);
+      setProducts(prev => [newProd, ...prev]);
+      setName("");
+      setPrice("");
+    }
+  };
+
+  const handleEditProduct = (prod) => {
+    setEditingProduct(prod);
+    setName(prod.name);
+    setCategory(prod.category);
+    // Extract price number from string like "৳ 120" or "৳ 1,250"
+    const priceNum = prod.price.replace(/[৳\s,]/g, "");
+    setPrice(priceNum);
+    setUnit(prod.unit);
+    setDvs(prod.dvs);
+    setIcon(prod.icon);
+    setError("");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingProduct(null);
     setName("");
+    setCategory("Agriculture");
     setPrice("");
+    setUnit("Kg");
+    setDvs(90);
+    setIcon("🌱");
+    setError("");
   };
 
   const handleDeleteProduct = (id) => {
@@ -2594,7 +2634,12 @@ function CustomSmeView({ products, setProducts, customSmeName, setCustomSmeName 
             <input 
               type="text" 
               value={customSmeName} 
-              onChange={e => setCustomSmeName(e.target.value)}
+              onChange={e => {
+                const newName = e.target.value;
+                setCustomSmeName(newName);
+                // Real-time propagation of brand name to all custom products
+                setProducts(prev => prev.map(p => p.isCustom ? { ...p, seller: newName } : p));
+              }}
               style={{
                 width: "100%", padding: "12px 16px", borderRadius: 8,
                 border: "1px solid var(--border-primary)", background: "var(--bg-primary)",
@@ -2607,7 +2652,7 @@ function CustomSmeView({ products, setProducts, customSmeName, setCustomSmeName 
           </div>
         </Card>
 
-        <SectionLabel icon="➕" text="Register Custom Product" />
+        <SectionLabel icon={editingProduct ? "✏️" : "➕"} text={editingProduct ? "Edit Custom Product" : "Register Custom Product"} />
         <Card hover={false} style={{ padding: "24px" }}>
           <form onSubmit={handleAddProduct} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {error && (
@@ -2700,20 +2745,38 @@ function CustomSmeView({ products, setProducts, customSmeName, setCustomSmeName 
               </div>
             </div>
 
-            <button 
-              type="submit"
-              style={{
-                width: "100%", padding: "14px", borderRadius: 8, border: "none",
-                background: `linear-gradient(135deg, ${ACCENT.greenLight}, ${ACCENT.greenDark})`,
-                color: "#fff", cursor: "pointer", fontWeight: 600, fontSize: 14, marginTop: 8,
-                transition: "transform 0.2s ease, opacity 0.2s ease",
-                boxShadow: "0 4px 12px rgba(16,185,129,0.2)"
-              }}
-              onMouseEnter={e => e.currentTarget.style.transform = "translateY(-1px)"}
-              onMouseLeave={e => e.currentTarget.style.transform = "translateY(0)"}
-            >
-              Add Product to Catalog
-            </button>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <button 
+                type="submit"
+                style={{
+                  width: "100%", padding: "14px", borderRadius: 8, border: "none",
+                  background: `linear-gradient(135deg, ${ACCENT.greenLight}, ${ACCENT.greenDark})`,
+                  color: "#fff", cursor: "pointer", fontWeight: 600, fontSize: 14, marginTop: 8,
+                  transition: "transform 0.2s ease, opacity 0.2s ease",
+                  boxShadow: "0 4px 12px rgba(16,185,129,0.2)"
+                }}
+                onMouseEnter={e => e.currentTarget.style.transform = "translateY(-1px)"}
+                onMouseLeave={e => e.currentTarget.style.transform = "translateY(0)"}
+              >
+                {editingProduct ? "Update Product Catalog" : "Add Product to Catalog"}
+              </button>
+
+              {editingProduct && (
+                <button 
+                  type="button"
+                  onClick={handleCancelEdit}
+                  style={{
+                    width: "100%", padding: "12px", borderRadius: 8, border: "1px solid var(--border-primary)",
+                    background: "var(--bg-primary)", color: "var(--text-primary)", cursor: "pointer", fontWeight: 500, fontSize: 13,
+                    transition: "background 0.2s"
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = "var(--bg-input)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "var(--bg-primary)"}
+                >
+                  Cancel Edit
+                </button>
+              )}
+            </div>
           </form>
         </Card>
       </div>
@@ -2748,18 +2811,36 @@ function CustomSmeView({ products, setProducts, customSmeName, setCustomSmeName 
                     <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 2 }}>Category: <strong>{p.category}</strong> · Seller: <strong>{p.seller}</strong></div>
                     <div style={{ fontSize: 13, color: ACCENT.green, fontWeight: 600, marginTop: 4 }}>{p.price} <span style={{ color: "var(--text-dim)", fontSize: 11, fontWeight: 400 }}>/ {p.unit}</span> · DVS: <span style={{ color: p.dvs >= 75 ? ACCENT.green : ACCENT.amber }}>{p.dvs}</span></div>
                   </div>
-                  <button 
-                    onClick={() => handleDeleteProduct(p.id)}
-                    style={{
-                      padding: "8px 12px", borderRadius: 6, border: `1px solid ${ACCENT.redBorder}`,
-                      background: "transparent", color: ACCENT.red, cursor: "pointer", fontSize: 12, fontWeight: 500,
-                      transition: "all 0.2s ease"
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background = ACCENT.redBg; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
-                  >
-                    Delete
-                  </button>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button 
+                      onClick={() => handleEditProduct(p)}
+                      style={{
+                        padding: "8px 12px", borderRadius: 6, border: `1px solid ${ACCENT.greenBorder}`,
+                        background: "transparent", color: ACCENT.green, cursor: "pointer", fontSize: 12, fontWeight: 500,
+                        transition: "all 0.2s ease"
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = ACCENT.greenBg; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+                    >
+                      Edit
+                    </button>
+                    <button 
+                      onClick={() => {
+                        if (confirm(`Are you sure you want to delete ${p.name}?`)) {
+                          handleDeleteProduct(p.id);
+                        }
+                      }}
+                      style={{
+                        padding: "8px 12px", borderRadius: 6, border: `1px solid ${ACCENT.redBorder}`,
+                        background: "transparent", color: ACCENT.red, cursor: "pointer", fontSize: 12, fontWeight: 500,
+                        transition: "all 0.2s ease"
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = ACCENT.redBg; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

@@ -152,6 +152,11 @@ app.get('/api/test-db', async (_req: Request, res: Response) => {
 app.use('/api/batch/trust-score', trustScoreRouter);
 app.use('/api/climate/dvs', climateDVSRouter);
 app.use('/api/ai/recommend', aiRecommendRouter);
+app.post('/api/orders/voice', (req, res, next) => {
+  req.url = '/orders/voice';
+  agentRouter(req, res, next);
+});
+
 app.use('/api/agent', agentRouter);
 app.use('/api/ai/chat', aiChatRouter);
 app.use('/api/batches', batchRouter);

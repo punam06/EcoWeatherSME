@@ -1,4 +1,4 @@
-import { ESGMetrics } from '../../../../lib/types';
+import { ESGMetrics } from '../types';
 
 export async function calculateESGMetrics(trustScore: number = 84, dvs: number = 72): Promise<ESGMetrics> {
   const eScore = Math.min(100, Math.round((trustScore * 0.5) + (dvs * 0.5)));
