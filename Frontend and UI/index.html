@@ -166,7 +166,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-    const IS_STATIC_FILE_HTML = window.location.protocol === 'file:';
+const IS_STATIC_FILE_HTML = window.location.protocol === 'file:';
     const API_BASE_URL_HTML = !IS_STATIC_FILE_HTML && window.location.hostname === 'localhost' 
       ? 'http://localhost:5001' 
       : '';
@@ -4329,6 +4329,7 @@ window.EcoSorthaApp = EcoSorthaApp;
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(<EcoSorthaApp />);
+
   </script>
 </body>
 </html>
