@@ -963,6 +963,7 @@ For every user message, respond with a JSON object in this exact format:
 Rules:
 - Always respond in the same language the user wrote in (Bangla, English, or mixed)
 - If the user wants to go to or see a page (e.g. "marketplace দেখাও", "marketplace নিয়ে যাও", "show marketplace", "go to dashboard", "আমার orders দেখাও", "orders page") — set intent to "navigate" and set extractedData.page to the exact matching page identifier (e.g. "marketplace", "batches", "dashboard", etc.)
+- If the user asks to see products, search catalog, or find available items (e.g. "compost সার দেখান", "organic compost সার", "সার কি কি আছে", "সার খুঁজে দিন", "show products", "search biochar") — set intent to "product_search" and extract productName
 - If the assistant previously asked for a city name/location and the user responds with a city name (e.g. "Dhaka", "Sylhet", "dhakar"), set the intent to "weather" and extract the city into extractedData.city
 - If the user asks about weather, temperature, আবহাওয়া — set intent to "weather" and extract the city name into extractedData.city
 - If the user wants to order or buy products (e.g. "compost কিনতে চাই", "order fertilizer") — set intent to "order" and extract productName and quantity
