@@ -87,7 +87,7 @@ To accelerate, we need $250K seed, NRB partnership support, and technical co-fou
 - 2:30–3:00 Impact + CTA
 
 ### Bangla Localization Tips
-- Open or close with one respectful Bangla line: **“আমাদের লক্ষ্য, কৃষকের ঝুঁকি কমিয়ে আয় বাড়ানো।”**
+- Open or close with one respectful Bangla line: **“আমাদের লক্ষ্য কৃষকদের ঝুঁকি কমানো এবং আয় বাড়ানো।”** (“Our goal is to reduce farmers’ risk and increase income.”)
 - Keep product terms bilingual when needed: “risk score (ঝুঁকি স্কোর)”, “shipment proof (চালান প্রমাণ)”.
 - Use local place names clearly: Dhaka, Chittagong, monsoon routes.
 
