@@ -2146,6 +2146,15 @@ function BatchRegistry({ onNewBatch }) {
   const [isLoading, setIsLoading]     = useState(true);
   const [selectedBatch, setSelected]  = useState(null);
   const [lastFetched, setLastFetched] = useState(null);
+  const [, setTick]                   = useState(0);
+
+  // Real-time dynamic timing ticker to update relative dates every 30 seconds
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTick(t => t + 1);
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   const fetchBatches = async () => {
     setIsLoading(true);
@@ -2384,6 +2393,54 @@ function BatchRegistry({ onNewBatch }) {
                 ⏳ Batch is awaiting IoT sensor verification before certification.
               </div>
             )}
+
+            {/* DELETE BATCH BUTTON */}
+            <div style={{ marginTop: "auto", paddingTop: 20 }}>
+              <button
+                onClick={async () => {
+                  if (confirm(`Are you sure you want to delete batch ${selectedBatch.id || selectedBatch.batch_number}? This action cannot be undone.`)) {
+                    try {
+                      const res = await fetch(`${BACKEND_URL}/api/batches/${selectedBatch.id || selectedBatch.batch_number}`, {
+                        method: "DELETE"
+                      });
+                      const result = await res.json();
+                      if (result.success) {
+                        setBatches(prev => prev.filter(b => b.id !== selectedBatch.id && b.batch_number !== selectedBatch.id));
+                        if (window.__SEED_BATCHES__) {
+                          window.__SEED_BATCHES__ = window.__SEED_BATCHES__.filter(b => b.id !== selectedBatch.id && b.batch_number !== selectedBatch.id);
+                        }
+                        setSelected(null);
+                      } else {
+                        alert(result.error || "Failed to delete batch");
+                      }
+                    } catch (err) {
+                      console.error("Failed to delete batch:", err);
+                      alert("Network error. Unable to contact the backend server.");
+                    }
+                  }
+                }}
+                style={{
+                  width: "100%", padding: "12px", borderRadius: 10,
+                  border: `1px solid ${ACCENT.redBorder}`,
+                  background: "rgba(239, 68, 68, 0.08)",
+                  color: ACCENT.red,
+                  cursor: "pointer",
+                  fontSize: 13, fontWeight: 600,
+                  transition: "all 0.3s ease",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = "rgba(239, 68, 68, 0.16)";
+                  e.currentTarget.style.borderColor = ACCENT.red;
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = "rgba(239, 68, 68, 0.08)";
+                  e.currentTarget.style.borderColor = ACCENT.redBorder;
+                }}
+              >
+                🗑️ Delete Batch Registry
+              </button>
+            </div>
           </div>
         </div>
       )}

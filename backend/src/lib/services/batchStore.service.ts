@@ -84,3 +84,16 @@ export function updateBatchInStore(id: string, updates: Partial<Batch>): Batch |
 export function getBatchFromStore(id: string): Batch | undefined {
   return batches.find(b => b.id === id || b.batch_number === id);
 }
+
+/**
+ * Deletes a batch from the in-memory database.
+ */
+export function deleteBatchFromStore(id: string): boolean {
+  const index = batches.findIndex(b => b.id === id || b.batch_number === id);
+  if (index !== -1) {
+    batches.splice(index, 1);
+    return true;
+  }
+  return false;
+}
+

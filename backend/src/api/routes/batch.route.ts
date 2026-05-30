@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import QRCode from 'qrcode';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
-import { getBatchesList, addBatch, updateBatchInStore, getBatchFromStore } from '../../lib/services/batchStore.service';
+import { getBatchesList, addBatch, updateBatchInStore, getBatchFromStore, deleteBatchFromStore } from '../../lib/services/batchStore.service';
 
 const router = Router();
 
@@ -301,6 +301,38 @@ router.get('/:id/readings', async (req: Request, res: Response) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to retrieve readings' });
+  }
+});
+
+// DELETE /api/batches/:id
+router.delete('/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = getSupabaseClient();
+        const { error } = await supabase.from('batches').delete().eq('id', id);
+        if (!error) {
+          deleteBatchFromStore(id);
+          res.json({ success: true, message: 'Batch deleted successfully' });
+          return;
+        }
+        console.warn('Supabase delete failed, using fallback:', error);
+      } catch (err) {
+        console.warn('Supabase delete threw, using fallback:', err);
+      }
+    }
+    
+    const deleted = deleteBatchFromStore(id);
+    if (deleted) {
+      res.json({ success: true, message: 'Batch deleted successfully' });
+    } else {
+      res.status(404).json({ success: false, error: 'Batch not found' });
+    }
+  } catch (error) {
+    console.error('Delete batch error:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete batch' });
   }
 });
 
