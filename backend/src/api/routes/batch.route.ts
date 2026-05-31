@@ -102,6 +102,7 @@ router.post('/', async (req: Request, res: Response) => {
             trust_score: batchData.trust_score,
             processor_id: processor_id || undefined,
             weight_kg: batchData.weight_kg,
+            packaging_type: batchData.packaging_type,
             destination_zone: batchData.destination_zone,
             status: 'pending'
           })

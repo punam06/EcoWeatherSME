@@ -24,8 +24,22 @@ const router = Router();
  */
 router.post('/', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    // ── 1. Validate request body ───────────────────────────
-    const parsed = TrustScoreRequestSchema.safeParse(req.body);
+    // ── 1. Validate & Normalize request body ───────────────────────────
+    const body = { ...req.body };
+    if (body.pH === undefined && body.ph !== undefined) body.pH = parseFloat(body.ph);
+    if (body.ec === undefined && body.EC !== undefined) body.ec = parseFloat(body.EC);
+    if (body.temperatureCelsius === undefined && body.temperature !== undefined) body.temperatureCelsius = parseFloat(body.temperature);
+    if (body.temperatureCelsius === undefined && body.temp !== undefined) body.temperatureCelsius = parseFloat(body.temp);
+    if (body.em1Ratio === undefined && body.em1_ratio !== undefined) {
+      const ratioStr = String(body.em1_ratio);
+      if (ratioStr === '1:1:20' || ratioStr === '1:500' || ratioStr === '0.002') body.em1Ratio = 0.002;
+      else if (ratioStr === '1:1000' || ratioStr === '0.001') body.em1Ratio = 0.001;
+      else if (ratioStr === '1:2000' || ratioStr === '0.0005') body.em1Ratio = 0.0005;
+      else body.em1Ratio = parseFloat(ratioStr) || 0.001;
+    }
+    if (body.fermentationDays === undefined && body.fermentation_days !== undefined) body.fermentationDays = parseInt(body.fermentation_days, 10);
+
+    const parsed = TrustScoreRequestSchema.safeParse(body);
 
     if (!parsed.success) {
       res.status(400).json({
