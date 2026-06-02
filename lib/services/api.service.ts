@@ -4,7 +4,7 @@
  * Provides a clean, typed interface for frontend components
  */
 
-const API_BASE_URL = typeof window !== 'undefined' 
+const API_BASE_URL = typeof globalThis !== 'undefined' && 'window' in globalThis 
   ? (process.env.REACT_APP_API_URL || `http://localhost:${process.env.REACT_APP_API_PORT || 5000}`)
   : '';
 
@@ -78,11 +78,11 @@ async function fetchAPI<T>(
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP Error: ${response.status}`);
+      throw new Error((errorData as any).error || `HTTP Error: ${response.status}`);
     }
 
     const data = await response.json();
-    return data;
+    return data as any;
   } catch (error) {
     console.error(`API Error [${endpoint}]:`, error);
     return {

@@ -32,7 +32,11 @@ CREATE TABLE IF NOT EXISTS batches (
     batch_number VARCHAR(100) UNIQUE NOT NULL,
     feedstock_type VARCHAR(100) NOT NULL,
     product_name VARCHAR(255) NOT NULL,
-    trust_score INT NOT NULL CHECK (trust_score >= 0 AND trust_score <= 100),
+    weight_kg NUMERIC(10,2) DEFAULT 0,
+    packaging_type VARCHAR(50) DEFAULT 'Standard',
+    destination_zone VARCHAR(100),
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'certified', 'dispatched', 'delivered')),
+    trust_score INT NOT NULL DEFAULT 0 CHECK (trust_score >= 0 AND trust_score <= 100),
     certificate_url VARCHAR(500),
     qr_code_url VARCHAR(500),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -167,6 +171,83 @@ CREATE TABLE IF NOT EXISTS compliance_knowledge_base (
     document_chunk TEXT NOT NULL,
     embedding vector(1536),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 11. Trust Score Calculation Logs (For diagnostic tracking)
+CREATE TABLE IF NOT EXISTS trust_score_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    ph NUMERIC(4,2) NOT NULL,
+    ec NUMERIC(4,2) NOT NULL,
+    temperature NUMERIC(5,2) NOT NULL,
+    em1_ratio NUMERIC(8,6) NOT NULL,
+    fermentation_days INT NOT NULL,
+    score NUMERIC(5,2) NOT NULL,
+    grade VARCHAR(2) NOT NULL,
+    is_viable BOOLEAN NOT NULL,
+    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 12. Granular ESG Metrics (For green SMEs and audit trails)
+CREATE TABLE IF NOT EXISTS esg_metrics (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    processor_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    e_score INT NOT NULL,
+    s_score INT NOT NULL,
+    g_score INT NOT NULL,
+    esg_score INT NOT NULL,
+    plastic_offset_kg INT NOT NULL,
+    carbon_sequestered_kg INT NOT NULL,
+    water_saved_l INT NOT NULL,
+    waste_reduced_kg INT NOT NULL,
+    spoilage_prevented_bdt INT NOT NULL,
+    trust_score INT NOT NULL,
+    dvs_score INT NOT NULL,
+    month VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 13. Knowledge Base Text Search for BARI Context
+CREATE TABLE IF NOT EXISTS bari_knowledge_chunks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    content TEXT NOT NULL,
+    category VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 14. Climate Delivery Viability Score Calculation Logs
+CREATE TABLE IF NOT EXISTS dvs_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    zone VARCHAR(50) NOT NULL,
+    ambient_temperature NUMERIC(5,2) NOT NULL,
+    solar_hour INT NOT NULL,
+    trust_score INT NOT NULL,
+    dvs_score NUMERIC(5,2) NOT NULL,
+    delivery_approved BOOLEAN NOT NULL,
+    tst_minutes NUMERIC(6,2) NOT NULL,
+    hazard_class VARCHAR(20) NOT NULL,
+    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 15. BARI RAG Assistant Query Logs
+CREATE TABLE IF NOT EXISTS rag_query_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    query TEXT NOT NULL,
+    language VARCHAR(5) NOT NULL,
+    answer TEXT NOT NULL,
+    tokens_used INT NOT NULL DEFAULT 0,
+    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 16. Agentic Chatbot Interaction Logs
+CREATE TABLE IF NOT EXISTS agent_interaction_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    session_id VARCHAR(100) NOT NULL,
+    farmer_id VARCHAR(100),
+    message TEXT NOT NULL,
+    intent VARCHAR(50) NOT NULL,
+    response_type VARCHAR(50) NOT NULL,
+    language VARCHAR(5) NOT NULL,
+    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Indexing optimizations for High-Velocity Query performance

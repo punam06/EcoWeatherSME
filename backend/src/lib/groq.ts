@@ -5,7 +5,7 @@ if (!process.env.GROQ_API_KEY) {
 }
 
 export const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY || 'missing-key',
+  apiKey: (process.env.GROQ_API_KEY || 'missing-key').trim(),
 });
 
 export const GROQ_MODEL = 'llama-3.3-70b-versatile';

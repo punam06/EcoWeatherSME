@@ -1,5 +1,5 @@
 /**
- * EcoSortha AI Dashboard - Frontend Integration Layer
+ * CLimaLogix AI Dashboard - Frontend Integration Layer
  * Handles API communication with backend
  * Browser-based React component
  */

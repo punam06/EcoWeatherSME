@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
-const IS_STATIC_FILE = window.location.protocol === 'file:';
-const API_BASE_URL = !IS_STATIC_FILE && window.location.hostname === 'localhost' 
-  ? 'http://localhost:5001' 
-  : '';
+const IS_STATIC_FILE_HTML = window.location.protocol === 'file:';
+    const API_BASE_URL_HTML = !IS_STATIC_FILE_HTML && window.location.hostname === 'localhost' 
+      ? 'http://localhost:5001' 
+      : '';
 
 /* ═══════════════════════════════════════════════════════════════
    THEME SYSTEM — CSS Custom Properties
@@ -65,6 +65,7 @@ const ACCENT = {
   redBorder: "rgba(239, 68, 68, 0.2)",
   blue: "#3B82F6",
   blueBg: "rgba(59, 130, 246, 0.08)",
+  blueBorder: "rgba(59, 130, 246, 0.2)",
 };
 
 /* ═══════════════════════════════════════════════════════════════
@@ -376,25 +377,73 @@ function ThemeToggle({ theme, onToggle }) {
 /* ═══════════════════════════════════════════════════════════════
    TAB 1: BATCH VERIFICATION (IoT Intake)
    ═══════════════════════════════════════════════════════════════ */
-function IoTForm({ onResult }) {
+function IoTForm({ onResult, prefilledBatchId, prefilledDispatchZone, setPrefilledBatchId, setPrefilledDispatchZone }) {
   const [pH, setPH] = useState(4.1);
   const [EC, setEC] = useState(3.4);
   const [temp, setTemp] = useState(28);
   const [ratio, setRatio] = useState("1:1:20");
   const [days, setDays] = useState(9);
   const [certified, setCertified] = useState(false);
-  const [qrCodeImg, setQrCodeImg] = useState(null);
-  const [batchNum, setBatchNum] = useState("");
   const [ts, setTs] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [qrCodeImg, setQrCodeImg] = useState(null);
   const [isCertifying, setIsCertifying] = useState(false);
+  const [batchNum, setBatchNum] = useState("");
+
+  const [selectedBatchId, setSelectedBatchId] = useState("");
+  const [dispatchZone, setDispatchZone] = useState("");
+  const [registeredBatches, setRegisteredBatches] = useState([]);
+
+  // Fetch registered batches to populate the Batch Selection Dropdown
+  useEffect(() => {
+    const loadBatches = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL_HTML}/api/batches`);
+        const result = await response.json();
+        if (result.success && Array.isArray(result.data)) {
+          setRegisteredBatches(result.data);
+        } else {
+          setRegisteredBatches(window.__SEED_BATCHES__ || []);
+        }
+      } catch (err) {
+        setRegisteredBatches(window.__SEED_BATCHES__ || []);
+      }
+    };
+    loadBatches();
+  }, []);
+
+  // Sync state if pre-populated from AI chatbot agent
+  useEffect(() => {
+    if (prefilledBatchId) {
+      setSelectedBatchId(prefilledBatchId);
+      
+      const matched = registeredBatches.find(b => b.id === prefilledBatchId || b.batch_number === prefilledBatchId);
+      if (matched) {
+        setDispatchZone(matched.destination_zone || matched.dest || "Old Dhaka");
+      } else if (prefilledDispatchZone) {
+        setDispatchZone(prefilledDispatchZone);
+      }
+    }
+  }, [prefilledBatchId, prefilledDispatchZone, registeredBatches]);
+
+  const handleBatchSelect = (bId) => {
+    setSelectedBatchId(bId);
+    if (setPrefilledBatchId) setPrefilledBatchId(bId);
+    
+    const matched = registeredBatches.find(b => b.id === bId || b.batch_number === bId);
+    if (matched) {
+      const zone = matched.destination_zone || matched.dest || "Old Dhaka";
+      setDispatchZone(zone);
+      if (setPrefilledDispatchZone) setPrefilledDispatchZone(zone);
+    }
+  };
 
   useEffect(() => {
     const fetchTrustScore = async () => {
       setIsLoading(true);
       try {
         const response = await fetch(
-          `${API_BASE_URL}/api/clever-responder`,
+          `${API_BASE_URL_HTML}/api/clever-responder`,
           {
             method: "POST",
             headers: {
@@ -414,12 +463,17 @@ function IoTForm({ onResult }) {
         setTs(data.trustScore || 0);
         onResult(data.trustScore || 0);
         setCertified(false);
+        setQrCodeImg(null);
+        setBatchNum("");
       } catch (error) {
         console.error("Failed to fetch trust score:", error);
         // Fallback to local calculation on error
         const fallbackScore = calcTrustScore({ pH, EC, temp, ratio, days });
         setTs(fallbackScore);
         onResult(fallbackScore);
+        setCertified(false);
+        setQrCodeImg(null);
+        setBatchNum("");
       } finally {
         setIsLoading(false);
       }
@@ -431,6 +485,43 @@ function IoTForm({ onResult }) {
   return (
     <div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 18 }}>
+        {/* NEW STATEFUL BATCH ID & DISPATCH ZONE SELECTIONS */}
+        <div style={{ gridColumn: "1 / -1" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            <div>
+              <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>Batch ID (Registered)</label>
+              <select 
+                value={selectedBatchId} 
+                onChange={e => handleBatchSelect(e.target.value)}
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+              >
+                <option value="">Select registered batch</option>
+                {registeredBatches.map(b => (
+                  <option key={b.id || b.batch_number} value={b.id || b.batch_number}>
+                    {b.id || b.batch_number} - {b.product_name || b.product}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>Dispatch Zone</label>
+              <select 
+                value={dispatchZone} 
+                onChange={e => { setDispatchZone(e.target.value); if (setPrefilledDispatchZone) setPrefilledDispatchZone(e.target.value); }}
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+              >
+                <option value="">Select zone</option>
+                {Object.keys(UHI_ZONES).map(z => <option key={z} value={z}>{z}</option>)}
+              </select>
+            </div>
+          </div>
+          {selectedBatchId && (
+            <div style={{ fontSize: 11, color: ACCENT.green, marginTop: 8, fontWeight: 600 }}>
+              📦 Selected Batch Product: {registeredBatches.find(b => b.id === selectedBatchId || b.batch_number === selectedBatchId)?.product_name || 'Registered Material'}
+            </div>
+          )}
+        </div>
+
         <div>
           <SliderRow label="pH Level" min={3.0} max={7.0} step={0.1} value={pH} onChange={setPH} color={ACCENT.green} />
           <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: 3.8–4.2</div>
@@ -472,11 +563,26 @@ function IoTForm({ onResult }) {
           if (ts >= 60) {
             setIsCertifying(true);
             try {
-              const res = await APIClient.certifyBatch({ batchId: `BCH-${Date.now().toString().slice(-6)}` });
+              const res = await window.APIClient.certifyBatch({ 
+                batchId: selectedBatchId || `BCH-${Date.now().toString().slice(-6)}`,
+                trustScore: ts
+              });
               if (res.success) {
                 setQrCodeImg(res.data.qrCodeDataUrl);
                 setBatchNum(res.data.batchId);
                 setCertified(true);
+                
+                // Sync list states locally
+                const updateLocalBatch = b => {
+                  if (b.id === res.data.batchId || b.batch_number === res.data.batchId) {
+                    return { ...b, status: 'certified', trust_score: ts };
+                  }
+                  return b;
+                };
+                if (window.__SEED_BATCHES__) {
+                  window.__SEED_BATCHES__ = window.__SEED_BATCHES__.map(updateLocalBatch);
+                }
+                setRegisteredBatches(prev => prev.map(updateLocalBatch));
               }
             } catch (err) {
               console.error("Batch certification failed:", err);
@@ -526,6 +632,123 @@ function IoTForm({ onResult }) {
               <div><span style={{ color: ACCENT.green }}>Processor:</span> #07 (anonymized)</div>
             </div>
           </div>
+          <button
+            onClick={() => {
+              const { jsPDF } = window.jspdf;
+              const doc = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4'
+              });
+              
+              // Add a border
+              doc.setDrawColor(46, 125, 50);
+              doc.setLineWidth(1.5);
+              doc.rect(5, 5, 200, 287);
+              
+              // Header
+              doc.setFont("helvetica", "bold");
+              doc.setFontSize(22);
+              doc.setTextColor(46, 125, 50);
+              doc.text("CLimaLogix AI", 105, 30, { align: "center" });
+              
+              doc.setFontSize(14);
+              doc.setTextColor(15, 23, 42);
+              doc.text("CLIMATESHIELD BATCH CERTIFICATE", 105, 42, { align: "center" });
+              
+              doc.setDrawColor(200, 200, 200);
+              doc.setLineWidth(0.5);
+              doc.line(20, 48, 190, 48);
+              
+              // Content
+              doc.setFont("helvetica", "normal");
+              doc.setFontSize(12);
+              doc.setTextColor(51, 65, 85);
+              
+              const matched = registeredBatches.find(b => b.id === batchNum || b.batch_number === batchNum);
+              const pName = matched ? (matched.product_name || matched.product) : "Organic Product";
+              const pZone = dispatchZone || (matched ? (matched.destination_zone || matched.dest) : "Old Dhaka");
+
+              let y = 60;
+              doc.setFont("helvetica", "bold");
+              doc.text("Batch ID:", 30, y);
+              doc.setFont("helvetica", "normal");
+              doc.text(batchNum, 75, y);
+              
+              y += 12;
+              doc.setFont("helvetica", "bold");
+              doc.text("Product Name:", 30, y);
+              doc.setFont("helvetica", "normal");
+              doc.text(pName, 75, y);
+
+              y += 12;
+              doc.setFont("helvetica", "bold");
+              doc.text("Dispatch Zone:", 30, y);
+              doc.setFont("helvetica", "normal");
+              doc.text(pZone, 75, y);
+
+              y += 12;
+              doc.setFont("helvetica", "bold");
+              doc.text("BARI Trust Score:", 30, y);
+              doc.setFont("helvetica", "normal");
+              doc.text(`${ts} / 100`, 75, y);
+              
+              y += 12;
+              doc.setFont("helvetica", "bold");
+              doc.text("Parameters:", 30, y);
+              doc.setFont("helvetica", "normal");
+              doc.text(`pH: ${pH}  |  EC: ${EC} mS/cm  |  Temp: ${temp} C`, 75, y);
+              
+              y += 12;
+              doc.setFont("helvetica", "bold");
+              doc.text("Treatment Ratio:", 30, y);
+              doc.setFont("helvetica", "normal");
+              doc.text(ratio, 75, y);
+              
+              y += 12;
+              doc.setFont("helvetica", "bold");
+              doc.text("Fermentation Days:", 30, y);
+              doc.setFont("helvetica", "normal");
+              doc.text(`${days} Days`, 75, y);
+              
+              y += 12;
+              doc.setFont("helvetica", "bold");
+              doc.text("Verification Status:", 30, y);
+              doc.setFont("helvetica", "normal");
+              doc.setTextColor(46, 125, 50);
+              doc.text("VERIFIED COMPLIANT", 75, y);
+              doc.setTextColor(51, 65, 85);
+              
+              // Add the QR code image if it exists
+              if (qrCodeImg) {
+                try {
+                  doc.addImage(qrCodeImg, 'PNG', 75, y + 15, 60, 60);
+                } catch (e) {
+                  console.error("Failed to add QR image to PDF:", e);
+                }
+              }
+              
+              y += 90;
+              doc.setDrawColor(200, 200, 200);
+              doc.line(20, y, 190, y);
+              
+              y += 10;
+              doc.setFont("helvetica", "italic");
+              doc.setFontSize(10);
+              doc.setTextColor(100, 116, 139);
+              doc.text("CLimaLogix AI ClimateShield — Decentralized Circular SME Compliance Network", 105, y, { align: "center" });
+              
+              doc.save(`CLimaLogix_Certificate_${batchNum}.pdf`);
+            }}
+            style={{
+              marginTop: 14, width: "100%", padding: "10px", borderRadius: 8,
+              border: `1px solid ${ACCENT.green}`, background: ACCENT.greenBg,
+              color: ACCENT.green, cursor: "pointer", fontSize: 12, fontWeight: 700,
+              transition: "all 0.25s ease", textAlign: "center", display: "block"
+            }}
+          >
+            📥 Download PDF Certificate
+          </button>
         </div>
       )}
     </div>
@@ -618,7 +841,7 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
     setHasCalculated(true);
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/clever-responder`,
+        `${API_BASE_URL_HTML}/api/clever-responder`,
         {
           method: "POST",
           headers: {
@@ -750,11 +973,6 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       setSpeechSupported(false);
     } else {
-      const locale = (navigator.languages && navigator.languages[0]) || navigator.language || "en-US";
-      if (locale.toLowerCase().startsWith("bn")) {
-        setSpeechLang("bn-BD");
-      }
-
       // Pre-detect language based on location
       navigator.geolocation.getCurrentPosition(
         async (position) => {
@@ -764,8 +982,6 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
             const data = await res.json();
             if (data.countryCode === "BD") {
               setSpeechLang("bn-BD");
-            } else if (!locale.toLowerCase().startsWith("bn")) {
-              setSpeechLang("en-US");
             }
           } catch (e) {
             console.error("Failed to detect language from location", e);
@@ -1171,15 +1387,15 @@ function DemandChart() {
    TAB 4: IMPACT & ESG LEDGER
    ═══════════════════════════════════════════════════════════════ */
 function ESGCard({ trustScore, dvs }) {
-  const [esgData, setEsgData] = React.useState(null);
-  const [isLoading, setIsLoading] = React.useState(true);
-  const [error, setError] = React.useState(null);
+  const [esgData, setEsgData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const fetchEsgData = async () => {
       try {
         setIsLoading(true);
-        const data = await APIClient.getESGMetrics(trustScore, dvs);
+        const data = await window.APIClient.getESGMetrics(trustScore, dvs);
         setEsgData(data);
         setError(null);
       } catch (err) {
@@ -1194,15 +1410,20 @@ function ESGCard({ trustScore, dvs }) {
   }, [trustScore, dvs]);
 
   if (isLoading) {
-    return <div>Loading ESG Data...</div>;
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 200, color: "var(--text-secondary)" }}>
+        <div style={{ fontSize: 24, marginBottom: 12 }}>⏳</div>
+        <div style={{ fontSize: 12 }}>Loading ESG Data...</div>
+      </div>
+    );
   }
 
   if (error) {
-    return <div style={{ color: 'red' }}>{error}</div>;
+    return <div style={{ color: ACCENT.red, padding: 12, textAlign: "center" }}>{error}</div>;
   }
 
   if (!esgData) {
-    return <div>No ESG data available.</div>;
+    return <div style={{ padding: 12, textAlign: "center" }}>No ESG data available.</div>;
   }
 
   // Calibrate DVS if simulator hasn't been run yet for general display
@@ -1254,7 +1475,7 @@ function ESGCard({ trustScore, dvs }) {
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>EcoSortha ESG Rating</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>CLimaLogix ESG Rating</div>
             <div style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.6 }}>
               Your agricultural supply chain operates with exceptional environmental and social compliance. 
               {!isSimulated && <span style={{ color: ACCENT.amber }}> Run simulator to refine this grade dynamically.</span>}
@@ -1478,7 +1699,7 @@ function ESGCard({ trustScore, dvs }) {
         borderRadius: 12, padding: "20px 24px"
       }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 12, letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: 8 }}>
-          <span>🏅</span> CERTIFICATIONS & COMPLIANCE STANDARDS
+          <span>🏅</span> {"CERTIFICATIONS & COMPLIANCE STANDARDS"}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
           {[
@@ -1534,98 +1755,187 @@ function PageHeader({ title, subtitle, action }) {
 }
 
 function DashboardView({ onNewBatch }) {
-  const stats = [
-    { label: "TOTAL BATCHES", value: "142", sub: "9 active", icon: "📦" },
-    { label: "CERTIFIED BATCHES", value: "118", sub: "83% certification rate", icon: "🛡️" },
-    { label: "AVG TRUST SCORE", value: "82.4", sub: "BARI-certified standard", icon: "📈" },
-    { label: "TOTAL WEIGHT", value: "8.6 t", sub: "bio-resources processed", icon: "⚖️" },
-    { label: "PLASTIC BOTTLES SAVED", value: "34,560", sub: "via bulk refill model", icon: "♻️" },
-    { label: "CO2 SEQUESTERED", value: "2,180 kg", sub: "biochar carbon capture", icon: "🌿" },
-    { label: "REVENUE", value: "BDT 12.5L", sub: "this month", icon: "📈" },
-    { label: "DVS COMPLIANCE", value: "96.2%", sub: "dispatches within TST", icon: "✅" },
-  ];
+  const [dashData, setDashData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
-  const hazardMaps = [
-    { zone: "Old Dhaka", hazard: "Extreme", temp: "41.2°C", rh: "74%", desc: "Class A thermal accumulation zone. Narrow concrete corridors trap heat.", time: "11:00 AM – 4:00 PM" },
-    { zone: "Mirpur", hazard: "High", temp: "38.7°C", rh: "68%", desc: "Dense residential concrete with limited canopy cover.", time: "12:00 PM – 3:00 PM" },
-    { zone: "Savar", hazard: "Moderate", temp: "36.1°C", rh: "62%", desc: "Mixed urban with partial green canopy. Moderate risk window.", time: "1:00 PM – 3:00 PM" },
-    { zone: "Gulshan", hazard: "Safe", temp: "34.2°C", rh: "58%", desc: "High green canopy coverage and lake proximity reduce thermal load.", time: "N/A" }
-  ];
+  const fetchDashboard = async (isManual = false) => {
+    if (isManual) setIsRefreshing(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/dashboard`);
+      const json = await res.json();
+      if (json.success && json.data) {
+        setDashData(json.data);
+        setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      }
+    } catch (e) {
+      console.error('[Dashboard] fetch failed:', e);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboard();
+    const interval = setInterval(() => fetchDashboard(false), 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const s = dashData?.stats;
+  const activity = dashData?.recentActivity || [];
+  const heatmap = dashData?.heatmap || [];
+  const isLive = dashData?.liveData;
+
+  const statCards = s ? [
+    { label: "TOTAL BATCHES",       value: s.totalBatches,       sub: `${s.activeBatches} active`,              icon: "📦" },
+    { label: "CERTIFIED BATCHES",   value: s.certifiedBatches,   sub: `${s.certRate} certification rate`,        icon: "🛡️" },
+    { label: "AVG TRUST SCORE",     value: s.avgTrustScore,      sub: "BARI-certified standard",                 icon: "📈" },
+    { label: "TOTAL WEIGHT",        value: s.totalWeight,        sub: "bio-resources processed",                 icon: "⚖️" },
+    { label: "PLASTIC BOTTLES SAVED",value: s.plasticSaved?.toLocaleString(), sub: "via bulk refill model",    icon: "♻️" },
+    { label: "CO₂ SEQUESTERED",     value: `${s.co2Sequestered} kg`, sub: "biochar carbon capture",            icon: "🌿" },
+    { label: "DVS COMPLIANCE",      value: s.certRate,           sub: "dispatches within TST",                  icon: "✅" },
+    { label: "HEATMAP ZONES",       value: heatmap.length,       sub: "thermal zones monitored",                icon: "🗺️" },
+  ] : [];
+
+  const colorMap = { green: ACCENT.greenBg, amber: ACCENT.amberBg, red: ACCENT.redBg, blue: ACCENT.blueBg };
 
   return (
     <div style={{ animation: "fadeSlideIn 0.3s ease" }}>
-      <PageHeader 
-        title="Operations Dashboard" 
-        subtitle="Bangladesh Climate-Resilient Circular Commerce" 
+      <PageHeader
+        title="Operations Dashboard"
+        subtitle="Bangladesh Climate-Resilient Circular Commerce"
         action={
-          <button onClick={onNewBatch} style={{
-            background: ACCENT.greenDark, color: "#fff", border: "none", padding: "10px 18px",
-            borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 13, display: "flex", gap: 6, alignItems: "center"
-          }}><span>+</span> New Batch</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {lastUpdated && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{
+                  width: 7, height: 7, borderRadius: "50%",
+                  background: isLive ? ACCENT.green : ACCENT.amber,
+                  boxShadow: isLive ? `0 0 6px ${ACCENT.green}` : "none",
+                  display: "inline-block"
+                }} />
+                <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+                  {isLive ? "Live DB" : "Seeded"} · {lastUpdated}
+                </span>
+                <button onClick={fetchDashboard} title="Refresh" style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  color: "var(--text-dim)", fontSize: 14, padding: "0 4px"
+                }}>↻</button>
+              </div>
+            )}
+            <button onClick={onNewBatch} style={{
+              background: ACCENT.greenDark, color: "#fff", border: "none", padding: "10px 18px",
+              borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 13, display: "flex", gap: 6, alignItems: "center"
+            }}><span>+</span> New Batch</button>
+          </div>
         }
       />
 
+      {/* ── STAT CARDS ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 32 }}>
-        {stats.map((s, i) => (
-          <Card key={i} style={{ padding: "20px 24px" }} hover={false}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-              <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, letterSpacing: "0.05em" }}>{s.label}</div>
-              <div style={{ background: "var(--bg-input)", padding: 6, borderRadius: "50%", fontSize: 12 }}>{s.icon}</div>
-            </div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>{s.value}</div>
-            <div style={{ fontSize: 12, color: "var(--text-dim)" }}>{s.sub}</div>
-          </Card>
-        ))}
+        {isLoading
+          ? Array.from({ length: 8 }).map((_, i) => (
+              <Card key={i} style={{ padding: "20px 24px" }} hover={false}>
+                <div style={{ height: 12, background: "var(--bg-input)", borderRadius: 6, marginBottom: 12, width: "60%", animation: "pulse 1.5s ease infinite" }} />
+                <div style={{ height: 28, background: "var(--bg-input)", borderRadius: 6, marginBottom: 8, width: "80%", animation: "pulse 1.5s ease infinite" }} />
+                <div style={{ height: 10, background: "var(--bg-input)", borderRadius: 6, width: "50%", animation: "pulse 1.5s ease infinite" }} />
+              </Card>
+            ))
+          : statCards.map((s, i) => (
+              <Card key={i} style={{ padding: "20px 24px" }} hover={false}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, letterSpacing: "0.05em" }}>{s.label}</div>
+                  <div style={{ background: "var(--bg-input)", padding: 6, borderRadius: "50%", fontSize: 12 }}>{s.icon}</div>
+                </div>
+                <div style={{ fontSize: 26, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>{s.value}</div>
+                <div style={{ fontSize: 12, color: "var(--text-dim)" }}>{s.sub}</div>
+              </Card>
+            ))
+        }
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
+        {/* ── THERMAL HEATMAP ── */}
         <Card hover={false}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
             <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>Dhaka Thermal Hazard Map</div>
-            <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>Live MERM Classification</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                {isLive ? "🟢 Live Weather Data" : "⚡ Estimated · Live MERM"}
+              </div>
+              <button onClick={() => fetchDashboard(true)} disabled={isRefreshing} style={{
+                fontSize: 13, color: ACCENT.green, background: "none", border: "none",
+                cursor: isRefreshing ? "wait" : "pointer", fontWeight: 500, padding: 0,
+                opacity: isRefreshing ? 0.5 : 1
+              }}>{isRefreshing ? "⏳" : "↻"}</button>
+            </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {hazardMaps.map(m => {
-              const hColor = m.hazard === "Extreme" ? ACCENT.red : m.hazard === "High" ? ACCENT.amber : m.hazard === "Moderate" ? ACCENT.amber : ACCENT.green;
-              return (
-                <div key={m.zone} style={{ border: "1px solid var(--border-primary)", borderRadius: 12, padding: "16px 20px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: hColor }}></span>
-                      <span style={{ fontWeight: 600, fontSize: 14 }}>{m.zone}</span>
-                      <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 12, background: hColor+"15", color: hColor, fontWeight: 600 }}>{m.hazard}</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{m.temp} · {m.rh}</div>
+            {isLoading
+              ? Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} style={{ border: "1px solid var(--border-primary)", borderRadius: 12, padding: "16px 20px" }}>
+                    <div style={{ height: 14, background: "var(--bg-input)", borderRadius: 6, width: "40%", marginBottom: 8, animation: "pulse 1.5s ease infinite" }} />
+                    <div style={{ height: 10, background: "var(--bg-input)", borderRadius: 6, width: "80%", animation: "pulse 1.5s ease infinite" }} />
                   </div>
-                  <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 4 }}>{m.desc}</div>
-                  {m.time !== "N/A" && <div style={{ fontSize: 12, color: ACCENT.amber }}>Peak: {m.time}</div>}
-                </div>
-              );
-            })}
+                ))
+              : heatmap.map(m => {
+                  const hColor = m.hazard === "Extreme" ? ACCENT.red : m.hazard === "High" ? ACCENT.amber : m.hazard === "Moderate" ? ACCENT.amber : ACCENT.green;
+                  return (
+                    <div key={m.zone} style={{ border: "1px solid var(--border-primary)", borderRadius: 12, padding: "16px 20px", transition: "background 0.2s" }}
+                         onMouseEnter={e => e.currentTarget.style.background = "var(--bg-input)"}
+                         onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: hColor, boxShadow: `0 0 6px ${hColor}66` }} />
+                          <span style={{ fontWeight: 600, fontSize: 14 }}>{m.zone}</span>
+                          <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 12, background: hColor+"15", color: hColor, fontWeight: 600 }}>{m.hazard}</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "'JetBrains Mono', monospace" }}>{m.temp} · {m.rh}</div>
+                      </div>
+                      <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 4 }}>{m.desc}</div>
+                      {m.time !== "N/A" && <div style={{ fontSize: 12, color: ACCENT.amber }}>⚡ Peak: {m.time}</div>}
+                    </div>
+                  );
+                })
+            }
           </div>
         </Card>
 
+        {/* ── RECENT ACTIVITY ── */}
         <Card hover={false}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
             <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>Recent Activity</div>
-            <a href="#" style={{ fontSize: 13, color: ACCENT.green, textDecoration: "none", fontWeight: 500 }}>View all →</a>
+            <button onClick={() => fetchDashboard(true)} disabled={isRefreshing} style={{
+              fontSize: 13, color: ACCENT.green, background: "none", border: "none",
+              cursor: isRefreshing ? "wait" : "pointer", fontWeight: 500, padding: 0,
+              opacity: isRefreshing ? 0.5 : 1
+            }}>{isRefreshing ? "⏳ Refreshing..." : "Refresh ↺"}</button>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-            {[
-              { icon: "🛡️", text: "Batch ECO-2025-142 certified — Trust Score 91", time: "2 min ago", bg: ACCENT.greenBg },
-              { icon: "📈", text: "DVS simulation for Old Dhaka route — Score 63 (Caution)", time: "18 min ago", bg: ACCENT.amberBg },
-              { icon: "🚚", text: "Batch ECO-2025-140 dispatched to Mirpur", time: "1 hr ago", bg: ACCENT.greenBg },
-              { icon: "⚠️", text: "High thermal hazard in Old Dhaka — delay dispatches until 5 PM", time: "2 hr ago", bg: ACCENT.redBg },
-              { icon: "📦", text: "New biochar batch ECO-2025-141 created (180 kg)", time: "3 hr ago", bg: ACCENT.blueBg },
-            ].map((a, i) => (
-              <div key={i} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-                <div style={{ width: 36, height: 36, borderRadius: "50%", background: a.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{a.icon}</div>
-                <div>
-                  <div style={{ fontSize: 13, color: "var(--text-primary)", marginBottom: 4, lineHeight: 1.4 }}>{a.text}</div>
-                  <div style={{ fontSize: 11, color: "var(--text-dim)" }}>{a.time}</div>
-                </div>
-              </div>
-            ))}
+            {isLoading
+              ? Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--bg-input)", animation: "pulse 1.5s ease infinite", flexShrink: 0 }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ height: 12, background: "var(--bg-input)", borderRadius: 6, marginBottom: 6, animation: "pulse 1.5s ease infinite" }} />
+                      <div style={{ height: 10, background: "var(--bg-input)", borderRadius: 6, width: "40%", animation: "pulse 1.5s ease infinite" }} />
+                    </div>
+                  </div>
+                ))
+              : activity.length > 0
+              ? activity.map((a, i) => (
+                  <div key={`${a.text}-${i}`} style={{ display: "flex", gap: 14, alignItems: "flex-start", opacity: isRefreshing ? 0.5 : 1, transition: "opacity 0.3s ease" }}>
+                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: colorMap[a.colorType] || ACCENT.greenBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>{a.icon}</div>
+                    <div>
+                      <div style={{ fontSize: 13, color: "var(--text-primary)", marginBottom: 4, lineHeight: 1.4 }}>{a.text}</div>
+                      <div style={{ fontSize: 11, color: "var(--text-dim)" }}>{a.time}</div>
+                    </div>
+                  </div>
+                ))
+              : <div style={{ color: "var(--text-dim)", fontSize: 13, textAlign: "center", padding: "20px 0" }}>No activity yet.</div>
+            }
           </div>
         </Card>
       </div>
@@ -1633,71 +1943,424 @@ function DashboardView({ onNewBatch }) {
   );
 }
 
-function BatchRegistry({ onNewBatch }) {
-  const [activeTab, setActiveTab] = useState("All");
-  const tabs = ["All", "Pending", "Certified", "Dispatched", "Delivered"];
-  const batches = [
-    { id: "BCH-142", product: "Bio-Slurry", status: "Certified", trust: 91, dvs: null, dest: "—", weight: 180 },
-    { id: "BCH-141", product: "Biochar", status: "Active", trust: 85, dvs: null, dest: "—", weight: 100 }
+/* ═══════════════════════════════════════════════════════════════
+   BATCH REGISTRY – module-level seed data (stable across renders)
+   ═══════════════════════════════════════════════════════════════ */
+(function() {
+  // defined at module scope so fetchBatches closures always see same reference
+  const _now = new Date();
+  const _seed = _now.getFullYear() * 100 + _now.getMonth() * 10 + _now.getDate();
+  window.__SEED_BATCHES__ = [
+    { id: `BCH-${_seed+0}`, product_name: "Bio-Slurry Concentrate",    status: "certified",  trust_score: 70+((_seed+0*7)%30),  destination_zone: "Old Dhaka",   weight_kg: 80+((_seed+0*13)%220),  created_at: new Date(Date.now()-0*18000000).toISOString() },
+    { id: `BCH-${_seed+1}`, product_name: "Biochar Granules",           status: "active",     trust_score: 70+((_seed+1*7)%30),  destination_zone: "Mirpur",      weight_kg: 80+((_seed+1*13)%220),  created_at: new Date(Date.now()-1*18000000).toISOString() },
+    { id: `BCH-${_seed+2}`, product_name: "EM-1 Bio-Culture",           status: "pending",    trust_score: 70+((_seed+2*7)%30),  destination_zone: "Gulshan",     weight_kg: 80+((_seed+2*13)%220),  created_at: new Date(Date.now()-2*18000000).toISOString() },
+    { id: `BCH-${_seed+3}`, product_name: "Organic Compost",            status: "dispatched", trust_score: 70+((_seed+3*7)%30),  destination_zone: "Savar",       weight_kg: 80+((_seed+3*13)%220),  created_at: new Date(Date.now()-3*18000000).toISOString() },
+    { id: `BCH-${_seed+4}`, product_name: "Liquid Fertiliser",          status: "delivered",  trust_score: 70+((_seed+4*7)%30),  destination_zone: "Dhanmondi",   weight_kg: 80+((_seed+4*13)%220),  created_at: new Date(Date.now()-4*18000000).toISOString() },
+    { id: `BCH-${_seed+5}`, product_name: "Thermal-Safe Vaccine Batch", status: "certified",  trust_score: 70+((_seed+5*7)%30),  destination_zone: "Uttara",      weight_kg: 80+((_seed+5*13)%220),  created_at: new Date(Date.now()-5*18000000).toISOString() },
+    { id: `BCH-${_seed+6}`, product_name: "Fresh Dairy Mix",            status: "active",     trust_score: 70+((_seed+6*7)%30),  destination_zone: "Banani",      weight_kg: 80+((_seed+6*13)%220),  created_at: new Date(Date.now()-6*18000000).toISOString() },
+    { id: `BCH-${_seed+7}`, product_name: "Carbon-Neutral Biochar",     status: "certified",  trust_score: 70+((_seed+7*7)%30),  destination_zone: "Motijheel",   weight_kg: 80+((_seed+7*13)%220),  created_at: new Date(Date.now()-7*18000000).toISOString() },
+    { id: `BCH-${_seed+8}`, product_name: "Cold-Chain Fish Paste",      status: "pending",    trust_score: 70+((_seed+8*7)%30),  destination_zone: "Jatrabari",   weight_kg: 80+((_seed+8*13)%220),  created_at: new Date(Date.now()-8*18000000).toISOString() },
+    { id: `BCH-${_seed+9}`, product_name: "Poultry Probiotic Mix",      status: "dispatched", trust_score: 70+((_seed+9*7)%30),  destination_zone: "Tejgaon",     weight_kg: 80+((_seed+9*13)%220),  created_at: new Date(Date.now()-9*18000000).toISOString() },
   ];
+})();
+
+function BatchRegistry({ onNewBatch }) {
+  const STATUS_TABS = ["All", "Pending", "Active", "Certified", "Dispatched", "Delivered"];
+  const STATUS_COLORS = {
+    certified: { border: ACCENT.greenBorder, color: ACCENT.green, bg: ACCENT.greenBg },
+    active:    { border: ACCENT.blueBorder,  color: ACCENT.blue,  bg: ACCENT.blueBg },
+    pending:   { border: "var(--border-primary)", color: "var(--text-secondary)", bg: "transparent" },
+    dispatched:{ border: ACCENT.amberBorder, color: ACCENT.amber, bg: ACCENT.amberBg },
+    delivered: { border: ACCENT.greenBorder, color: ACCENT.green, bg: ACCENT.greenBg },
+  };
+
+  const [activeTab, setActiveTab]     = useState("All");
+  const [search, setSearch]           = useState("");
+  const [batches, setBatches]         = useState([]);
+  const [isLoading, setIsLoading]     = useState(true);
+  const [selectedBatch, setSelected]  = useState(null);
+  const [lastFetched, setLastFetched] = useState(null);
+  const [, setTick]                   = useState(0);
+
+  // Real-time dynamic timing ticker to update relative dates every 30 seconds
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTick(t => t + 1);
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const fetchBatches = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/batches`);
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+        // normalise status field to lowercase so filters always work
+        setBatches(json.data.map(b => ({ ...b, status: (b.status || "").trim().toLowerCase() })));
+      } else {
+        setBatches(window.__SEED_BATCHES__ || []);
+      }
+    } catch (_) {
+      setBatches(window.__SEED_BATCHES__ || []);
+    } finally {
+      setIsLoading(false);
+      setLastFetched(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    }
+  };
+
+  useEffect(() => { fetchBatches(); }, []);
+
+  const normalise = s => (s || "").trim().toLowerCase();
+  const filtered = batches.filter(b => {
+    const tabMatch = activeTab === "All" || normalise(b.status) === normalise(activeTab);
+    const q = search.toLowerCase();
+    const searchMatch = !search
+      || (b.id || "").toLowerCase().includes(q)
+      || (b.product_name || b.product || "").toLowerCase().includes(q)
+      || (b.destination_zone || b.dest || "").toLowerCase().includes(q);
+    return tabMatch && searchMatch;
+  });
+
+  const tabCounts = STATUS_TABS.reduce((acc, t) => {
+    acc[t] = t === "All" ? batches.length : batches.filter(b => normalise(b.status) === normalise(t)).length;
+    return acc;
+  }, {});
+
+  const getStatusStyle = (status) => STATUS_COLORS[status?.toLowerCase()] || STATUS_COLORS.pending;
 
   return (
-    <div style={{ animation: "fadeSlideIn 0.3s ease" }}>
-      <PageHeader title="Batch Registry" subtitle="All bio-resource batches with certification status" action={
-        <button onClick={onNewBatch} style={{
-          background: ACCENT.greenDark, color: "#fff", border: "none", padding: "10px 18px",
-          borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 13, display: "flex", gap: 6, alignItems: "center"
-        }}><span>+</span> New Batch</button>
-      } />
-      
-      <div style={{ display: "flex", gap: 4, background: "var(--bg-input)", padding: 4, borderRadius: 8, width: "max-content", marginBottom: 24 }}>
-        {tabs.map(t => (
-          <button key={t} onClick={() => setActiveTab(t)} style={{
-            padding: "8px 18px", borderRadius: 6, border: "none", fontSize: 13, cursor: "pointer",
-            background: activeTab === t ? "var(--bg-card)" : "transparent",
-            color: activeTab === t ? "var(--text-primary)" : "var(--text-secondary)",
-            boxShadow: activeTab === t ? "var(--shadow-card)" : "none", fontWeight: activeTab === t ? 600 : 400
-          }}>{t}</button>
-        ))}
+    <div style={{ animation: "fadeSlideIn 0.3s ease", position: "relative" }}>
+      <PageHeader
+        title="Batch Registry"
+        subtitle={lastFetched ? `${batches.length} batches · last updated ${lastFetched}` : "All heat-sensitive SME product batches"}
+        action={
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <button onClick={fetchBatches} disabled={isLoading} style={{
+              background: "var(--bg-input)", color: "var(--text-secondary)", border: "1px solid var(--border-primary)",
+              padding: "10px 14px", borderRadius: 8, cursor: isLoading ? "wait" : "pointer", fontSize: 13, fontWeight: 500
+            }}>{isLoading ? "⏳" : "↻ Refresh"}</button>
+            <button onClick={onNewBatch} style={{
+              background: ACCENT.greenDark, color: "#fff", border: "none", padding: "10px 18px",
+              borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 13, display: "flex", gap: 6, alignItems: "center"
+            }}><span>+</span> New Batch</button>
+          </div>
+        }
+      />
+
+      {/* ── SEARCH + FILTER ROW ── */}
+      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 24, flexWrap: "wrap" }}>
+        <div style={{ position: "relative", flex: "0 0 280px" }}>
+          <span style={{ position: "absolute", left: 12, top: 10, fontSize: 13, color: "var(--text-dim)" }}>🔍</span>
+          <input
+            type="text"
+            placeholder="Search batches, products, zones..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{
+              width: "100%", padding: "10px 12px 10px 34px", borderRadius: 8,
+              border: "1px solid var(--border-primary)", background: "var(--bg-primary)",
+              color: "var(--text-primary)", outline: "none", fontSize: 13
+            }}
+          />
+        </div>
+        <div style={{ display: "flex", gap: 4, background: "var(--bg-input)", padding: 4, borderRadius: 8 }}>
+          {STATUS_TABS.map(t => (
+            <button key={t} onClick={() => setActiveTab(t)} style={{
+              padding: "7px 14px", borderRadius: 6, border: "none", fontSize: 12, cursor: "pointer",
+              background: activeTab === t ? "var(--bg-card)" : "transparent",
+              color: activeTab === t ? "var(--text-primary)" : "var(--text-secondary)",
+              boxShadow: activeTab === t ? "var(--shadow-card)" : "none",
+              fontWeight: activeTab === t ? 600 : 400,
+              display: "flex", alignItems: "center", gap: 5
+            }}>
+              {t}
+              {tabCounts[t] > 0 && (
+                <span style={{
+                  background: activeTab === t ? ACCENT.greenBg : "var(--bg-input)",
+                  color: activeTab === t ? ACCENT.green : "var(--text-dim)",
+                  borderRadius: 12, padding: "1px 7px", fontSize: 10, fontWeight: 700
+                }}>{tabCounts[t]}</span>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
+      {/* ── TABLE ── */}
       <Card style={{ padding: 0, overflow: "hidden" }} hover={false}>
         <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
           <thead>
             <tr style={{ borderBottom: "1px solid var(--border-primary)", background: "var(--bg-input)" }}>
-              {["BATCH", "PRODUCT", "STATUS", "TRUST SCORE", "DVS SCORE", "DESTINATION", "WEIGHT"].map(h => (
-                <th key={h} style={{ padding: "14px 24px", fontSize: 11, fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.05em" }}>{h}</th>
+              {["BATCH ID", "PRODUCT", "STATUS", "TRUST SCORE", "DESTINATION", "WEIGHT", "CREATED"].map(h => (
+                <th key={h} style={{ padding: "14px 20px", fontSize: 10, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.08em" }}>{h}</th>
               ))}
-              <th></th>
+              <th style={{ padding: "14px 12px" }}></th>
             </tr>
           </thead>
           <tbody>
-            {batches.map((b, i) => (
-              <tr key={i} style={{ borderBottom: "1px solid var(--border-primary)", cursor: "pointer", transition: "background 0.2s" }}
-                  onMouseEnter={e => e.currentTarget.style.background="var(--bg-input)"}
-                  onMouseLeave={e => e.currentTarget.style.background="transparent"}>
-                <td style={{ padding: "18px 24px", fontSize: 13, fontWeight: 500 }}>{b.id}</td>
-                <td style={{ padding: "18px 24px", fontSize: 13, color: "var(--text-secondary)" }}>{b.product}</td>
-                <td style={{ padding: "18px 24px" }}>
-                  <span style={{ border: `1px solid ${b.status==="Certified"?ACCENT.greenBorder:"var(--border-primary)"}`, color: b.status==="Certified"?ACCENT.green:"var(--text-secondary)", padding: "4px 12px", borderRadius: 20, fontSize: 11, background: b.status==="Certified"?ACCENT.greenBg:"transparent", fontWeight: 600 }}>
-                    {b.status}
-                  </span>
-                </td>
-                <td style={{ padding: "18px 24px", fontSize: 13, color: ACCENT.green, fontWeight: 600 }}>{b.trust ? `🛡️ ${b.trust}` : "—"}</td>
-                <td style={{ padding: "18px 24px", fontSize: 13, color: "var(--text-secondary)" }}>{b.dvs || "—"}</td>
-                <td style={{ padding: "18px 24px", fontSize: 13, color: "var(--text-secondary)" }}>{b.dest}</td>
-                <td style={{ padding: "18px 24px", fontSize: 13, color: "var(--text-secondary)" }}>{b.weight} kg</td>
-                <td style={{ padding: "18px 24px", color: "var(--text-muted)", fontSize: 16 }}>›</td>
-              </tr>
-            ))}
+            {isLoading
+              ? Array.from({ length: 6 }).map((_, i) => (
+                  <tr key={i} style={{ borderBottom: "1px solid var(--border-primary)" }}>
+                    {Array.from({ length: 8 }).map((__, j) => (
+                      <td key={j} style={{ padding: "16px 20px" }}>
+                        <div style={{ height: 12, background: "var(--bg-input)", borderRadius: 6, width: j === 0 ? "80%" : "60%", animation: "pulse 1.5s ease infinite" }} />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              : filtered.length === 0
+              ? (
+                <tr><td colSpan={8} style={{ padding: "40px 24px", textAlign: "center", color: "var(--text-dim)", fontSize: 14 }}>
+                  {search ? `No batches match "${search}"` : `No ${activeTab !== "All" ? activeTab.toLowerCase() : ""} batches found.`}
+                </td></tr>
+              )
+              : filtered.map((b, i) => {
+                  const ss = getStatusStyle(b.status);
+                  const elapsed = b.created_at ? Math.round((Date.now() - new Date(b.created_at).getTime()) / 60000) : 0;
+                  const timeAgo = elapsed < 60 ? `${elapsed}m ago` : elapsed < 1440 ? `${Math.round(elapsed / 60)}h ago` : `${Math.round(elapsed / 1440)}d ago`;
+                  return (
+                    <tr key={b.id || i}
+                      onClick={() => setSelected(b)}
+                      style={{ borderBottom: "1px solid var(--border-primary)", cursor: "pointer", transition: "background 0.2s" }}
+                      onMouseEnter={e => e.currentTarget.style.background = "var(--bg-input)"}
+                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                      <td style={{ padding: "16px 20px", fontSize: 13, fontWeight: 600, fontFamily: "'JetBrains Mono', monospace", color: ACCENT.green }}>{b.id || b.batch_number}</td>
+                      <td style={{ padding: "16px 20px", fontSize: 13 }}>{b.product_name || b.product || "—"}</td>
+                      <td style={{ padding: "16px 20px" }}>
+                        <span style={{ border: `1px solid ${ss.border}`, color: ss.color, padding: "4px 10px", borderRadius: 20, fontSize: 10, background: ss.bg, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                          {b.status || "—"}
+                        </span>
+                      </td>
+                      <td style={{ padding: "16px 20px", fontSize: 13, color: b.trust_score >= 75 ? ACCENT.green : b.trust_score >= 55 ? ACCENT.amber : ACCENT.red, fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>
+                        {b.trust_score != null ? `🛡️ ${b.trust_score}` : "—"}
+                      </td>
+                      <td style={{ padding: "16px 20px", fontSize: 13, color: "var(--text-secondary)" }}>{b.destination_zone || b.dest || "—"}</td>
+                      <td style={{ padding: "16px 20px", fontSize: 13, color: "var(--text-secondary)" }}>{b.weight_kg != null ? `${b.weight_kg} kg` : b.weight ? `${b.weight} kg` : "—"}</td>
+                      <td style={{ padding: "16px 20px", fontSize: 12, color: "var(--text-dim)" }}>{timeAgo}</td>
+                      <td style={{ padding: "16px 12px", color: ACCENT.green, fontSize: 16 }}>›</td>
+                    </tr>
+                  );
+                })
+            }
           </tbody>
         </table>
+        {!isLoading && filtered.length > 0 && (
+          <div style={{ padding: "14px 20px", borderTop: "1px solid var(--border-primary)", fontSize: 12, color: "var(--text-dim)", display: "flex", justifyContent: "space-between" }}>
+            <span>Showing {filtered.length} of {batches.length} batches</span>
+            <span style={{ color: ACCENT.green }}>Click a row to view details →</span>
+          </div>
+        )}
       </Card>
+
+      {/* ── BATCH DETAIL DRAWER ── */}
+      {selectedBatch && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 200,
+          display: "flex", justifyContent: "flex-end"
+        }}>
+          <div onClick={() => setSelected(null)} style={{ flex: 1, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }} />
+          <div style={{
+            width: 420, height: "100vh", overflowY: "auto",
+            background: "var(--bg-card)", borderLeft: "1px solid var(--border-primary)",
+            padding: 32, animation: "fadeSlideIn 0.3s ease",
+            display: "flex", flexDirection: "column", gap: 20
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>Batch Details</div>
+              <button onClick={() => setSelected(null)} style={{
+                background: "var(--bg-input)", border: "1px solid var(--border-primary)",
+                borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: "var(--text-secondary)", fontSize: 13
+              }}>✕ Close</button>
+            </div>
+
+            <div style={{ background: "var(--bg-input)", borderRadius: 12, padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: ACCENT.green }}>
+                {selectedBatch.id || selectedBatch.batch_number}
+              </div>
+              {(() => {
+                const ss = getStatusStyle(selectedBatch.status);
+                return <span style={{ border: `1px solid ${ss.border}`, color: ss.color, padding: "4px 12px", borderRadius: 20, fontSize: 11, background: ss.bg, fontWeight: 700, textTransform: "uppercase", width: "max-content" }}>{selectedBatch.status}</span>;
+              })()}
+            </div>
+
+            {[
+              { label: "Product", value: selectedBatch.product_name || selectedBatch.product || "—" },
+              { label: "Destination Zone", value: selectedBatch.destination_zone || selectedBatch.dest || "—" },
+              { label: "Weight", value: selectedBatch.weight_kg ? `${selectedBatch.weight_kg} kg` : selectedBatch.weight ? `${selectedBatch.weight} kg` : "—" },
+              { label: "Processor ID", value: selectedBatch.processor_id || "#07 (anonymized)" },
+              { label: "Created At", value: selectedBatch.created_at ? new Date(selectedBatch.created_at).toLocaleString() : "—" },
+            ].map(({ label, value }) => (
+              <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderBottom: "1px solid var(--border-primary)", fontSize: 14 }}>
+                <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>{label}</span>
+                <span style={{ color: "var(--text-primary)", fontWeight: 600, textAlign: "right", maxWidth: "60%" }}>{value}</span>
+              </div>
+            ))}
+
+            <div style={{ background: "var(--bg-input)", borderRadius: 12, padding: 20 }}>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>Trust Score</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <div style={{
+                  fontSize: 38, fontWeight: 800, fontFamily: "'JetBrains Mono', monospace",
+                  color: selectedBatch.trust_score >= 75 ? ACCENT.green : selectedBatch.trust_score >= 55 ? ACCENT.amber : ACCENT.red
+                }}>{selectedBatch.trust_score ?? "—"}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ height: 8, background: "var(--bg-card)", borderRadius: 4, overflow: "hidden" }}>
+                    <div style={{
+                      height: "100%", borderRadius: 4, transition: "width 0.8s ease",
+                      width: `${selectedBatch.trust_score ?? 0}%`,
+                      background: selectedBatch.trust_score >= 75 ? ACCENT.green : selectedBatch.trust_score >= 55 ? ACCENT.amber : ACCENT.red
+                    }} />
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 6 }}>BARI Compliance Threshold: 60+</div>
+                </div>
+              </div>
+            </div>
+
+            {selectedBatch.status === "certified" && (
+              <div style={{ background: ACCENT.greenBg, border: `1px solid ${ACCENT.greenBorder}`, borderRadius: 12, padding: 16, fontSize: 13, color: ACCENT.green, fontWeight: 600 }}>
+                ✓ Batch is certified. Dispatch is permitted within TST window.
+              </div>
+            )}
+            {selectedBatch.status === "pending" && (
+              <div style={{ background: ACCENT.amberBg, border: `1px solid ${ACCENT.amberBorder}`, borderRadius: 12, padding: 16, fontSize: 13, color: ACCENT.amber, fontWeight: 600 }}>
+                ⏳ Batch is awaiting IoT sensor verification before certification.
+              </div>
+            )}
+
+            {/* DELETE BATCH BUTTON */}
+            <div style={{ marginTop: "auto", paddingTop: 20 }}>
+              <button
+                onClick={async () => {
+                  if (confirm(`Are you sure you want to delete batch ${selectedBatch.id || selectedBatch.batch_number}? This action cannot be undone.`)) {
+                    try {
+                      const res = await fetch(`${BACKEND_URL}/api/batches/${selectedBatch.id || selectedBatch.batch_number}`, {
+                        method: "DELETE"
+                      });
+                      const result = await res.json();
+                      if (result.success) {
+                        setBatches(prev => prev.filter(b => b.id !== selectedBatch.id && b.batch_number !== selectedBatch.id));
+                        if (window.__SEED_BATCHES__) {
+                          window.__SEED_BATCHES__ = window.__SEED_BATCHES__.filter(b => b.id !== selectedBatch.id && b.batch_number !== selectedBatch.id);
+                        }
+                        setSelected(null);
+                      } else {
+                        alert(result.error || "Failed to delete batch");
+                      }
+                    } catch (err) {
+                      console.error("Failed to delete batch:", err);
+                      alert("Network error. Unable to contact the backend server.");
+                    }
+                  }
+                }}
+                style={{
+                  width: "100%", padding: "12px", borderRadius: 10,
+                  border: `1px solid ${ACCENT.redBorder}`,
+                  background: "rgba(239, 68, 68, 0.08)",
+                  color: ACCENT.red,
+                  cursor: "pointer",
+                  fontSize: 13, fontWeight: 600,
+                  transition: "all 0.3s ease",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = "rgba(239, 68, 68, 0.16)";
+                  e.currentTarget.style.borderColor = ACCENT.red;
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = "rgba(239, 68, 68, 0.08)";
+                  e.currentTarget.style.borderColor = ACCENT.redBorder;
+                }}
+              >
+                🗑️ Delete Batch Registry
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function RegisterBatch({ onCancel }) {
+  const [productName, setProductName] = useState("");
+  const [productType, setProductType] = useState("Bio-Slurry");
+  const [weight, setWeight] = useState("100");
+  const [packagingType, setPackagingType] = useState("Standard");
+  const [destinationZone, setDestinationZone] = useState("Old Dhaka");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const handleSubmit = async () => {
+    if (!productName.trim()) {
+      setErrorMsg("Product Name is required");
+      return;
+    }
+    if (destinationZone === "Select zone" || !destinationZone) {
+      setErrorMsg("Please select a valid Destination Zone");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMsg("");
+
+    // Build a local batch object so we can always add it to the registry
+    const localBatch = {
+      id: `BCH-${Date.now().toString().slice(-6)}`,
+      batch_number: `BCH-${Date.now().toString().slice(-6)}`,
+      product_name: productName,
+      feedstock_type: productType,   // map productType → feedstock_type
+      status: "pending",
+      trust_score: 0,
+      destination_zone: destinationZone,
+      weight_kg: parseFloat(weight) || 0,
+      packaging_type: packagingType,
+      created_at: new Date().toISOString(),
+    };
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/batches`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          batch_number:    localBatch.id,
+          feedstock_type:  productType,   // ← required by backend schema
+          product_name:    productName,
+          trust_score:     0,             // ← required by backend schema (default 0 until IoT verified)
+          processor_id:    null,
+          // extra fields stored but not schema-validated:
+          destination_zone: destinationZone,
+          weight_kg:        localBatch.weight_kg,
+          packaging_type:   packagingType,
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data) {
+          localBatch.id = result.data.id || result.data.batch_number || localBatch.id;
+          localBatch.trust_score = result.data.trust_score ?? 0;
+          localBatch.status = result.data.status || "pending";
+          localBatch.created_at = result.data.created_at || localBatch.created_at;
+        }
+      }
+      // Always add to local seed (whether backend succeeded or not)
+      if (window.__SEED_BATCHES__) {
+        window.__SEED_BATCHES__.unshift(localBatch);
+      }
+      onCancel();
+    } catch (error) {
+      console.warn("Backend unreachable — saving batch locally only:", error);
+      // Offline fallback: still add to registry so user sees their batch
+      if (window.__SEED_BATCHES__) {
+        window.__SEED_BATCHES__.unshift(localBatch);
+      }
+      onCancel();
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div style={{ animation: "fadeSlideIn 0.3s ease" }}>
       <button onClick={onCancel} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: 14, marginBottom: 24, display: "flex", gap: 8, alignItems: "center", padding: 0 }}>
@@ -1707,27 +2370,65 @@ function RegisterBatch({ onCancel }) {
       
       <Card style={{ maxWidth: 700 }} hover={false}>
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          {errorMsg && (
+            <div style={{ background: "rgba(239, 68, 68, 0.1)", border: `1px solid ${ACCENT.redBorder || "#ef4444"}`, padding: "12px 16px", borderRadius: 8, color: ACCENT.red, fontSize: 13, fontWeight: 500 }}>
+              ⚠️ {errorMsg}
+            </div>
+          )}
+
           <div>
             <label style={{ display: "block", fontSize: 13, marginBottom: 8, fontWeight: 500, color: "var(--text-primary)" }}>Product Name</label>
-            <input type="text" placeholder="e.g. Premium Bio-Slurry Concentrate" style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }} />
+            <input 
+              type="text" 
+              placeholder="e.g. Premium Bio-Slurry Concentrate" 
+              value={productName}
+              onChange={e => setProductName(e.target.value)}
+              style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }} 
+            />
           </div>
+          
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
             <div>
               <label style={{ display: "block", fontSize: 13, marginBottom: 8, fontWeight: 500, color: "var(--text-primary)" }}>Product Type</label>
-              <select style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}>
+              <select 
+                value={productType}
+                onChange={e => setProductType(e.target.value)}
+                style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}
+              >
                 <option>Bio-Slurry</option>
                 <option>Biochar</option>
+                <option>EM-1 Bio-Culture</option>
+                <option>Organic Compost</option>
+                <option>Liquid Fertiliser</option>
+                <option>Thermal-Safe Vaccine Batch</option>
+                <option>Fresh Dairy Mix</option>
+                <option>Cold-Chain Fish Paste</option>
+                <option>Poultry Probiotic Mix</option>
+                <option>{"Medicines & Pharmaceuticals"}</option>
+                <option>{"Cosmetics & Skincare"}</option>
+                <option>{"Chemical & Temperature Reagents"}</option>
+                <option>Others</option>
               </select>
             </div>
             <div>
               <label style={{ display: "block", fontSize: 13, marginBottom: 8, fontWeight: 500, color: "var(--text-primary)" }}>Weight (kg)</label>
-              <input type="number" defaultValue="100" style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }} />
+              <input 
+                type="number" 
+                value={weight}
+                onChange={e => setWeight(e.target.value)}
+                style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }} 
+              />
             </div>
           </div>
+          
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
             <div>
               <label style={{ display: "block", fontSize: 13, marginBottom: 8, fontWeight: 500, color: "var(--text-primary)" }}>Packaging Type</label>
-              <select style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}>
+              <select 
+                value={packagingType}
+                onChange={e => setPackagingType(e.target.value)}
+                style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}
+              >
                 <option>Standard</option>
                 <option>Insulated</option>
                 <option>Thermal Bin</option>
@@ -1735,7 +2436,11 @@ function RegisterBatch({ onCancel }) {
             </div>
             <div>
               <label style={{ display: "block", fontSize: 13, marginBottom: 8, fontWeight: 500, color: "var(--text-primary)" }}>Destination Zone</label>
-              <select style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}>
+              <select 
+                value={destinationZone}
+                onChange={e => setDestinationZone(e.target.value)}
+                style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}
+              >
                 <option>Select zone</option>
                 {Object.keys(UHI_ZONES).map(z => <option key={z}>{z}</option>)}
               </select>
@@ -1749,7 +2454,13 @@ function RegisterBatch({ onCancel }) {
 
           <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 8 }}>
             <button onClick={onCancel} style={{ padding: "12px 24px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", cursor: "pointer", fontWeight: 500, fontSize: 14 }}>Cancel</button>
-            <button onClick={onCancel} style={{ padding: "12px 24px", borderRadius: 8, border: "none", background: ACCENT.greenDark, color: "#fff", cursor: "pointer", fontWeight: 500, fontSize: 14 }}>Create Batch</button>
+            <button 
+              onClick={handleSubmit} 
+              disabled={isSubmitting}
+              style={{ padding: "12px 24px", borderRadius: 8, border: "none", background: ACCENT.greenDark, color: "#fff", cursor: isSubmitting ? "wait" : "pointer", fontWeight: 500, fontSize: 14 }}
+            >
+              {isSubmitting ? "Registering..." : "Create Batch"}
+            </button>
           </div>
         </div>
       </Card>
@@ -1769,17 +2480,53 @@ const MOCK_PRODUCTS = [
 ];
 
 
-function ChatbotView() {
+const IS_LOCAL_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const BACKEND_URL = IS_LOCAL_DEV ? 'http://localhost:5001' : 'https://backsme.onrender.com';
+
+function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerificationDispatchZone }) {
   const [messages, setMessages] = useState([
-    { role: "system", content: "Hello! I am EcoSortha AI, your voice and text-based assistant. I can provide microclimate forecasts, smart dispatch suggestions, or analyze files and context. How can I help you today?", time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }
+    { role: "system", content: "Hello! I am CLimaLogix AI, your voice and text-based assistant. I can provide microclimate forecasts, smart dispatch suggestions, or analyze files and context. How can I help you today?", time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }
   ]);
   const [input, setInput] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [speechLang, setSpeechLang] = useState("en-US");
   const [speechSupported, setSpeechSupported] = useState(true);
+  const [voiceError, setVoiceError] = useState(null);
+  const [hasAttemptedVoice, setHasAttemptedVoice] = useState(false);
+  const [orderContext, setOrderContext] = useState(null);
+  // ── Session memory: persists across all messages in this tab ──
+  const [chatSessionId, setChatSessionId] = useState(null);
   const fileInputRef = useRef(null);
 
+  // Initialize a backend session when the chatbot page mounts
   useEffect(() => {
+    const initChatSession = async () => {
+      try {
+        const userStr = localStorage.getItem("user") || localStorage.getItem("farmer");
+        const user = userStr ? JSON.parse(userStr) : null;
+        const res = await fetch(`${BACKEND_URL}/api/ai/chat/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ farmerId: user ? user.id : undefined })
+        });
+        const data = await res.json();
+        if (data.success && data.data && data.data.sessionId) {
+          setChatSessionId(data.data.sessionId);
+          console.log("[ChatbotView] Session started:", data.data.sessionId);
+        }
+      } catch (e) {
+        console.warn("[ChatbotView] Could not init session — context memory disabled.", e);
+      }
+    };
+    initChatSession();
+  }, []);
+
+  useEffect(() => {
+    const locale = (navigator.languages && navigator.languages[0]) || navigator.language || "en-US";
+    if (locale.toLowerCase().startsWith("bn")) {
+      setSpeechLang("bn-BD");
+    }
+
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       setSpeechSupported(false);
     } else {
@@ -1791,6 +2538,8 @@ function ChatbotView() {
             const data = await res.json();
             if (data.countryCode === "BD") {
               setSpeechLang("bn-BD");
+            } else if (!locale.toLowerCase().startsWith("bn")) {
+              setSpeechLang("en-US");
             }
           } catch (e) {
             console.error("Failed to detect language from location", e);
@@ -1801,11 +2550,10 @@ function ChatbotView() {
     }
   }, []);
 
-  const IS_LOCAL_DEV_DASH = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
-  const BACKEND_URL_DASH = IS_LOCAL_DEV_DASH ? 'http://localhost:5001' : 'https://ecosortha.onrender.com';
-
   const handleSend = async (text, attachedFileName = null) => {
     if (!text.trim() && !attachedFileName) return;
+    setVoiceError(null);
+    setHasAttemptedVoice(false);
     const newMsg = { 
       role: "user", 
       content: text, 
@@ -1815,44 +2563,146 @@ function ChatbotView() {
     setMessages(prev => [...prev, newMsg]);
     setInput("");
     
+    // Check for conversational order confirmation
+    const normalizedText = text.toLowerCase().trim();
+    const isYes = normalizedText === "yes" || normalizedText === "confirm" || normalizedText.includes("অর্ডার করো") || normalizedText.includes("confirm") || normalizedText.includes("করো") || normalizedText.includes("হাঁ") || normalizedText === "ha" || normalizedText === "ok" || normalizedText === "হ্যাঁ";
+    
+    if (orderContext && isYes) {
+      try {
+        const userStr = localStorage.getItem("user") || localStorage.getItem("farmer");
+        const user = userStr ? JSON.parse(userStr) : null;
+        
+        const voiceRes = await fetch(`${BACKEND_URL}/api/orders/voice`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            productName: orderContext.productName,
+            quantity: orderContext.quantity,
+            farmerId: user ? user.id : undefined,
+            customProducts: products.filter(p => p.isCustom)
+          })
+        });
+        const voiceData = await voiceRes.json();
+        if (voiceData.success && voiceData.data) {
+          setMessages(prev => [...prev, {
+            role: "system",
+            content: voiceData.data.message,
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+          }]);
+          setOrderContext(null);
+          setTimeout(() => {
+            setTab(1); // Navigates to Batches tab (Batch Registry)
+          }, 1500);
+          return;
+        }
+      } catch (err) {
+        console.error("Conversational order failed:", err);
+      }
+    }
+
+    // Call the actual backend agent endpoint!
     try {
-      const res = await fetch(`${BACKEND_URL_DASH}/api/agent/message`, {
+      const userStr = localStorage.getItem("user") || localStorage.getItem("farmer");
+      const user = userStr ? JSON.parse(userStr) : null;
+
+      // Always send the current sessionId so the backend maintains conversation history
+      const currentSessionId = chatSessionId || undefined;
+      
+      const res = await fetch(`${BACKEND_URL}/api/agent/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: text,
           language: speechLang.startsWith("bn") ? "bn" : "en",
+          sessionId: currentSessionId,
+          farmerId: user ? user.id : undefined,
+          customProducts: products.filter(p => p.isCustom)
         })
       });
       const data = await res.json();
       if (data.success && data.data) {
+        const agentResponse = data.data;
+        
+        // Capture (or update) the session ID returned by the backend
+        if (agentResponse.sessionId && agentResponse.sessionId !== chatSessionId) {
+          setChatSessionId(agentResponse.sessionId);
+        }
+
         setMessages(prev => [...prev, {
           role: "system",
-          content: data.data.message,
+          content: agentResponse.message,
           time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
         }]);
+
+        // Handle navigation routing
+        if (agentResponse.type === "NAVIGATION" && agentResponse.navigationTarget) {
+          if (agentResponse.navigationTarget.toLowerCase() === 'batch_verification' && agentResponse.verifiedBatchId) {
+            setVerificationBatchId(agentResponse.verifiedBatchId);
+            if (agentResponse.verifiedDispatchZone) {
+              setVerificationDispatchZone(agentResponse.verifiedDispatchZone);
+            }
+          }
+          const pageRoutes = {
+            'dashboard': 0,
+            'orders': 1,
+            'marketplace': 6,
+            'batches': 1,
+            'batch_verification': 2,
+            'microclimate': 3,
+            'climate_demand': 4,
+            'impact_esg': 5,
+            'chatbot': 7,
+          };
+          const targetIndex = pageRoutes[agentResponse.navigationTarget.toLowerCase()];
+          if (targetIndex !== undefined) {
+            setTimeout(() => {
+              setTab(targetIndex);
+            }, 1500);
+          }
+        }
+
+        // Handle order context extraction
+        if (agentResponse.type === "ORDER_CONFIRM_PROMPT" && agentResponse.pendingOrder) {
+          const { productName, quantity } = agentResponse.pendingOrder;
+          if (productName) {
+            setOrderContext({ productName, quantity: quantity || 1 });
+          }
+        }
       } else {
         throw new Error(data.error || "Failed");
       }
     } catch (err) {
       console.error("Backend agent call failed:", err);
-      const isBn = speechLang.startsWith("bn");
-      const errorMsg = isBn
+      const isbn = speechLang.startsWith("bn");
+      const errorMsg = isbn
         ? "⚠️ দুঃখিত, সার্ভারের সাথে সংযোগ স্থাপন করা যাচ্ছে না। অনুগ্রহ করে একটু পরে আবার চেষ্টা করুন।"
         : "⚠️ Sorry, unable to reach the server. Please try again in a moment.";
-      setMessages(prev => [...prev, { role: "system", content: errorMsg, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }]);
+      setMessages(prev => [...prev, {
+        role: "system",
+        content: errorMsg,
+        time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+      }]);
     }
   };
 
-
   const handleVoice = () => {
     if (isRecording) return;
+    setVoiceError(null);
+    setHasAttemptedVoice(true);
+
     if (navigator.mediaDevices?.getUserMedia) {
       navigator.mediaDevices.getUserMedia({ audio: true })
         .then(stream => stream.getTracks().forEach(track => track.stop()))
         .catch(() => {});
     }
-    startSpeechRecognition(speechLang);
+
+    try {
+      startSpeechRecognition(speechLang);
+    } catch (error) {
+      console.error("Speech recognition start error", error);
+      setVoiceError("Microphone access is blocked. Check Safari site permissions for this page.");
+      setIsRecording(false);
+    }
   };
 
   const startSpeechRecognition = (lang) => {
@@ -1862,7 +2712,12 @@ function ChatbotView() {
       return;
     }
     const recognition = new SpeechRecognition();
-    recognition.lang = lang;
+    
+    // Fallback chain for lang attribute
+    const langCode = speechLang.startsWith('bn') ? 'bn-BD' : 
+                     speechLang.startsWith('en') ? 'en-US' : 'bn-BD';
+    recognition.lang = langCode;
+    recognition.continuous = false;
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
@@ -1871,7 +2726,19 @@ function ChatbotView() {
     };
 
     recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
+      const alternative = event.results[0][0];
+      const transcript = alternative.transcript;
+      const confidence = alternative.confidence ?? 1.0;
+
+      // If confidence is high, check for language override
+      if (confidence >= 0.8) {
+        if (/[\u0980-\u09FF]/.test(transcript)) {
+          setSpeechLang("bn-BD");
+        } else if (/[a-zA-Z]/.test(transcript)) {
+          setSpeechLang("en-US");
+        }
+      }
+
       setInput(transcript);
       handleSend(transcript);
     };
@@ -1879,6 +2746,21 @@ function ChatbotView() {
     recognition.onerror = (event) => {
       console.error("Speech recognition error", event.error);
       setIsRecording(false);
+      
+      if (event.error === 'network') {
+        setVoiceError('ইন্টারনেট সংযোগ সমস্যা। টেক্সট টাইপ করুন।');
+        // Autofocus the text input so the user can immediately type instead
+        const textInput = document.querySelector('input[placeholder="Type your message..."]');
+        if (textInput) {
+          textInput.focus();
+        }
+      } else if (event.error === 'not-allowed') {
+        setVoiceError('মাইক্রোফোন অনুমতি দিন।');
+      } else if (event.error === 'no-speech') {
+        setVoiceError('কোনো কথা শোনা যায়নি। আবার চেষ্টা করুন।');
+      } else {
+        setVoiceError('ভয়েস ইনপুট ব্যর্থ হয়েছে। টেক্সট ব্যবহার করুন।');
+      }
     };
 
     recognition.onend = () => {
@@ -1899,7 +2781,7 @@ function ChatbotView() {
 
   return (
     <div style={{ animation: "fadeSlideIn 0.3s ease", height: "calc(100vh - 200px)", display: "flex", flexDirection: "column" }}>
-      <PageHeader title="EcoSortha AI Assistant" subtitle="Voice, Text & Context-Aware Microclimate Chatbot" />
+      <PageHeader title="CLimaLogix AI Assistant" subtitle="Voice, Text & Context-Aware Microclimate Chatbot" />
       
       <Card hover={false} style={{ flex: 1, display: "flex", flexDirection: "column", padding: 0, overflow: "hidden" }}>
         
@@ -1928,7 +2810,7 @@ function ChatbotView() {
                 {m.content}
               </div>
               <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 6, padding: "0 4px" }}>
-                {m.role === "user" ? "You" : "EcoSortha AI"} • {m.time}
+                {m.role === "user" ? "You" : "CLimaLogix AI"} • {m.time}
               </div>
             </div>
           ))}
@@ -1943,16 +2825,25 @@ function ChatbotView() {
               Microphone not supported in this browser.
             </div>
           )}
+          {voiceError && hasAttemptedVoice && (
+            <div style={{ padding: "12px 18px", fontSize: 12, color: ACCENT.red, background: "var(--bg-input)", borderRadius: "18px 18px 18px 0", width: "fit-content", border: `1px solid ${ACCENT.redBorder}` }}>
+              {voiceError}
+            </div>
+          )}
         </div>
 
         {/* Quick Actions */}
         <div style={{ padding: "12px 24px", display: "flex", gap: 12, borderTop: "1px solid var(--border-primary)", background: "var(--bg-input)" }}>
-          {["Climate Forecast", "Dispatch Suggestions", "Submit Feedback"].map(action => (
-            <button key={action} onClick={() => handleSend(`Show me ${action.toLowerCase()}`)} style={{
+          {[
+            { label: '🌤️ আবহাওয়া দেখুন', message: 'আজকের আবহাওয়া কেমন?' },
+            { label: '🛒 Marketplace', message: 'marketplace দেখাও' },
+            { label: '📦 আমার অর্ডার', message: 'আমার orders দেখাও' }
+          ].map(action => (
+            <button key={action.label} onClick={() => handleSend(action.message)} style={{
               padding: "6px 14px", borderRadius: 20, background: "var(--bg-primary)", border: `1px solid ${ACCENT.greenBorder}`,
               color: ACCENT.green, fontSize: 12, cursor: "pointer", fontWeight: 500, transition: "background 0.2s"
             }} onMouseEnter={e => e.currentTarget.style.background=ACCENT.greenBg} onMouseLeave={e => e.currentTarget.style.background="var(--bg-primary)"}>
-              {action}
+              {action.label}
             </button>
           ))}
         </div>
@@ -1973,30 +2864,28 @@ function ChatbotView() {
               style={{ display: "none" }} 
             />
           </button>
+          <select 
+            value={speechLang} 
+            onChange={e => setSpeechLang(e.target.value)}
+            style={{
+              padding: "0 10px", borderRadius: 24, border: "1px solid var(--border-primary)",
+              background: "var(--bg-input)", color: "var(--text-secondary)", fontSize: 12, outline: "none", height: 44
+            }}
+            title="Language"
+          >
+            <option value="en-US">EN</option>
+            <option value="bn-BD">BN</option>
+          </select>
           {speechSupported && (
-            <>
-              <select 
-                value={speechLang} 
-                onChange={e => setSpeechLang(e.target.value)}
-                style={{
-                  padding: "0 10px", borderRadius: 24, border: "1px solid var(--border-primary)",
-                  background: "var(--bg-input)", color: "var(--text-secondary)", fontSize: 12, outline: "none", height: 44
-                }}
-                title="Language"
-              >
-                <option value="en-US">EN</option>
-                <option value="bn-BD">BN</option>
-              </select>
-              <button onClick={handleVoice} disabled={isRecording} style={{
-                width: 44, height: 44, borderRadius: "50%", border: "none", cursor: isRecording ? "not-allowed" : "pointer",
-                background: isRecording ? ACCENT.redBg : "var(--bg-input)",
-                color: isRecording ? ACCENT.red : "var(--text-secondary)",
-                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
-                transition: "all 0.3s ease", opacity: isRecording ? 0.8 : 1
-              }} title="Voice Input">
-                🎙️
-              </button>
-            </>
+            <button onClick={handleVoice} disabled={isRecording} style={{
+              width: 44, height: 44, borderRadius: "50%", border: "none", cursor: isRecording ? "not-allowed" : "pointer",
+              background: isRecording ? ACCENT.redBg : "var(--bg-input)",
+              color: isRecording ? ACCENT.red : "var(--text-secondary)",
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20,
+              transition: "all 0.3s ease", opacity: isRecording ? 0.8 : 1
+            }} title="Voice Input">
+              🎙️
+            </button>
           )}
           <input 
             type="text" 
@@ -2022,14 +2911,14 @@ function ChatbotView() {
   );
 }
 
-function MarketplaceView() {
+function MarketplaceView({ products = MOCK_PRODUCTS }) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [minDvs, setMinDvs] = useState(0);
 
   const categories = ["All", "Agriculture", "Pharmaceuticals", "Food & Dairy", "Food & Seafood", "Chemicals"];
 
-  const filteredProducts = MOCK_PRODUCTS.filter(p => {
+  const filteredProducts = products.filter(p => {
     if (category !== "All" && p.category !== category) return false;
     if (p.dvs < minDvs) return false;
     if (search && !p.name.toLowerCase().includes(search.toLowerCase()) && !p.seller.toLowerCase().includes(search.toLowerCase())) return false;
@@ -2117,6 +3006,1628 @@ function MarketplaceView() {
   );
 }
 
+function CustomSmeView({ products, setProducts, customSmeName, setCustomSmeName }) {
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState("Agriculture");
+  const [price, setPrice] = useState("");
+  const [unit, setUnit] = useState("Kg");
+  const [dvs, setDvs] = useState(90);
+  const [icon, setIcon] = useState("🌱");
+  const [error, setError] = useState("");
+  const [editingProduct, setEditingProduct] = useState(null);
+
+  const categories = ["Agriculture", "Pharmaceuticals", "Food & Dairy", "Food & Seafood", "Chemicals"];
+  const icons = ["🌱", "🌾", "🌿", "📦", "🥛", "🐟", "⚕️", "💉", "🧪", "🍎", "🧀", "🍯"];
+
+  const handleAddProduct = (e) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      setError("Product Name is required");
+      return;
+    }
+    if (!price.trim() || isNaN(price)) {
+      setError("Please enter a valid price (number)");
+      return;
+    }
+    setError("");
+
+    if (editingProduct) {
+      // Edit mode: update existing custom product
+      setProducts(prev => prev.map(p => p.id === editingProduct.id ? {
+        ...p,
+        name: name.trim(),
+        category,
+        price: `৳ ${Number(price).toLocaleString()}`,
+        unit,
+        dvs: Number(dvs),
+        icon
+      } : p));
+      handleCancelEdit();
+    } else {
+      // Add mode: create new custom product
+      const newProd = {
+        id: Date.now(),
+        name: name.trim(),
+        category,
+        price: `৳ ${Number(price).toLocaleString()}`,
+        unit,
+        seller: customSmeName,
+        dvs: Number(dvs),
+        icon,
+        badge: "Custom SME",
+        isCustom: true
+      };
+
+      setProducts(prev => [newProd, ...prev]);
+      setName("");
+      setPrice("");
+    }
+  };
+
+  const handleEditProduct = (prod) => {
+    setEditingProduct(prod);
+    setName(prod.name);
+    setCategory(prod.category);
+    // Extract price number from string like "৳ 120" or "৳ 1,250"
+    const priceNum = prod.price.replace(/[৳\s,]/g, "");
+    setPrice(priceNum);
+    setUnit(prod.unit);
+    setDvs(prod.dvs);
+    setIcon(prod.icon);
+    setError("");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingProduct(null);
+    setName("");
+    setCategory("Agriculture");
+    setPrice("");
+    setUnit("Kg");
+    setDvs(90);
+    setIcon("🌱");
+    setError("");
+  };
+
+  const handleDeleteProduct = (id) => {
+    setProducts(prev => prev.filter(p => p.id !== id));
+  };
+
+  const customProducts = products.filter(p => p.isCustom);
+
+  return (
+    <div style={{ animation: "fadeSlideIn 0.3s ease", display: "grid", gridTemplateColumns: "1.2fr 1.8fr", gap: 30, marginBottom: 80 }}>
+      {/* Left Column: Brand & Add Form */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+        <SectionLabel icon="🛠️" text="SME Brand Configuration" />
+        <Card hover={false} style={{ padding: "24px" }}>
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 8 }}>SME BRAND NAME</label>
+            <input 
+              type="text" 
+              value={customSmeName} 
+              onChange={e => {
+                const newName = e.target.value;
+                setCustomSmeName(newName);
+                // Real-time propagation of brand name to all custom products
+                setProducts(prev => prev.map(p => p.isCustom ? { ...p, seller: newName } : p));
+              }}
+              style={{
+                width: "100%", padding: "12px 16px", borderRadius: 8,
+                border: "1px solid var(--border-primary)", background: "var(--bg-primary)",
+                color: "var(--text-primary)", fontSize: 14, outline: "none",
+                transition: "border-color 0.2s ease"
+              }}
+              placeholder="e.g. Dhaka Eco Farms"
+            />
+            <small style={{ display: "block", marginTop: 6, color: "var(--text-dim)", fontSize: 11 }}>This name will automatically appear as the seller of your custom products.</small>
+          </div>
+        </Card>
+
+        <SectionLabel icon={editingProduct ? "✏️" : "➕"} text={editingProduct ? "Edit Custom Product" : "Register Custom Product"} />
+        <Card hover={false} style={{ padding: "24px" }}>
+          <form onSubmit={handleAddProduct} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {error && (
+              <div style={{ padding: "10px 12px", borderRadius: 6, background: ACCENT.redBg, color: ACCENT.red, fontSize: 12, border: `1px solid ${ACCENT.redBorder}` }}>
+                ⚠️ {error}
+              </div>
+            )}
+
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>PRODUCT NAME</label>
+              <input 
+                type="text" 
+                value={name} 
+                onChange={e => setName(e.target.value)}
+                style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}
+                placeholder="e.g. Super Biochar"
+              />
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>CATEGORY</label>
+                <select 
+                  value={category} 
+                  onChange={e => setCategory(e.target.value)}
+                  style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none", cursor: "pointer" }}
+                >
+                  {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>UNIT</label>
+                <select 
+                  value={unit} 
+                  onChange={e => setUnit(e.target.value)}
+                  style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none", cursor: "pointer" }}
+                >
+                  <option value="Kg">Kg</option>
+                  <option value="L">L</option>
+                  <option value="Vial">Vial</option>
+                  <option value="Box">Box</option>
+                  <option value="Pack">Pack</option>
+                  <option value="Ton">Ton</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>PRICE (৳ BDT)</label>
+                <input 
+                  type="text" 
+                  value={price} 
+                  onChange={e => setPrice(e.target.value)}
+                  style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}
+                  placeholder="e.g. 120"
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>BASE DVS SCORE</label>
+                <input 
+                  type="number" 
+                  min="0" max="100"
+                  value={dvs} 
+                  onChange={e => setDvs(Number(e.target.value))}
+                  style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 8 }}>SELECT EMOJI ICON</label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {icons.map(ico => (
+                  <button 
+                    key={ico} 
+                    type="button"
+                    onClick={() => setIcon(ico)}
+                    style={{
+                      width: 40, height: 40, borderRadius: 8, border: icon === ico ? `2px solid ${ACCENT.green}` : "1px solid var(--border-primary)",
+                      background: icon === ico ? ACCENT.greenBg : "var(--bg-primary)", fontSize: 18, cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s ease"
+                    }}
+                  >
+                    {ico}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <button 
+                type="submit"
+                style={{
+                  width: "100%", padding: "14px", borderRadius: 8, border: "none",
+                  background: `linear-gradient(135deg, ${ACCENT.greenLight}, ${ACCENT.greenDark})`,
+                  color: "#fff", cursor: "pointer", fontWeight: 600, fontSize: 14, marginTop: 8,
+                  transition: "transform 0.2s ease, opacity 0.2s ease",
+                  boxShadow: "0 4px 12px rgba(16,185,129,0.2)"
+                }}
+                onMouseEnter={e => e.currentTarget.style.transform = "translateY(-1px)"}
+                onMouseLeave={e => e.currentTarget.style.transform = "translateY(0)"}
+              >
+                {editingProduct ? "Update Product Catalog" : "Add Product to Catalog"}
+              </button>
+
+              {editingProduct && (
+                <button 
+                  type="button"
+                  onClick={handleCancelEdit}
+                  style={{
+                    width: "100%", padding: "12px", borderRadius: 8, border: "1px solid var(--border-primary)",
+                    background: "var(--bg-primary)", color: "var(--text-primary)", cursor: "pointer", fontWeight: 500, fontSize: 13,
+                    transition: "background 0.2s"
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = "var(--bg-input)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "var(--bg-primary)"}
+                >
+                  Cancel Edit
+                </button>
+              )}
+            </div>
+          </form>
+        </Card>
+      </div>
+
+      {/* Right Column: Custom Products List */}
+      <div>
+        <SectionLabel icon="📦" text="Live Custom Products Catalog" />
+        <Card hover={false} style={{ padding: "24px", minHeight: 400 }}>
+          {customProducts.length === 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-dim)", paddingTop: 80 }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>🛠️</div>
+              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: "var(--text-secondary)" }}>No Custom Products Yet</div>
+              <div style={{ fontSize: 13, textAlign: "center", maxWidth: 320, lineHeight: 1.5 }}>Configure your brand name on the left and add your first custom product. It will instantly show up here and in the Marketplace!</div>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
+              {customProducts.map(p => (
+                <div 
+                  key={p.id} 
+                  style={{
+                    display: "flex", alignItems: "center", gap: 16, padding: "16px", borderRadius: 10,
+                    border: "1px solid var(--border-primary)", background: "var(--bg-primary)",
+                    transition: "all 0.2s ease", position: "relative"
+                  }}
+                >
+                  <div style={{ fontSize: 32 }}>{p.icon}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>{p.name}</span>
+                      <span style={{ fontSize: 9, background: ACCENT.greenBg, color: ACCENT.green, padding: "2px 6px", borderRadius: 4, fontWeight: 700, border: `1px solid ${ACCENT.greenBorder}` }}>CUSTOM</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 2 }}>Category: <strong>{p.category}</strong> · Seller: <strong>{p.seller}</strong></div>
+                    <div style={{ fontSize: 13, color: ACCENT.green, fontWeight: 600, marginTop: 4 }}>{p.price} <span style={{ color: "var(--text-dim)", fontSize: 11, fontWeight: 400 }}>/ {p.unit}</span> · DVS: <span style={{ color: p.dvs >= 75 ? ACCENT.green : ACCENT.amber }}>{p.dvs}</span></div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button 
+                      onClick={() => handleEditProduct(p)}
+                      style={{
+                        padding: "8px 12px", borderRadius: 6, border: `1px solid ${ACCENT.greenBorder}`,
+                        background: "transparent", color: ACCENT.green, cursor: "pointer", fontSize: 12, fontWeight: 500,
+                        transition: "all 0.2s ease"
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = ACCENT.greenBg; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+                    >
+                      Edit
+                    </button>
+                    <button 
+                      onClick={() => {
+                        if (confirm(`Are you sure you want to delete ${p.name}?`)) {
+                          handleDeleteProduct(p.id);
+                        }
+                      }}
+                      style={{
+                        padding: "8px 12px", borderRadius: 6, border: `1px solid ${ACCENT.redBorder}`,
+                        background: "transparent", color: ACCENT.red, cursor: "pointer", fontSize: 12, fontWeight: 500,
+                        transition: "all 0.2s ease"
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = ACCENT.redBg; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerificationDispatchZone }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [messages, setMessages] = useState([
+    {
+      role: "assistant",
+      type: "TEXT",
+      content: "Hello! I am your CLimaLogix AI Agricultural Assistant. How can I help you with BARI compliance, product catalog searches, or order dispatches today?"
+    }
+  ]);
+  const [inputValue, setInputValue] = useState("");
+  const [sessionId, setSessionId] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [language, setLanguage] = useState("bn");
+  const [voiceSupported, setVoiceSupported] = useState(true);
+
+  const messagesEndRef = useRef(null);
+  const recognitionRef = useRef(null);
+
+  // Auto-scroll to bottom of chat
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
+
+  // Check Web Speech API support
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setVoiceSupported(false);
+    }
+  }, []);
+
+  // Initialize Session
+  const initSession = async () => {
+    try {
+      const userStr = localStorage.getItem("user") || localStorage.getItem("farmer");
+      const user = userStr ? JSON.parse(userStr) : null;
+      
+      const response = await fetch(`${BACKEND_URL}/api/ai/chat/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ farmerId: user ? user.id : undefined })
+      });
+      const resData = await response.json();
+      if (resData.success && resData.data) {
+        setSessionId(resData.data.sessionId);
+      }
+    } catch (err) {
+      console.warn("Failed to initialize session:", err);
+    }
+  };
+
+  // Close Session
+  const endSession = async () => {
+    if (!sessionId) return;
+    try {
+      await fetch(`${BACKEND_URL}/api/ai/chat/end`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId })
+      });
+      setSessionId("");
+    } catch (err) {
+      console.warn("Failed to end session:", err);
+    }
+  };
+
+  // Handle Toggle Panel Open/Closed
+  const togglePanel = () => {
+    if (!isOpen) {
+      initSession();
+      setIsOpen(true);
+    } else {
+      endSession();
+      setIsOpen(false);
+    }
+  };
+
+  // Send message to agent backend
+  const handleSendMessage = async (textToSend) => {
+    const text = textToSend || inputValue;
+    if (!text.trim()) return;
+
+    // Append user message locally
+    setMessages((prev) => [...prev, { role: "user", type: "TEXT", content: text }]);
+    if (!textToSend) setInputValue("");
+    setIsProcessing(true);
+
+    try {
+      const userStr = localStorage.getItem("user") || localStorage.getItem("farmer");
+      const user = userStr ? JSON.parse(userStr) : null;
+
+      const response = await fetch(`${BACKEND_URL}/api/agent/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: text,
+          language,
+          sessionId: sessionId || undefined,
+          farmerId: user ? user.id : undefined,
+          customProducts: products.filter(p => p.isCustom)
+        })
+      });
+      const resData = await response.json();
+
+      if (resData.success && resData.data) {
+        const agentData = resData.data;
+
+        // Update sessionId if the backend created or returned a new one
+        if (agentData.sessionId && agentData.sessionId !== sessionId) {
+          setSessionId(agentData.sessionId);
+        }
+
+        // Append assistant response locally
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            type: agentData.type,
+            content: agentData.message,
+            products: agentData.products,
+            pendingOrder: agentData.pendingOrder,
+            orderResult: agentData.orderResult,
+            navigationTarget: agentData.navigationTarget
+          }
+        ]);
+
+        // Handle navigation routing dynamically
+        if (agentData.type === "NAVIGATION" && agentData.navigationTarget) {
+          if (agentData.navigationTarget.toLowerCase().includes("verification") && agentData.verifiedBatchId) {
+            setVerificationBatchId(agentData.verifiedBatchId);
+            if (agentData.verifiedDispatchZone) {
+              setVerificationDispatchZone(agentData.verifiedDispatchZone);
+            }
+          }
+          setTimeout(() => {
+            const target = agentData.navigationTarget.toLowerCase();
+            if (target.includes("marketplace") || target.includes("market")) {
+              setTab(6);
+            } else if (target.includes("dashboard")) {
+              setTab(0);
+            } else if (target.includes("order")) {
+              setTab(1);
+            } else if (target.includes("verification")) {
+              setTab(2);
+            } else if (target.includes("climate") || target.includes("forecast")) {
+              setTab(3);
+            }
+          }, 1500);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to get agent response:", err);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          type: "TEXT",
+          content: language === "bn" ? "দুঃখিত, সংযোগে কিছু সমস্যা হচ্ছে।" : "Sorry, I am facing connection issues."
+        }
+      ]);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Web Speech API Recording handler
+  const handleVoiceInput = () => {
+    if (isRecording) {
+      if (recognitionRef.current) recognitionRef.current.stop();
+      setIsRecording(false);
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    recognitionRef.current = new SpeechRecognition();
+    const recognition = recognitionRef.current;
+    recognition.lang = language === "bn" ? "bn-BD" : "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setIsRecording(true);
+    };
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      handleSendMessage(transcript);
+    };
+
+    recognition.onerror = () => {
+      setIsRecording(false);
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    recognition.start();
+  };
+
+  return (
+    <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 9999, fontFamily: "inherit" }}>
+      {/* CSS keyframes block injected dynamically */}
+      <style>{`
+        @keyframes pulseGlowGreen {
+          0%, 100% { box-shadow: 0 4px 14px rgba(45, 106, 79, 0.4); }
+          50% { box-shadow: 0 4px 28px rgba(45, 106, 79, 0.8); }
+        }
+        @keyframes agentPulseRed {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.15); opacity: 0.7; }
+        }
+      `}</style>
+
+      {/* Floating Action Button */}
+      {!isOpen && (
+        <button
+          onClick={togglePanel}
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: "50%",
+            background: "#2d6a4f",
+            color: "#ffffff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            border: "none",
+            boxShadow: "0 4px 14px rgba(45, 106, 79, 0.4)",
+            animation: isProcessing ? "pulseGlowGreen 1.5s infinite" : "none",
+            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = "scale(1.08) translateY(-2px)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = "scale(1) translateY(0)";
+          }}
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 3.5 1 9.8a7 7 0 0 1-9 8.2z"></path>
+            <path d="M9 22v-4h-2a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-5l-5 4z" style={{ display: "none" }}></path>
+          </svg>
+        </button>
+      )}
+
+      {/* Chat window panel */}
+      {isOpen && (
+        <div
+          style={{
+            width: 360,
+            height: 520,
+            background: "var(--bg-secondary)",
+            border: "1px solid var(--border-primary)",
+            borderRadius: 16,
+            boxShadow: "var(--shadow-hover)",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            animation: "fadeSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+          }}
+        >
+          {/* Header */}
+          <div
+            style={{
+              padding: "14px 18px",
+              borderBottom: "1px solid var(--border-primary)",
+              background: "var(--bg-header)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#10B981" }}></div>
+              <span style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>CLimaLogix AI Agent</span>
+            </div>
+            
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {/* Language toggle pill */}
+              <button
+                onClick={() => setLanguage((l) => (l === "en" ? "bn" : "en"))}
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: 20,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  border: "1px solid var(--border-primary)",
+                  background: "var(--bg-input)",
+                  color: "#10B981",
+                  cursor: "pointer"
+                }}
+              >
+                {language === "en" ? "EN" : "বাং"}
+              </button>
+
+              <button
+                onClick={togglePanel}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--text-muted)",
+                  fontSize: 18,
+                  cursor: "pointer",
+                  lineHeight: 1
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Messages scroll section */}
+          <div style={{ flex: 1, padding: 16, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
+            {messages.map((msg, index) => {
+              const isAssistant = msg.role === "assistant";
+              return (
+                <div key={index} style={{ display: "flex", flexDirection: "column", alignItems: isAssistant ? "flex-start" : "flex-end" }}>
+                  
+                  {/* TEXT TYPE */}
+                  {msg.type === "TEXT" && (
+                    <div
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: isAssistant ? "14px 14px 14px 2px" : "14px 14px 2px 14px",
+                        background: isAssistant ? "var(--bg-input)" : "#2d6a4f",
+                        color: isAssistant ? "var(--text-primary)" : "#ffffff",
+                        fontSize: 12.5,
+                        lineHeight: 1.45,
+                        maxWidth: "85%",
+                        boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+                        border: isAssistant ? "1px solid var(--border-primary)" : "none"
+                      }}
+                    >
+                      {msg.content}
+                    </div>
+                  )}
+
+                  {/* PRODUCT LIST TYPE */}
+                  {msg.type === "PRODUCT_LIST" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "90%" }}>
+                      <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>{msg.content}</div>
+                      {msg.products && msg.products.map((prod, pIdx) => (
+                        <div
+                          key={pIdx}
+                          style={{
+                            padding: 12,
+                            borderRadius: 10,
+                            background: "var(--bg-input)",
+                            border: "1px solid var(--border-primary)",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 6
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                            <span style={{ fontWeight: 700, fontSize: 13, color: "var(--text-primary)" }}>{prod.name}</span>
+                            <span style={{ fontWeight: 700, color: "#10B981", fontSize: 13 }}>৳{prod.price_bdt}</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                            Trust Score: {prod.trust_score} · DVS: {prod.dvs}
+                          </div>
+                          <button
+                            onClick={() => handleSendMessage(`${pIdx + 1}`)}
+                            style={{
+                              marginTop: 4,
+                              padding: "6px",
+                              borderRadius: 6,
+                              background: "#2d6a4f",
+                              color: "#ffffff",
+                              border: "none",
+                              fontSize: 11,
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              textAlign: "center"
+                            }}
+                          >
+                            {language === "bn" ? "নির্বাচন করুন" : "Select Product"}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* ORDER CONFIRM PROMPT */}
+                  {msg.type === "ORDER_CONFIRM_PROMPT" && msg.pendingOrder && (
+                    <div
+                      style={{
+                        padding: 14,
+                        borderRadius: 12,
+                        background: "var(--bg-input)",
+                        border: "1px solid var(--border-primary)",
+                        width: "90%",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 10
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: 12, color: "var(--text-secondary)" }}>
+                        {language === "bn" ? "📝 পেন্ডিং অর্ডার বিবরণী" : "📝 Order Details"}
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--text-primary)", lineHeight: 1.5 }}>
+                        <div><strong>Item:</strong> {msg.pendingOrder.productName}</div>
+                        <div><strong>Qty:</strong> {msg.pendingOrder.quantity} bags</div>
+                        <div><strong>Total BDT:</strong> ৳{msg.pendingOrder.totalBdt}</div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button
+                          onClick={() => handleSendMessage("yes")}
+                          style={{
+                            flex: 1,
+                            padding: "8px",
+                            borderRadius: 6,
+                            background: "#10B981",
+                            color: "#ffffff",
+                            fontWeight: 700,
+                            border: "none",
+                            cursor: "pointer",
+                            fontSize: 11
+                          }}
+                        >
+                          Confirm ✓
+                        </button>
+                        <button
+                          onClick={() => handleSendMessage("no")}
+                          style={{
+                            flex: 1,
+                            padding: "8px",
+                            borderRadius: 6,
+                            background: "#EF4444",
+                            color: "#ffffff",
+                            fontWeight: 700,
+                            border: "none",
+                            cursor: "pointer",
+                            fontSize: 11
+                          }}
+                        >
+                          Cancel ✗
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ORDER SUCCESS TYPE */}
+                  {msg.type === "ORDER_SUCCESS" && (
+                    <div
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: "14px 14px 14px 2px",
+                        background: "rgba(16, 185, 129, 0.15)",
+                        border: "1px solid #10B981",
+                        color: "#10B981",
+                        fontSize: 12.5,
+                        maxWidth: "85%",
+                        boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
+                      }}
+                    >
+                      🎉 {msg.content}
+                    </div>
+                  )}
+
+                  {/* ORDER CANCELLED TYPE */}
+                  {msg.type === "ORDER_CANCELLED" && (
+                    <div
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: "14px 14px 14px 2px",
+                        background: "var(--bg-input)",
+                        border: "1px solid var(--border-primary)",
+                        color: "var(--text-muted)",
+                        fontSize: 12.5,
+                        maxWidth: "85%",
+                      }}
+                    >
+                      ✕ {msg.content}
+                    </div>
+                  )}
+
+                  {/* AUTH REQUIRED TYPE */}
+                  {msg.type === "AUTH_REQUIRED" && (
+                    <div
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: "14px 14px 14px 2px",
+                        background: "rgba(245, 158, 11, 0.15)",
+                        border: "1px solid #F59E0B",
+                        color: "#F59E0B",
+                        fontSize: 12.5,
+                        maxWidth: "85%",
+                      }}
+                    >
+                      ⚠️ {msg.content}
+                    </div>
+                  )}
+
+                  {/* NAVIGATION TYPE */}
+                  {msg.type === "NAVIGATION" && (
+                    <div
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: "14px 14px 14px 2px",
+                        background: "rgba(59, 130, 246, 0.15)",
+                        border: "1px solid #3B82F6",
+                        color: "#3B82F6",
+                        fontSize: 12.5,
+                        maxWidth: "85%",
+                      }}
+                    >
+                      🚀 {msg.content}
+                    </div>
+                  )}
+
+                </div>
+              );
+            })}
+            
+            {/* Thinking Indicator */}
+            {isProcessing && (
+              <div style={{ display: "flex", gap: 4, padding: 8 }}>
+                <span style={{ fontSize: 14 }}>⏳</span>
+                <span style={{ fontSize: 11, color: "var(--text-dim)" }}>CLimaLogix Agent thinking...</span>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Chat input row */}
+          <div
+            style={{
+              padding: "10px 14px",
+              borderTop: "1px solid var(--border-primary)",
+              background: "var(--bg-header)",
+              display: "flex",
+              alignItems: "center",
+              gap: 8
+            }}
+          >
+            <input
+              type="text"
+              placeholder={language === "bn" ? "মেসেজ লিখুন..." : "Type your message..."}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+              disabled={isProcessing}
+              style={{
+                flex: 1,
+                padding: "8px 12px",
+                borderRadius: 8,
+                border: "1px solid var(--border-primary)",
+                background: "var(--bg-primary)",
+                color: "var(--text-primary)",
+                fontSize: 12.5,
+                outline: "none"
+              }}
+            />
+
+            {/* Mic button */}
+            {voiceSupported && (
+              <button
+                onClick={handleVoiceInput}
+                disabled={isProcessing}
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: "50%",
+                  border: `1px solid ${isRecording ? "#EF4444" : "var(--border-primary)"}`,
+                  background: isRecording ? "rgba(239, 68, 68, 0.1)" : "var(--bg-primary)",
+                  color: isRecording ? "#EF4444" : "#10B981",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  animation: isRecording ? "agentPulseRed 1.2s infinite" : "none"
+                }}
+              >
+                🎤
+              </button>
+            )}
+
+            <button
+              onClick={() => handleSendMessage()}
+              disabled={isProcessing || !inputValue.trim()}
+              style={{
+                padding: "8px 14px",
+                borderRadius: 8,
+                background: "#2d6a4f",
+                color: "#ffffff",
+                fontWeight: 700,
+                border: "none",
+                fontSize: 12.5,
+                cursor: "pointer",
+                opacity: !inputValue.trim() ? 0.6 : 1
+              }}
+            >
+              Send
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TAB: SYSTEM DOCS & AUDIT MODULE (YC PITCH + TECH SPECS + ADMIN)
+// ═══════════════════════════════════════════════════════════════
+
+function SystemDocsView({ productsList }) {
+  const [subTab, setSubTab] = useState("pitch");
+  
+  // Settings persisted in localStorage for durability
+  const [visibilityMode, setVisibilityMode] = useState(() => localStorage.getItem("docs_visibility") || "public");
+  const [passphrase, setPassphrase] = useState(() => localStorage.getItem("docs_passphrase") || "climalogix2026");
+  const [startDate, setStartDate] = useState(() => localStorage.getItem("docs_start") || "2026-05-30T00:00");
+  const [endDate, setEndDate] = useState(() => localStorage.getItem("docs_end") || "2026-06-30T23:59");
+  const [hiddenTabs, setHiddenTabs] = useState(() => {
+    const saved = localStorage.getItem("docs_hidden_tabs");
+    return saved ? JSON.parse(saved) : [];
+  });
+  
+  const [isUnlocked, setIsUnlocked] = useState(() => localStorage.getItem("docs_unlocked") === "true");
+  const [passInput, setPassInput] = useState("");
+  const [passError, setPassError] = useState("");
+  const [successAnim, setSuccessAnim] = useState(false);
+  
+  const [bypassInput, setBypassInput] = useState("");
+  const [bypassError, setBypassError] = useState("");
+  const [isBypassed, setIsBypassed] = useState(false);
+
+  // Dynamic editable team roster
+  const [team, setTeam] = useState(() => {
+    const saved = localStorage.getItem("docs_team");
+    if (saved) return JSON.parse(saved);
+    return [
+      { name: "Punam", role: "Lead AI Architect & Full-Stack Developer", email: "punam@climalogix.ai", avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&h=120&q=80" },
+      { name: "Sarah Chowdhury", role: "Operations & Logistics Director", email: "sarah@climalogix.ai", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&h=120&q=80" },
+      { name: "Dr. Ahmed", role: "Agronomy Compliance Advisory Lead (BARI Consultant)", email: "ahmed@climalogix.ai", avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=120&h=120&q=80" }
+    ];
+  });
+
+  // Team editor states
+  const [newMemberName, setNewMemberName] = useState("");
+  const [newMemberRole, setNewMemberRole] = useState("");
+  const [newMemberEmail, setNewMemberEmail] = useState("");
+  const [newMemberAvatar, setNewMemberAvatar] = useState("");
+
+  // Sync to localStorage
+  useEffect(() => { localStorage.setItem("docs_visibility", visibilityMode); }, [visibilityMode]);
+  useEffect(() => { localStorage.setItem("docs_passphrase", passphrase); }, [passphrase]);
+  useEffect(() => { localStorage.setItem("docs_start", startDate); }, [startDate]);
+  useEffect(() => { localStorage.setItem("docs_end", endDate); }, [endDate]);
+  useEffect(() => { localStorage.setItem("docs_hidden_tabs", JSON.stringify(hiddenTabs)); }, [hiddenTabs]);
+  useEffect(() => { localStorage.setItem("docs_team", JSON.stringify(team)); }, [team]);
+
+  // Dynamic Telemetry calculation from live memory state
+  const batches = window.__SEED_BATCHES__ || [];
+  const totalBatches = batches.length;
+  
+  const avgTrustScore = totalBatches > 0 
+    ? Math.round(batches.reduce((acc, b) => acc + (b.trust_score || 0), 0) / totalBatches) 
+    : 0;
+
+  const activeCertified = batches.filter(b => b.status === "certified" || b.status === "delivered").length;
+  
+  const highRiskZonesList = ["Old Dhaka", "Jatrabari", "Tejgaon", "Hazaribagh", "Kamrangirchar", "Chowkbazar", "Moghbazar", "New Market"];
+  const highRiskCount = batches.filter(b => highRiskZonesList.includes(b.destination_zone)).length;
+  
+  const avgDvs = totalBatches > 0
+    ? Math.round(batches.reduce((acc, b) => {
+        const uhi = UHI_ZONES[b.destination_zone]?.offset || 2.0;
+        const adjustedTemp = 31 + uhi;
+        const risk = Math.max(0, Math.min(1, (adjustedTemp - 25) / 15));
+        const multiplier = UHI_ZONES[b.destination_zone]?.hazardMultiplier || 1.3;
+        const dvsVal = Math.max(0, Math.min(100, Math.round((b.trust_score || 75) * (1 - risk * multiplier))));
+        return acc + dvsVal;
+      }, 0) / totalBatches)
+    : 0;
+
+  const handleUnlock = () => {
+    if (passInput === passphrase) {
+      setSuccessAnim(true);
+      setTimeout(() => {
+        setIsUnlocked(true);
+        localStorage.setItem("docs_unlocked", "true");
+        setSuccessAnim(false);
+      }, 800);
+    } else {
+      setPassError("Incorrect passphrase. Please try again.");
+      setTimeout(() => setPassError(""), 3000);
+    }
+  };
+
+  const handleBypass = () => {
+    if (bypassInput === passphrase) {
+      setIsBypassed(true);
+    } else {
+      setBypassError("Incorrect passphrase.");
+      setTimeout(() => setBypassError(""), 3000);
+    }
+  };
+
+  const handleAddMember = () => {
+    if (!newMemberName.trim() || !newMemberRole.trim()) return;
+    const defaultAvatars = [
+      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&h=120&q=80",
+      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&h=120&q=80",
+      "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=120&h=120&q=80",
+      "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=120&h=120&q=80"
+    ];
+    const avatarUrl = newMemberAvatar.trim() || defaultAvatars[team.length % defaultAvatars.length];
+    
+    setTeam([...team, {
+      name: newMemberName,
+      role: newMemberRole,
+      email: newMemberEmail || `${newMemberName.toLowerCase().replace(/\s+/g, '')}@climalogix.ai`,
+      avatar: avatarUrl
+    }]);
+
+    setNewMemberName("");
+    setNewMemberRole("");
+    setNewMemberEmail("");
+    setNewMemberAvatar("");
+  };
+
+  const handleRemoveMember = (idx) => {
+    setTeam(team.filter((_, i) => i !== idx));
+  };
+
+  const toggleTabHide = (tabId) => {
+    setHiddenTabs(prev => 
+      prev.includes(tabId) ? prev.filter(t => t !== tabId) : [...prev, tabId]
+    );
+  };
+
+  const resetAllSettings = () => {
+    setVisibilityMode("public");
+    setPassphrase("climalogix2026");
+    setStartDate("2026-05-30T00:00");
+    setEndDate("2026-06-30T23:59");
+    setHiddenTabs([]);
+    setIsUnlocked(false);
+    setIsBypassed(false);
+    localStorage.removeItem("docs_unlocked");
+    setTeam([
+      { name: "Punam", role: "Lead AI Architect & Full-Stack Developer", email: "punam@climalogix.ai", avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&h=120&q=80" },
+      { name: "Sarah Chowdhury", role: "Operations & Logistics Director", email: "sarah@climalogix.ai", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&h=120&q=80" },
+      { name: "Dr. Ahmed", role: "Agronomy Compliance Advisory Lead (BARI Consultant)", email: "ahmed@climalogix.ai", avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=120&h=120&q=80" }
+    ]);
+  };
+
+  // Schedule parameters check
+  const now = new Date();
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const isOutsideWindow = startDate && endDate && (now < start || now > end);
+
+  // Security Access gates
+  if (visibilityMode === "dev_lock" && !isUnlocked) {
+    return (
+      <div style={{ maxWidth: 500, margin: "80px auto", animation: "fadeSlideIn 0.4s ease" }}>
+        <Card hover={false} style={{ border: `1px solid ${ACCENT.amberBorder}`, background: "rgba(17, 24, 39, 0.8)", textAlign: "center", padding: "40px 30px" }}>
+          <div style={{ fontSize: 48, marginBottom: 20 }}>🔒</div>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>{"Dev Staging Lock Active"}</h2>
+          <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 28 }}>
+            {"Access to this live product pitch and technical whitepaper is currently passphrase-protected by the development team."}
+          </p>
+          
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "stretch" }}>
+            <input 
+              type="password" 
+              placeholder="Enter Staging Passphrase" 
+              value={passInput}
+              onChange={e => setPassInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleUnlock()}
+              style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none", textAlign: "center" }}
+            />
+            {passError && <div style={{ fontSize: 12, color: ACCENT.red, fontWeight: 500 }}>{passError}</div>}
+            
+            <button 
+              onClick={handleUnlock}
+              style={{
+                width: "100%", padding: "12px 0", borderRadius: 8,
+                background: successAnim ? ACCENT.green : "linear-gradient(135deg, #10B981, #059669)",
+                color: "#ffffff", fontWeight: 700, fontSize: 14, border: "none", cursor: "pointer",
+                transition: "all 0.3s ease",
+                transform: successAnim ? "scale(1.05)" : "none"
+              }}
+            >
+              {successAnim ? "✓ Unlocked!" : "Unlock Portal"}
+            </button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (visibilityMode === "scheduled" && isOutsideWindow && !isBypassed) {
+    return (
+      <div style={{ maxWidth: 550, margin: "80px auto", animation: "fadeSlideIn 0.4s ease" }}>
+        <Card hover={false} style={{ border: `1px solid ${ACCENT.redBorder}`, background: "rgba(17, 24, 39, 0.8)", textAlign: "center", padding: "40px 30px" }}>
+          <div style={{ fontSize: 48, marginBottom: 20 }}>⏳</div>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>{"Scheduled Access Restriction"}</h2>
+          <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 20 }}>
+            {"The live audit portal is locked. Access is scheduled only during the specified evaluator window:"}
+          </p>
+          
+          <div style={{ background: "var(--bg-primary)", padding: "16px 20px", borderRadius: 10, border: "1px solid var(--border-primary)", marginBottom: 28, fontSize: 13, fontFamily: "'JetBrains Mono', monospace", color: ACCENT.amber }}>
+            <div>Start: {new Date(startDate).toLocaleString()}</div>
+            <div style={{ marginTop: 6 }}>End: {new Date(endDate).toLocaleString()}</div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "stretch", borderTop: "1px solid var(--border-primary)", paddingTop: 24 }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>{"ADMINISTRATIVE / AUDITOR BYPASS"}</div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <input 
+                type="password" 
+                placeholder="Admin Passphrase" 
+                value={bypassInput}
+                onChange={e => setBypassInput(e.target.value)}
+                style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+              />
+              <button 
+                onClick={handleBypass}
+                style={{ padding: "10px 18px", borderRadius: 8, background: "var(--bg-input)", color: "var(--text-primary)", border: "1px solid var(--border-primary)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+              >
+                Bypass
+              </button>
+            </div>
+            {bypassError && <div style={{ fontSize: 12, color: ACCENT.red, textAlign: "left" }}>{bypassError}</div>}
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // Left sub-navigation tab filtering
+  const SUB_TABS = [
+    { id: "pitch", label: "💼 Pitch Deck" },
+    { id: "arch", label: "📐 Architecture Flow" },
+    { id: "math", label: "🧪 Mathematical Models" },
+    { id: "telemetry", label: "📈 Live Telemetry" },
+    { id: "team", label: "👥 Team Showcase" },
+    { id: "admin", label: "⚙️ Admin Controls" }
+  ];
+
+  const visibleSubTabs = SUB_TABS.filter(t => {
+    if (t.id === "admin") return true; // admin tab is always there for bypass/edit
+    if (hiddenTabs.includes(t.id)) return false; // hide if admin marked as hidden
+    return true;
+  });
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", gap: 32, animation: "fadeSlideIn 0.4s ease" }}>
+      
+      {/* ── LEFT SUB-NAV BAR ────────────────────────────────────── */}
+      <aside style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ fontSize: 10, color: "var(--text-muted)", letterSpacing: "0.1em", fontWeight: 700, paddingLeft: 12, marginBottom: 12 }}>
+          {"DOCUMENTATION MENU"}
+        </div>
+        {visibleSubTabs.map(t => (
+          <button 
+            key={t.id} 
+            onClick={() => setSubTab(t.id)}
+            style={{
+              padding: "12px 16px", borderRadius: 8, textAlign: "left", fontSize: 12.5, fontWeight: 600,
+              background: subTab === t.id ? "var(--bg-card)" : "transparent",
+              color: subTab === t.id ? ACCENT.green : "var(--text-secondary)",
+              border: `1px solid ${subTab === t.id ? "var(--border-primary)" : "transparent"}`,
+              cursor: "pointer", display: "flex", alignItems: "center", gap: 10, transition: "all 0.25s ease"
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </aside>
+
+      {/* ── RIGHT CONTENT CARD ──────────────────────────────────── */}
+      <section style={{ minWidth: 0 }}>
+        
+        {/* ── SUB-VIEW: PITCH DECK ────────────────────────────── */}
+        {subTab === "pitch" && (
+          <div style={{ animation: "fadeSlideIn 0.35s ease" }}>
+            <SectionLabel icon="💼" text="CLimaLogix AI Pitch Deck — YC Structure" />
+            <Card hover={false} style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+              <div>
+                <h3 style={{ fontSize: 20, fontWeight: 700, color: ACCENT.green, marginBottom: 12 }}>
+                  {"1. The Problem: Agricultural Spoilage in High-Density Logistics"}
+                </h3>
+                <p style={{ fontSize: 13.5, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                  {"E-commerce and agricultural logistics in Bangladesh lose up to 35% of heat-sensitive organic resources (bio-slurry, probiotics, vaccine packages) due to unmapped Urban Heat Island (UHI) exposure. Traditional supply chains ignore diurnal temperatures and density factors, leading to massive financial waste and ruined bio-efficiency."}
+                </p>
+              </div>
+
+              <div>
+                <h3 style={{ fontSize: 20, fontWeight: 700, color: ACCENT.green, marginBottom: 12 }}>
+                  {"2. The Solution: CLimaLogix ClimateShield"}
+                </h3>
+                <p style={{ fontSize: 13.5, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                  {"CLimaLogix AI implements real-time agricultural trust auditing, microclimate exposure risk estimation, and dynamic delivery viability slotting (DVS) for high-density logistics. Using advanced IoT telemetry mapping and localized UHI offsets, CLimaLogix safeguards heat-sensitive batches, increasing successful deliveries by over 40%."}
+                </p>
+              </div>
+
+              <div>
+                <h3 style={{ fontSize: 20, fontWeight: 700, color: ACCENT.green, marginBottom: 12 }}>
+                  {"3. Business Model: B2B SaaS & Cryptographic Verification"}
+                </h3>
+                <p style={{ fontSize: 13.5, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                  {"We charge processing SMEs a monthly SaaS subscription for real-time dispatch advice, combined with a minute cryptographic 'trust fee' per certified batch. Evaluators and buyers receive complimentary audit access, validating product pedigree and BARI compliance in under 10 seconds."}
+                </p>
+              </div>
+
+              <div>
+                <h3 style={{ fontSize: 20, fontWeight: 700, color: ACCENT.green, marginBottom: 12 }}>
+                  {"4. Roadmap & Expansion Goals"}
+                </h3>
+                <p style={{ fontSize: 13.5, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                  {"· Q3 2026: Expand pilot integrations into 15 organic bio-refineries in Dhaka division."}
+                  <br />
+                  {"· Q4 2026: Direct integration into major cold-chain freight carriers in Bangladesh."}
+                  <br />
+                  {"· Q1 2027: Rollout of predictive neural routing engines mapping future climate changes."}
+                </p>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* ── SUB-VIEW: ARCHITECTURE ──────────────────────────── */}
+        {subTab === "arch" && (
+          <div style={{ animation: "fadeSlideIn 0.35s ease" }}>
+            <SectionLabel icon="📐" text="CLimaLogix Technical Architecture" />
+            <Card hover={false}>
+              <h3 style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", marginBottom: 16 }}>
+                {"Unified System Dataflow Pipeline"}
+              </h3>
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 24 }}>
+                {"The pipeline dynamically processes live sensor telemetry, maps localized thermal risks, evaluates compliance standards, and schedules delivery slots."}
+              </p>
+
+              {/* GORGEOUS PREMIUM FLOWCHART */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 16, alignItems: "center", background: "var(--bg-primary)", padding: 24, borderRadius: 12, border: "1px solid var(--border-primary)" }}>
+                
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div style={{ background: "rgba(59, 130, 246, 0.1)", border: `1px solid ${ACCENT.blue}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: ACCENT.blue, fontWeight: 700 }}>
+                    {"1. IoT SENSORS (pH, EC, Temp)"}
+                  </div>
+                  <div style={{ color: "var(--text-dim)", fontWeight: 700 }}>{"→"}</div>
+                  <div style={{ background: "rgba(245, 158, 11, 0.1)", border: `1px solid ${ACCENT.amber}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: ACCENT.amber, fontWeight: 700 }}>
+                    {"2. EXPRESS INGESTION ENGINE"}
+                  </div>
+                </div>
+
+                <div style={{ color: "var(--text-dim)", fontWeight: 700, fontSize: 16 }}>{"↓"}</div>
+
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div style={{ background: "rgba(16, 185, 129, 0.1)", border: `1px solid ${ACCENT.green}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: ACCENT.green, fontWeight: 700, textAlign: "center" }}>
+                    {"3. MICROCLIMATE RISK MODEL (MERM)"}<br />
+                    <span style={{ fontSize: 9, fontWeight: 500, opacity: 0.8 }}>{"Computes UHI offset & adjusted temp"}</span>
+                  </div>
+                  <div style={{ color: "var(--text-dim)", fontWeight: 700 }}>{"↔"}</div>
+                  <div style={{ background: "rgba(139, 92, 246, 0.1)", border: "1px solid #8B5CF6", padding: "10px 16px", borderRadius: 8, fontSize: 12, color: "#a78bfa", fontWeight: 700, textAlign: "center" }}>
+                    {"4. BARI COMPLIANCE KB"}<br />
+                    <span style={{ fontSize: 9, fontWeight: 500, opacity: 0.8 }}>{"pgvector cosine distance queries"}</span>
+                  </div>
+                </div>
+
+                <div style={{ color: "var(--text-dim)", fontWeight: 700, fontSize: 16 }}>{"↓"}</div>
+
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div style={{ background: "rgba(239, 68, 68, 0.1)", border: `1px solid ${ACCENT.red}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: ACCENT.red, fontWeight: 700 }}>
+                    {"5. DVS SCHEDULER & VIABILITY GRADES"}
+                  </div>
+                  <div style={{ color: "var(--text-dim)", fontWeight: 700 }}>{"→"}</div>
+                  <div style={{ background: "rgba(16, 185, 129, 0.2)", border: `2px solid ${ACCENT.green}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: "#ffffff", fontWeight: 700, boxShadow: `0 0 12px ${ACCENT.greenBg}` }}>
+                    {"6. COMPLIANT ORDER ROUTED"}
+                  </div>
+                </div>
+
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 24 }}>
+                <div style={{ padding: 14, borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-primary)" }}>
+                  <h4 style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>{"High-Velocity Ingestion Stack"}</h4>
+                  <p style={{ fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                    {"Saves raw microclimate datasets, community observation records, and dispatch schedules dynamically using direct ORM mapping to database layers."}
+                  </p>
+                </div>
+                <div style={{ padding: 14, borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-primary)" }}>
+                  <h4 style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>{"BARI pgvector Search Engine"}</h4>
+                  <p style={{ fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                    {"Retrieves official standards chunk by chunk using pgvector semantic query mapping inside organic compliance database schemas."}
+                  </p>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* ── SUB-VIEW: MATHEMATICAL MODEL ────────────────────── */}
+        {subTab === "math" && (
+          <div style={{ animation: "fadeSlideIn 0.35s ease" }}>
+            <SectionLabel icon="🧪" text="Dynamic Mathematical Formulation" />
+            <Card hover={false} style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+              
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>
+                  {"1. Microclimate Exposure Risk Model (MERM)"}
+                </h3>
+                <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 12 }}>
+                  {"MERM dynamically maps localized microclimate shifts inside urban high-density sectors (Dhaka districts), incorporating base regional temperature data, wind speeds, building densities, and Urban Heat Island (UHI) offsets:"}
+                </p>
+                <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 12, border: "1px solid var(--border-primary)", color: ACCENT.green }}>
+                  {"T_adjusted = T_base + UHI_offset * (1 - vegetation_fraction) * building_density - wind_corridor_factor * (wind_speed / 10)"}
+                </div>
+              </div>
+
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>
+                  {"2. Thermal Risk Factor (RF_thermal)"}
+                </h3>
+                <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 12 }}>
+                  {"Computes degradation speeds when temperatures climb above the organic safety boundary (25°C), capped cleanly between 0.0 and 1.0:"}
+                </p>
+                <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 12, border: "1px solid var(--border-primary)", color: ACCENT.green }}>
+                  {"RF_thermal = Max(0, Min(1, (T_adjusted - 25) / 15))"}
+                </div>
+              </div>
+
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>
+                  {"3. BARI Delivery Viability Slotting (DVS)"}
+                </h3>
+                <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 12 }}>
+                  {"Calculates the exact viability slotting percentage for the batch, applying UHI hazard multipliers to calibrate final dispatch advice:"}
+                </p>
+                <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 12, border: "1px solid var(--border-primary)", color: ACCENT.green }}>
+                  {"DVS = Math.max(0, Math.min(100, Math.round(trustScore * (1 - RF_thermal * hazardMultiplier))))"}
+                </div>
+              </div>
+
+            </Card>
+          </div>
+        )}
+
+        {/* ── SUB-VIEW: TELEMETRY ─────────────────────────────── */}
+        {subTab === "telemetry" && (
+          <div style={{ animation: "fadeSlideIn 0.35s ease" }}>
+            <SectionLabel icon="📈" text="System Operations Live Telemetry" />
+            
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20, marginBottom: 24 }}>
+              
+              <Card hover={false} style={{ textAlign: "center", border: `1px solid var(--border-primary)` }}>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+                  {"Total Batches"}
+                </div>
+                <div style={{ fontSize: 36, fontWeight: 800, color: ACCENT.green, fontFamily: "'JetBrains Mono', monospace" }}>
+                  {totalBatches}
+                </div>
+                <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 6 }}>
+                  {"Registered organic lots in memory"}
+                </div>
+              </Card>
+
+              <Card hover={false} style={{ textAlign: "center", border: `1px solid var(--border-primary)` }}>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+                  {"Avg Trust Score"}
+                </div>
+                <div style={{ fontSize: 36, fontWeight: 800, color: ACCENT.green, fontFamily: "'JetBrains Mono', monospace" }}>
+                  {avgTrustScore}
+                  <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text-secondary)" }}>{"/100"}</span>
+                </div>
+                <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 6 }}>
+                  {"BARI compliance average"}
+                </div>
+              </Card>
+
+              <Card hover={false} style={{ textAlign: "center", border: `1px solid var(--border-primary)` }}>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+                  {"High Risk Dispatches"}
+                </div>
+                <div style={{ fontSize: 36, fontWeight: 800, color: highRiskCount > 0 ? ACCENT.amber : ACCENT.green, fontFamily: "'JetBrains Mono', monospace" }}>
+                  {highRiskCount}
+                </div>
+                <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 6 }}>
+                  {"Lots routed to high UHI areas"}
+                </div>
+              </Card>
+
+            </div>
+
+            <Card hover={false}>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>
+                {"Live System Averages & Calibration KPI"}
+              </h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, borderBottom: "1px solid var(--border-primary)", paddingBottom: 8 }}>
+                  <span style={{ color: "var(--text-secondary)" }}>{"Average Delivery Viability Score (DVS)"}</span>
+                  <span style={{ fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: ACCENT.green }}>{avgDvs}{"%"}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, borderBottom: "1px solid var(--border-primary)", paddingBottom: 8 }}>
+                  <span style={{ color: "var(--text-secondary)" }}>{"Active Certified lots"}</span>
+                  <span style={{ fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: ACCENT.blue }}>{activeCertified}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                  <span style={{ color: "var(--text-secondary)" }}>{"Marketplace Listed Products"}</span>
+                  <span style={{ fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: ACCENT.amber }}>{productsList.length}</span>
+                </div>
+              </div>
+            </Card>
+
+          </div>
+        )}
+
+        {/* ── SUB-VIEW: TEAM SHOWCASE ─────────────────────────── */}
+        {subTab === "team" && (
+          <div style={{ animation: "fadeSlideIn 0.35s ease" }}>
+            <SectionLabel icon="👥" text="CLimaLogix AI Project Team" />
+            
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 20, marginBottom: 28 }}>
+              {team.map((m, i) => (
+                <Card key={i} style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                  <img 
+                    src={m.avatar} 
+                    alt={m.name} 
+                    style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover", border: "2px solid var(--border-primary)" }}
+                  />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>{m.name}</div>
+                    <div style={{ fontSize: 11, color: ACCENT.green, fontWeight: 600, marginTop: 2, marginBottom: 4 }}>{m.role}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-dim)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{m.email}</div>
+                  </div>
+                  {/* Remove button inside team showcase */}
+                  <button 
+                    onClick={() => handleRemoveMember(i)}
+                    style={{ marginLeft: "auto", background: "none", border: "none", color: ACCENT.red, cursor: "pointer", fontSize: 14 }}
+                    title="Remove member"
+                  >
+                    {"🗑️"}
+                  </button>
+                </Card>
+              ))}
+            </div>
+
+            {/* TEAM BUILDER ADDITION FORM */}
+            <Card hover={false} style={{ border: `1px solid var(--border-primary)` }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 16 }}>
+                {"Add New Team Member"}
+              </h3>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+                <input 
+                  type="text" placeholder="Name" value={newMemberName} 
+                  onChange={e => setNewMemberName(e.target.value)}
+                  style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+                />
+                <input 
+                  type="text" placeholder="Role" value={newMemberRole} 
+                  onChange={e => setNewMemberRole(e.target.value)}
+                  style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+                />
+                <input 
+                  type="text" placeholder="Email (Optional)" value={newMemberEmail} 
+                  onChange={e => setNewMemberEmail(e.target.value)}
+                  style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+                />
+                <input 
+                  type="text" placeholder="Avatar URL (Optional)" value={newMemberAvatar} 
+                  onChange={e => setNewMemberAvatar(e.target.value)}
+                  style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+                />
+              </div>
+              <button 
+                onClick={handleAddMember}
+                style={{ padding: "10px 20px", borderRadius: 8, background: ACCENT.green, color: "#fff", fontWeight: 700, fontSize: 13, border: "none", cursor: "pointer" }}
+              >
+                {"+ Add Team Member"}
+              </button>
+            </Card>
+
+          </div>
+        )}
+
+        {/* ── SUB-VIEW: ADMIN CONTROLS ────────────────────────── */}
+        {subTab === "admin" && (
+          <div style={{ animation: "fadeSlideIn 0.35s ease" }}>
+            <SectionLabel icon="⚙️" text="Admin Configuration Panel" />
+            <Card hover={false} style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+              
+              <div>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 8 }}>
+                  {"Visibility Mode"}
+                </label>
+                <div style={{ display: "flex", gap: 12 }}>
+                  {["public", "dev_lock", "scheduled"].map(mode => (
+                    <button
+                      key={mode}
+                      onClick={() => setVisibilityMode(mode)}
+                      style={{
+                        flex: 1, padding: "12px", borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+                        background: visibilityMode === mode ? "var(--bg-card)" : "var(--bg-primary)",
+                        color: visibilityMode === mode ? ACCENT.green : "var(--text-secondary)",
+                        border: `1px solid ${visibilityMode === mode ? ACCENT.green : "var(--border-primary)"}`,
+                        transition: "all 0.25s ease"
+                      }}
+                    >
+                      {mode === "public" ? "🔓 Public" : mode === "dev_lock" ? "🔒 Dev Lock" : "⏳ Scheduled"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {visibilityMode === "dev_lock" && (
+                <div style={{ animation: "fadeSlideIn 0.3s ease" }}>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 8 }}>
+                    {"Dev Staging Passphrase"}
+                  </label>
+                  <input 
+                    type="text" value={passphrase} onChange={e => setPassphrase(e.target.value)}
+                    style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none", fontFamily: "'JetBrains Mono', monospace" }}
+                  />
+                </div>
+              )}
+
+              {visibilityMode === "scheduled" && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, animation: "fadeSlideIn 0.3s ease" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 8 }}>
+                      {"Window Start Date-Time"}
+                    </label>
+                    <input 
+                      type="datetime-local" value={startDate} onChange={e => setStartDate(e.target.value)}
+                      style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 8 }}>
+                      {"Window End Date-Time"}
+                    </label>
+                    <input 
+                      type="datetime-local" value={endDate} onChange={e => setEndDate(e.target.value)}
+                      style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 14, outline: "none" }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div style={{ borderTop: "1px solid var(--border-primary)", paddingTop: 20 }}>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>
+                  {"Section Visibility Toggles (Hide specific deck sections)"}
+                </label>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {[
+                    { id: "pitch", label: "💼 YC Structure Pitch Deck" },
+                    { id: "arch", label: "📐 Technical Architecture Diagrams" },
+                    { id: "math", label: "🧪 Mathematical Formulation Models" },
+                    { id: "telemetry", label: "📈 System Telemetry KPIs" },
+                    { id: "team", label: "👥 Team Roster Showcase" }
+                  ].map(sec => (
+                    <div key={sec.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)" }}>
+                      <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{sec.label}</span>
+                      <button
+                        onClick={() => toggleTabHide(sec.id)}
+                        style={{
+                          padding: "6px 14px", borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: "pointer", border: "none",
+                          background: hiddenTabs.includes(sec.id) ? "rgba(239, 68, 68, 0.15)" : "rgba(16, 185, 129, 0.15)",
+                          color: hiddenTabs.includes(sec.id) ? ACCENT.red : ACCENT.green
+                        }}
+                      >
+                        {hiddenTabs.includes(sec.id) ? "❌ Hidden" : "✓ Visible"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ borderTop: "1px solid var(--border-primary)", paddingTop: 24, display: "flex", gap: 16 }}>
+                <button 
+                  onClick={resetAllSettings}
+                  style={{ flex: 1, padding: "12px", borderRadius: 8, background: "rgba(239, 68, 68, 0.1)", border: `1px solid ${ACCENT.redBorder}`, color: ACCENT.red, fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+                >
+                  {"⚠️ Reset Defaults"}
+                </button>
+                <button 
+                  onClick={() => alert("Settings successfully saved and persisted to local configurations!")}
+                  style={{ flex: 1, padding: "12px", borderRadius: 8, background: ACCENT.green, color: "#fff", fontWeight: 700, fontSize: 13, border: "none", cursor: "pointer" }}
+                >
+                  {"Save Changes"}
+                </button>
+              </div>
+
+            </Card>
+          </div>
+        )}
+
+      </section>
+    </div>
+  );
+}
 
 const TABS = [
   { label: "Overall Dashboard", icon: "⊞" },
@@ -2129,11 +4640,17 @@ const TABS = [
   { label: "Chatbot", icon: "💬" }
 ];
 
-export default function EcoSorthaApp() {
+function CLimaLogixApp() {
   const [tab, setTab] = useState(0);
   const [trustScore, setTrustScore] = useState(84);
   const [isRegisteringBatch, setIsRegisteringBatch] = useState(false);
   const [theme, setTheme] = useState("dark");
+  const [dvs, setDvs] = useState(72);
+  const [productsList, setProductsList] = useState(MOCK_PRODUCTS);
+  const [selectedSme, setSelectedSme] = useState("green_refineries");
+  const [customSmeName, setCustomSmeName] = useState("My Custom SME");
+  const [verificationBatchId, setVerificationBatchId] = useState("");
+  const [verificationDispatchZone, setVerificationDispatchZone] = useState("");
 
   // Calculate Generalized Dhaka Division Scores (averaging all zones in Dhaka Division)
   const calcGeneralizedScores = (ts) => {
@@ -2148,10 +4665,24 @@ export default function EcoSorthaApp() {
   };
   
   const genDvs = calcGeneralizedScores(trustScore);
-  const adjustedTemp = calcAdjustedTemp(31, "Mirpur", new Date().getHours(), 8);
-  const dvs = calcDVS(trustScore, adjustedTemp);
 
   const themeVars = THEMES[theme];
+
+  const activeTabs = [...TABS];
+  if (selectedSme === "custom_sme") {
+    activeTabs.push({ label: "SME Configurator", icon: "🛠️" });
+  }
+  activeTabs.push({ label: "System Docs", icon: "📖" });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("tab") === "docs") {
+      const idx = activeTabs.findIndex(t => t.label === "System Docs");
+      if (idx !== -1) {
+        setTab(idx);
+      }
+    }
+  }, [activeTabs.length]);
 
   return (
     <div style={{
@@ -2218,8 +4749,32 @@ export default function EcoSorthaApp() {
             animation: "pulseGlow 3s ease-in-out infinite",
           }}>🌱</div>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>EcoSortha AI</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>CLimaLogix AI</div>
             <div style={{ fontSize: 9, color: "var(--text-dim)", letterSpacing: "0.14em", fontWeight: 500 }}>CLIMATESHIELD · SME DASHBOARD</div>
+          </div>
+          {/* New SME Dropdown */}
+          <div style={{ marginLeft: 24, display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-secondary)" }}>
+            <span style={{ fontSize: 18 }}>⭐</span>
+            <select 
+              value={selectedSme}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedSme(val);
+                if (val === "custom_sme") {
+                  setTab(8);
+                } else {
+                  setTab(0);
+                }
+              }}
+              style={{
+                background: "transparent", color: "var(--text-primary)", border: "none",
+                outline: "none", cursor: "pointer", fontSize: 14, fontWeight: 500
+              }}
+            >
+              <option value="green_refineries">Green Refineries Ltd. (SME)</option>
+              <option value="agro_eco">Agro Eco SME</option>
+              <option value="custom_sme">🛠️ {customSmeName || "Custom SME"} (Configurator)</option>
+            </select>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -2237,17 +4792,9 @@ export default function EcoSorthaApp() {
             <span>Gen. DVS: <strong style={{ color: genDvs >= 75 ? ACCENT.green : genDvs >= 55 ? ACCENT.amber : ACCENT.red, fontFamily: "'JetBrains Mono', monospace" }}>{genDvs}</strong></span>
           </div>
 
-          {/* DVS Standard Indicator - Top Right */}
-          <div style={{
-            display: "flex", alignItems: "center", gap: 12,
-            padding: "8px 14px", borderRadius: 10,
-            background: `${ACCENT.green}12`, border: `1px solid ${ACCENT.greenBorder}`,
-            fontSize: 12, fontWeight: 600, color: ACCENT.green,
-            letterSpacing: "0.08em"
-          }}>
-            <span style={{ fontSize: 14 }}>✓</span>
-            <span>DVS STANDARD</span>
-            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>v2.1</span>
+          <div style={{ display: "flex", gap: 10 }}>
+            <ScoreGauge value={trustScore} label="Trust" size={76} />
+            <ScoreGauge value={genDvs} label="Gen. DVS" size={76} />
           </div>
           <ThemeToggle theme={theme} onToggle={() => setTheme(t => t === "dark" ? "light" : "dark")} />
         </div>
@@ -2262,7 +4809,7 @@ export default function EcoSorthaApp() {
         WebkitBackdropFilter: "var(--backdrop-blur)",
         paddingLeft: 28,
       }}>
-        {TABS.map((t, i) => (
+        {activeTabs.map((t, i) => (
           <button key={t.label} onClick={() => setTab(i)}
             style={{
               padding: "12px 18px", border: "none",
@@ -2296,7 +4843,13 @@ export default function EcoSorthaApp() {
             <div>
               <SectionLabel icon="📡" text="Batch Sensor Verification" />
               <Card>
-                <IoTForm onResult={setTrustScore} />
+                <IoTForm 
+                  onResult={setTrustScore} 
+                  prefilledBatchId={verificationBatchId}
+                  prefilledDispatchZone={verificationDispatchZone}
+                  setPrefilledBatchId={setVerificationBatchId}
+                  setPrefilledDispatchZone={setVerificationDispatchZone}
+                />
               </Card>
             </div>
             <div>
@@ -2338,11 +4891,27 @@ export default function EcoSorthaApp() {
           </div>
         )}
 
-        {tab === 6 && <MarketplaceView />}
-        {tab === 7 && <ChatbotView />}
+        {tab === 6 && <MarketplaceView products={productsList} />}
+        {tab === 7 && (
+          <ChatbotView 
+            setTab={setTab} 
+            products={productsList} 
+            setVerificationBatchId={setVerificationBatchId}
+            setVerificationDispatchZone={setVerificationDispatchZone}
+          />
+        )}
+        {tab === 8 && selectedSme === "custom_sme" && (
+          <CustomSmeView 
+            products={productsList} 
+            setProducts={setProductsList} 
+            customSmeName={customSmeName} 
+            setCustomSmeName={setCustomSmeName} 
+          />
+        )}
+        {activeTabs[tab]?.label === "System Docs" && (
+          <SystemDocsView productsList={productsList} />
+        )}
       </main>
-
-
 
       {/* ── FOOTER ────────────────────────────────────────────── */}
       <footer style={{
@@ -2354,13 +4923,24 @@ export default function EcoSorthaApp() {
         WebkitBackdropFilter: "var(--backdrop-blur)",
       }}>
         <div style={{ fontSize: 9, color: "var(--text-dim)", letterSpacing: "0.1em", fontWeight: 500 }}>
-          ECOSORTHA AI CLIMATESHIELD · INFINITY AI BUILDFEST 2026 · TEAM GLIDERS · TRACK 4: E-COMMERCE
+          CLIMALOGIX AI CLIMATESHIELD · INFINITY AI BUILDFEST 2026 · TEAM GLIDERS · TRACK 4: E-COMMERCE
         </div>
         <div style={{ display: "flex", gap: 16, fontSize: 9, color: "var(--text-dim)" }}>
           <span>Trust Score: <span style={{ color: ACCENT.green, fontFamily: "'JetBrains Mono', monospace" }}>{trustScore}/100</span></span>
           <span>DVS: <span style={{ color: dvs >= 75 ? ACCENT.green : dvs >= 55 ? ACCENT.amber : ACCENT.red, fontFamily: "'JetBrains Mono', monospace" }}>{dvs}/100</span></span>
         </div>
       </footer>
+      <AgentPanel 
+        setTab={setTab} 
+        products={productsList} 
+        setVerificationBatchId={setVerificationBatchId}
+        setVerificationDispatchZone={setVerificationDispatchZone}
+      />
     </div>
   );
 }
+
+window.CLimaLogixApp = CLimaLogixApp;
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<CLimaLogixApp />);

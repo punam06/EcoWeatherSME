@@ -31,6 +31,8 @@ export interface AgentResponse {
   pendingOrder?: PendingOrder;
   orderResult?: OrderResult;
   navigationTarget?: string;
+  verifiedBatchId?: string;
+  verifiedDispatchZone?: string;
   requiresAuth?: boolean;
   sessionId: string;
 }
@@ -213,7 +215,7 @@ import { groq, GROQ_MODEL } from '../groq';
 const AGENT_SYSTEM_PROMPT = `
 You are EcoSortha AI, an intelligent agricultural commerce assistant for Bangladesh's organic farming sector. You understand Bangla, English, and Banglish (mixed) naturally.
 
-You help farmers and SMEs with: weather/climate data, BARI agricultural guidelines, product browsing, placing orders, and navigating the platform dashboard.
+You help farmers and SMEs with: weather/climate data, BARI agricultural guidelines, product browsing, placing orders, analyzing batch safety/verification, and navigating the platform dashboard.
 
 For every user message, respond with a JSON object in this exact format:
 {
@@ -225,7 +227,8 @@ For every user message, respond with a JSON object in this exact format:
     "productName": "string or null",
     "quantity": "number or null",
     "unit": "string or null",
-    "cropContext": "string or null"
+    "cropContext": "string or null",
+    "batchId": "string or null"
   },
   "replyMessage": "Your natural conversational response in the same language the user used"
 }
@@ -235,6 +238,7 @@ Rules:
 - "replyMessage" must be warm, conversational, and helpful — never robotic
 - If the assistant previously asked for a city name/location and the user responds with a city name (e.g. "Dhaka", "Sylhet", "dhakar"), set the intent to "weather" and extract the city
 - If the user says anything like "dashboard দেখাও", "go to orders", "marketplace নিয়ে যাও", "order page" — set intent to "navigate" and extract the page
+- If the user asks if a batch is safe or requests batch verification (e.g. "is the batch safe?", "batch absolute safe?", "verify batch BCH-141", "BCH-142 নিরাপদ কি?"), set intent to "navigate", page to "batch_verification", and extract the batch ID (e.g. "BCH-141") into "batchId"
 - If the user wants to buy/order something — set intent to "order"
 - If the user asks about weather, temperature, climate, আবহাওয়া — set intent to "weather"
 - For BARI guidelines, soil, pH, organic farming advice — set intent to "bari_advice"
@@ -254,13 +258,15 @@ interface AgentParsedResult {
     quantity: number | null;
     unit: string | null;
     cropContext: string | null;
+    batchId: string | null;
   };
   replyMessage: string;
 }
 
 async function queryLLMIntent(
   query: string,
-  history: { role: 'user' | 'assistant'; content: string }[]
+  history: { role: 'user' | 'assistant'; content: string }[],
+  customProductsContext?: string
 ): Promise<AgentParsedResult> {
   const conversationHistory = history.slice(-6).map((m) => ({
     role: m.role === 'user' ? ('user' as const) : ('assistant' as const),
@@ -275,7 +281,7 @@ async function queryLLMIntent(
     const completion = await groq.chat.completions.create({
       model: GROQ_MODEL,
       messages: [
-        { role: 'system', content: AGENT_SYSTEM_PROMPT },
+        { role: 'system', content: AGENT_SYSTEM_PROMPT + (customProductsContext ? `\n\n${customProductsContext}` : '') },
         ...messages,
       ],
       temperature: 0.3,
@@ -311,6 +317,7 @@ async function queryLLMIntent(
       quantity: null,
       unit: null,
       cropContext: null,
+      batchId: null,
     },
     replyMessage: textResult || 'দুঃখিত, আমি বুঝতে পারিনি। অনুগ্রহ করে আবার বলুন।',
   };
@@ -323,7 +330,8 @@ export async function processMessage(
   query: string,
   language: 'bn' | 'en',
   sessionId?: string,
-  farmerId?: string
+  farmerId?: string,
+  customProducts?: any[]
 ): Promise<AgentResponse> {
   // Resolve or Create Session
   let activeSessionId = sessionId;
@@ -338,8 +346,13 @@ export async function processMessage(
     session.farmerId = farmerId;
   }
 
+  // Format custom products for context
+  const customProductsContext = Array.isArray(customProducts) && customProducts.length > 0
+    ? `Here is the current customized SME product catalog you can help users order:\n` + customProducts.map((p: any) => `- ${p.name} (${p.category || 'Agriculture'}): Price: ${p.price}, Unit: ${p.unit || 'Kg'}, DVS Score: ${p.dvs || 90}, Seller: ${p.seller || 'Custom SME'}`).join('\n')
+    : '';
+
   // Query LLM Intent Layer
-  const llmResult = await queryLLMIntent(query, session.history);
+  const llmResult = await queryLLMIntent(query, session.history, customProductsContext);
 
   appendMessage(activeSessionId!, 'user', query);
 
@@ -385,13 +398,72 @@ export async function processMessage(
       }
 
       case 'navigate': {
-        result = {
-          type: 'NAVIGATION',
-          message: llmResult.replyMessage,
-          navigationTarget: llmResult.extractedData?.page || 'dashboard',
-          language,
-          sessionId: activeSessionId!,
-        };
+        const page = llmResult.extractedData?.page || 'dashboard';
+        const isBatchVerification = page === 'batch_verification' || 
+          (/(safe|verify|validation|verification|নিরাপদ|ভেরিফাই|যাচাই)/i.test(query) && /(batch|ব্যাটচ|ব্যাচ|bch)/i.test(query));
+
+        if (isBatchVerification) {
+          const { getBatchesList, getBatchFromStore } = require('./batchStore.service');
+          
+          let batchId = llmResult.extractedData?.batchId || '';
+          if (!batchId) {
+            const bchMatch = query.match(/BCH-\d+/i);
+            if (bchMatch) {
+              batchId = bchMatch[0].toUpperCase();
+            }
+          }
+
+          let targetBatch: any = null;
+          if (batchId) {
+            targetBatch = getBatchFromStore(batchId);
+          }
+
+          if (!targetBatch) {
+            const list = getBatchesList();
+            if (list.length > 0) {
+              targetBatch = list[0]; // pick the most recently created/added batch
+            }
+          }
+
+          if (targetBatch) {
+            const destZone = targetBatch.destination_zone || 'Old Dhaka';
+            const bId = targetBatch.batch_number || targetBatch.id;
+            
+            const reply = language === 'bn'
+              ? `আমি আপনার ${targetBatch.product_name} ব্যাচ ${bId}-এর নিরাপত্তা যাচাই করছি যা ${destZone}-এ পাঠানো হবে। আপনাকে ব্যাচ ভেরিফিকেশন পেজে নিয়ে যাওয়া হচ্ছে...`
+              : `I am verifying batch ${bId} (${targetBatch.product_name}) destined for ${destZone} zone. Navigating you to the Batch Verification page...`;
+
+            result = {
+              type: 'NAVIGATION',
+              message: reply,
+              navigationTarget: 'batch_verification',
+              verifiedBatchId: bId,
+              verifiedDispatchZone: destZone,
+              language,
+              sessionId: activeSessionId!,
+            };
+          } else {
+            result = {
+              type: 'NAVIGATION',
+              message: language === 'bn'
+                ? 'ব্যাচ ভেরিফিকেশন পেজে যাওয়া হচ্ছে। অনুগ্রহ করে আপনার ব্যাচ আইডি এবং জোন ইনপুট করুন।'
+                : 'Navigating to the Batch Verification page. Please input your batch ID and dispatch zone.',
+              navigationTarget: 'batch_verification',
+              verifiedBatchId: 'BCH-100',
+              verifiedDispatchZone: 'Old Dhaka',
+              language,
+              sessionId: activeSessionId!,
+            };
+          }
+        } else {
+          result = {
+            type: 'NAVIGATION',
+            message: llmResult.replyMessage,
+            navigationTarget: page,
+            language,
+            sessionId: activeSessionId!,
+          };
+        }
         break;
       }
 

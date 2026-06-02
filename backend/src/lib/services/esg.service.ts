@@ -1,17 +1,4 @@
-export interface ESGMetrics {
-  month: string;
-  spoilage_prevented_bdt: number;
-  plastic_offset_kg: number;
-  carbon_sequestered_kg: number;
-  water_saved_l: number;
-  waste_reduced_kg: number;
-  e_score: number;
-  s_score: number;
-  g_score: number;
-  esg_score: number;
-  trust_score: number;
-  dvs_score: number;
-}
+import { ESGMetrics } from '../types';
 
 export async function calculateESGMetrics(trustScore: number = 84, dvs: number = 72): Promise<ESGMetrics> {
   const eScore = Math.min(100, Math.round((trustScore * 0.5) + (dvs * 0.5)));
@@ -42,12 +29,26 @@ export async function calculateESGMetrics(trustScore: number = 84, dvs: number =
 
   // Gracefully attempt saving to database without throwing crashes if Supabase is down
   try {
-    const { supabase } = require('../supabase');
-    if (supabase) {
-      await supabase.from('esg_metrics').insert({ ...metrics });
+    const { getSupabaseClient, isSupabaseConfigured } = require('../supabase');
+    if (isSupabaseConfigured()) {
+      const supabase = getSupabaseClient();
+      await supabase.from('esg_metrics').insert({
+        e_score: metrics.e_score,
+        s_score: metrics.s_score,
+        g_score: metrics.g_score,
+        esg_score: metrics.esg_score,
+        plastic_offset_kg: metrics.plastic_offset_kg,
+        carbon_sequestered_kg: metrics.carbon_sequestered_kg,
+        water_saved_l: metrics.water_saved_l,
+        waste_reduced_kg: metrics.waste_reduced_kg,
+        spoilage_prevented_bdt: metrics.spoilage_prevented_bdt,
+        trust_score: metrics.trust_score,
+        dvs_score: metrics.dvs_score,
+        month: metrics.month
+      });
     }
   } catch (error) {
-    // Graceful bypass
+    console.warn('[ESG Service] program ESG insert failed:', error);
   }
 
   return metrics;

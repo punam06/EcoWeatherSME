@@ -58,10 +58,35 @@ export function compileESGMetrics(
   biocharKg: number,
   compliantShipmentsCount: number
 ): ESGMetrics {
+  const plastic_offset_kg = calculatePlasticOffset(volumesRefilled);
+  const carbon_sequestered_kg = calculateCarbonSequestration(biocharKg);
+  const spoilage_prevented_bdt = calculateSpoilageAverted(compliantShipmentsCount);
+
+  // Derived circular economy metrics matching backend logic
+  const water_saved_l = Math.round(volumesRefilled.reduce((acc, v) => acc + v, 0) * 18.5);
+  const waste_reduced_kg = Math.round(biocharKg * 1.2);
+
+  // Default baseline score variables
+  const trust_score = 85;
+  const dvs_score = 80;
+
+  const e_score = Math.min(100, Math.round((trust_score * 0.5) + (dvs_score * 0.5)));
+  const s_score = Math.min(100, Math.round((trust_score * 0.4) + 54));
+  const g_score = Math.min(100, Math.round((trust_score * 0.6) + 38));
+  const esg_score = Math.round((e_score + s_score + g_score) / 3);
+
   return {
     month,
-    spoilage_prevented_bdt: calculateSpoilageAverted(compliantShipmentsCount),
-    plastic_offset_kg: calculatePlasticOffset(volumesRefilled),
-    carbon_sequestered_kg: calculateCarbonSequestration(biocharKg)
+    spoilage_prevented_bdt,
+    plastic_offset_kg,
+    carbon_sequestered_kg,
+    water_saved_l,
+    waste_reduced_kg,
+    e_score,
+    s_score,
+    g_score,
+    esg_score,
+    trust_score,
+    dvs_score
   };
 }
