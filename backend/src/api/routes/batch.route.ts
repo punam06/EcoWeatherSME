@@ -1,14 +1,57 @@
 import { Router, Request, Response } from 'express';
 import QRCode from 'qrcode';
+import { z } from 'zod';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
 import { getBatchesList, addBatch, updateBatchInStore, getBatchFromStore, deleteBatchFromStore } from '../../lib/services/batchStore.service';
 
 const router = Router();
 
+const CreateBatchSchema = z.object({
+  product_name: z.string().min(1).max(255).optional(),
+  product_type: z.string().min(1).max(255).optional(),
+  weight_kg: z.coerce.number().min(0).max(1000000).optional(),
+  packaging_type: z.string().min(1).max(100).optional(),
+  destination_zone: z.string().min(1).max(100).optional(),
+  processor_id: z.string().min(1).max(100).optional(),
+  batch_number: z.string().min(1).max(100).optional(),
+}).strict();
+
+const UpdateBatchSchema = z.object({
+  product_name: z.string().min(1).max(255).optional(),
+  product_type: z.string().min(1).max(255).optional(),
+  weight_kg: z.coerce.number().min(0).max(1000000).optional(),
+  packaging_type: z.string().min(1).max(100).optional(),
+  destination_zone: z.string().min(1).max(100).optional(),
+  processor_id: z.string().min(1).max(100).optional(),
+  batch_number: z.string().min(1).max(100).optional(),
+  status: z.enum(['pending', 'certified', 'dispatched', 'delivered']).optional(),
+  trust_score: z.number().min(0).max(100).optional(),
+  qr_code_url: z.string().optional(),
+  certificate_url: z.string().optional(),
+}).strict();
+
+const CertifyBatchSchema = z.object({
+  batchId: z.string().min(1).max(100).optional(),
+  trustScore: z.coerce.number().min(0).max(100).optional(),
+}).strict();
+
+const RecordReadingsSchema = z.object({
+  pH: z.coerce.number().min(0).max(14).optional(),
+  EC: z.coerce.number().min(0).max(20).optional(),
+  temperature: z.coerce.number().min(-50).max(100).optional(),
+  em1_ratio: z.string().min(1).max(50).optional(),
+  fermentation_days: z.coerce.number().int().min(0).max(365).optional(),
+}).strict();
+
 // GET /api/batches
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const processorId = req.query.processor_id as string;
+    const rawProcessorId = req.query.processor_id;
+    const processorId = typeof rawProcessorId === 'string' ? rawProcessorId.trim() : undefined;
+    if (processorId && (processorId.length === 0 || processorId.length > 100)) {
+      res.status(400).json({ success: false, error: 'Invalid processor_id format' });
+      return;
+    }
     
     if (isSupabaseConfigured()) {
       const supabase = getSupabaseClient();
@@ -40,6 +83,10 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    if (!id || typeof id !== 'string' || id.length > 100) {
+      res.status(400).json({ success: false, error: 'Valid batch ID is required' });
+      return;
+    }
     
     if (isSupabaseConfigured()) {
       const supabase = getSupabaseClient();
@@ -63,8 +110,14 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // POST /api/batches
+// TODO: Add JWT authentication middleware before production launch
 router.post('/', async (req: Request, res: Response) => {
   try {
+    const parsed = CreateBatchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: 'Validation failed', details: parsed.error.issues });
+      return;
+    }
     const { 
       product_name, 
       product_type, 
@@ -73,10 +126,10 @@ router.post('/', async (req: Request, res: Response) => {
       destination_zone, 
       processor_id,
       batch_number
-    } = req.body;
+    } = parsed.data;
 
     const displayBatchId = batch_number || `BCH-${Date.now().toString().slice(-6)}`;
-    const weightNum = parseFloat(weight_kg ?? '100') || 100;
+    const weightNum = weight_kg ?? 100;
     
     const batchData = {
       batch_number: displayBatchId,
@@ -131,10 +184,20 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // PUT /api/batches/:id
+// TODO: Add JWT authentication middleware before production launch
 router.put('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    if (!id || typeof id !== 'string' || id.length > 100) {
+      res.status(400).json({ success: false, error: 'Valid batch ID is required' });
+      return;
+    }
+    const parsed = UpdateBatchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: 'Validation failed', details: parsed.error.issues });
+      return;
+    }
+    const updates = parsed.data;
     
     if (isSupabaseConfigured()) {
       const supabase = getSupabaseClient();
@@ -159,10 +222,16 @@ router.put('/:id', async (req: Request, res: Response) => {
 });
 
 // POST /api/batches/certify
+// TODO: Add JWT authentication middleware before production launch
 router.post('/certify', async (req: Request, res: Response) => {
   try {
-    const { batchId, trustScore } = req.body;
-    const finalTrustScore = typeof trustScore === 'number' ? trustScore : parseInt(trustScore ?? '80', 10) || 80;
+    const parsed = CertifyBatchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: 'Validation failed', details: parsed.error.issues });
+      return;
+    }
+    const { batchId, trustScore } = parsed.data;
+    const finalTrustScore = trustScore ?? 80;
     
     // Generate actual batch ID if none provided
     const displayBatchId = batchId || `BCH-${Date.now().toString().slice(-6)}`;
@@ -234,10 +303,20 @@ router.post('/certify', async (req: Request, res: Response) => {
 });
 
 // Readings stubs so they are handled cleanly inside batchRouter
+// TODO: Add JWT authentication middleware before production launch
 router.post('/:id/readings', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { pH, EC, temperature, em1_ratio, fermentation_days } = req.body;
+    if (!id || typeof id !== 'string' || id.length > 100) {
+      res.status(400).json({ success: false, error: 'Valid batch ID is required' });
+      return;
+    }
+    const parsed = RecordReadingsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: 'Validation failed', details: parsed.error.issues });
+      return;
+    }
+    const { pH, EC, temperature, em1_ratio, fermentation_days } = parsed.data;
     
     if (isSupabaseConfigured()) {
       const supabase = getSupabaseClient();
@@ -276,6 +355,10 @@ router.post('/:id/readings', async (req: Request, res: Response) => {
 router.get('/:id/readings', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    if (!id || typeof id !== 'string' || id.length > 100) {
+      res.status(400).json({ success: false, error: 'Valid batch ID is required' });
+      return;
+    }
     if (isSupabaseConfigured()) {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase.from('iot_readings').select('*').eq('batch_id', id);
@@ -306,9 +389,14 @@ router.get('/:id/readings', async (req: Request, res: Response) => {
 });
 
 // DELETE /api/batches/:id
+// TODO: Add JWT authentication middleware before production launch
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    if (!id || typeof id !== 'string' || id.length > 100) {
+      res.status(400).json({ success: false, error: 'Valid batch ID is required' });
+      return;
+    }
     
     if (isSupabaseConfigured()) {
       try {

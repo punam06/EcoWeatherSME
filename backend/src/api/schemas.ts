@@ -12,16 +12,17 @@ import { z } from 'zod';
 // ─── Trust Score Schema ───────────────────────────────────────────────────────
 
 export const TrustScoreRequestSchema = z.object({
-  /** pH of biological material — must be a positive number */
+  /** pH of biological material — must be between 0 and 14 */
   pH: z
     .number({ required_error: 'pH is required', invalid_type_error: 'pH must be a number' })
-    .positive('pH must be positive')
+    .min(0, 'pH cannot be negative')
     .max(14, 'pH cannot exceed 14'),
 
   /** Electrical Conductivity in dS/m */
   ec: z
     .number({ required_error: 'ec is required', invalid_type_error: 'ec must be a number' })
-    .nonnegative('ec must be non-negative'),
+    .min(0, 'ec must be non-negative')
+    .max(20, 'ec cannot exceed 20'),
 
   /** Temperature in Celsius */
   temperatureCelsius: z
@@ -42,7 +43,8 @@ export const TrustScoreRequestSchema = z.object({
       required_error: 'em1Ratio is required',
       invalid_type_error: 'em1Ratio must be a number',
     })
-    .positive('em1Ratio must be positive'),
+    .min(0.0001, 'em1Ratio must be at least 0.0001')
+    .max(1.0, 'em1Ratio cannot exceed 1.0'),
 
   /** Fermentation duration in days (minimum 0 — scoring penalises below 21) */
   fermentationDays: z
@@ -51,8 +53,9 @@ export const TrustScoreRequestSchema = z.object({
       invalid_type_error: 'fermentationDays must be a number',
     })
     .int('fermentationDays must be an integer')
-    .nonnegative('fermentationDays must be 0 or greater'),
-});
+    .min(0, 'fermentationDays must be 0 or greater')
+    .max(365, 'fermentationDays cannot exceed 365'),
+}).strict();
 
 export type TrustScoreRequest = z.infer<typeof TrustScoreRequestSchema>;
 
@@ -62,7 +65,8 @@ export const ClimateDVSRequestSchema = z.object({
   /** Delivery zone — any valid Dhaka zone name */
   zone: z
     .string({ required_error: 'zone is required', invalid_type_error: 'zone must be a string' })
-    .min(1, 'zone must not be empty'),
+    .min(1, 'zone must not be empty')
+    .max(100, 'zone name too long'),
 
   /** Regional ambient temperature in Celsius */
   ambientTemperature: z
@@ -91,7 +95,7 @@ export const ClimateDVSRequestSchema = z.object({
     })
     .min(0, 'trustScore must be between 0 and 100')
     .max(100, 'trustScore must be between 0 and 100'),
-});
+}).strict();
 
 export type ClimateDVSRequest = z.infer<typeof ClimateDVSRequestSchema>;
 
@@ -109,6 +113,6 @@ export const AIRecommendRequestSchema = z.object({
     required_error: 'language is required',
     invalid_type_error: 'language must be "bn" or "en"',
   }),
-});
+}).strict();
 
 export type AIRecommendRequest = z.infer<typeof AIRecommendRequestSchema>;

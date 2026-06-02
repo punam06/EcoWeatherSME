@@ -11,6 +11,7 @@
 
 import path from 'path';
 import fetch from 'node-fetch';
+import { z } from 'zod';
 
 // ── Load environment variables ───────────────────────────────────────────────
 // Always try to load .env files — Render will use dashboard vars which override these.
@@ -19,8 +20,25 @@ const dotenv = require('dotenv');
 dotenv.config();                                              // backend/.env
 dotenv.config({ path: path.resolve(__dirname, '..', '..', '.env') }); // root .env
 
+// Environment variable startup check
+const checkEnvVars = () => {
+  const required = ['GROQ_API_KEY', 'OPENWEATHER_API_KEY'];
+  const missing = required.filter((key) => !process.env[key]);
+  if (missing.length > 0) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error(`❌ CRITICAL STARTUP ERROR: Missing required environment variables in production: ${missing.join(', ')}`);
+      process.exit(1);
+    } else {
+      console.warn(`⚠️ WARNING: Missing environment variables for full functionality: ${missing.join(', ')}`);
+    }
+  }
+};
+checkEnvVars();
+
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import { globalRateLimiter } from './lib/middleware/rateLimiter';
 
 // ── Route Imports ─────────────────────────────────────────────────────────────
 import trustScoreRouter from './api/routes/trustScore.route';
@@ -44,12 +62,19 @@ const PORT = parseInt(process.env.PORT ?? '5001', 10);
 // MIDDLEWARE
 // ═══════════════════════════════════════════════════════════════
 
+// Apply helmet security headers
+app.use(helmet());
+
+// Apply global rate limiting
+app.use(globalRateLimiter);
+
 // JSON body parser
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // CORS — allow frontend origins
 const FRONTEND_ORIGINS = [
+  process.env.CORS_ORIGIN,
   process.env.FRONTEND_URL,
   'https://eco-sortha.vercel.app',
   'https://ecosortha.onrender.com',
@@ -81,9 +106,42 @@ app.use(
 );
 
 app.use((req, res, next) => {
-  console.log(`📡 [Incoming Request] ${req.method} ${req.url} - Body:`, req.body);
+  // Wrap req.body logging to prevent printout of sensitive fields if they ever occur
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`📡 [Incoming Request] ${req.method} ${req.url} - Body:`, req.body);
+  }
   next();
 });
+
+// Zod query schemas for input validation
+const GeocodeQuerySchema = z.object({
+  q: z.string().min(1).max(100),
+});
+
+const WeatherQuerySchema = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lon: z.coerce.number().min(-180).max(180),
+});
+
+const CleverResponderTrustScoreSchema = z.object({
+  action: z.literal('trust-score'),
+  pH: z.coerce.number().min(0).max(14).default(4.0),
+  EC: z.coerce.number().min(0).max(20).default(3.5),
+  temp: z.coerce.number().min(-50).max(100).default(28),
+  ratio: z.string().min(1).max(50).default('1:1:20'),
+  days: z.coerce.number().int().min(0).max(365).default(9),
+}).strict();
+
+const CleverResponderMicroclimateSchema = z.object({
+  action: z.literal('microclimate-metrics'),
+  trustScore: z.coerce.number().min(0).max(100).default(80),
+  zone: z.string().min(1).max(100).default('Mirpur'),
+  packaging: z.string().min(1).max(100).default('standard'),
+  hour: z.coerce.number().int().min(0).max(23).default(12),
+  baseTemp: z.coerce.number().min(-10).max(60).default(31),
+  windSpeed: z.coerce.number().min(0).max(200).default(8),
+  routeDuration: z.coerce.number().min(0).max(10080).default(90),
+}).strict();
 
 // ═══════════════════════════════════════════════════════════════
 // HEALTH & DIAGNOSTICS
@@ -262,18 +320,19 @@ app.get('/api/dashboard', async (req: Request, res: Response) => {
 
 // ── Geocoding Endpoint ──────────────────────────────────────────────────
 app.get('/api/geocode', async (req: Request, res: Response) => {
-  const query = req.query.q;
-  if (!query) {
-    res.status(400).json({ success: false, error: 'Query parameter "q" is required' });
+  const parsed = GeocodeQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: 'Validation failed', details: parsed.error.issues });
     return;
   }
+  const { q: query } = parsed.data;
   const apiKey = process.env.OPENWEATHER_API_KEY;
   if (!apiKey) {
     res.status(500).json({ success: false, error: 'Weather API key is not configured on backend' });
     return;
   }
   try {
-    const url = `http://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(query as string)},BD&limit=1&appid=${apiKey}`;
+    const url = `http://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(query)},BD&limit=1&appid=${apiKey}`;
     const response = await fetch(url);
     const data: any = await response.json();
     if (Array.isArray(data) && data.length > 0) {
@@ -297,7 +356,7 @@ app.get('/api/geocode', async (req: Request, res: Response) => {
         'tejgaon': { lat: 23.7612, lon: 90.3994 },
         'old dhaka': { lat: 23.7083, lon: 90.4075 }
       };
-      const cleanQuery = String(query).toLowerCase().trim();
+      const cleanQuery = query.toLowerCase().trim();
       const fallback = fallbackZones[cleanQuery] || { lat: 23.8103, lon: 90.4125 };
       res.json({
         success: true,
@@ -312,11 +371,12 @@ app.get('/api/geocode', async (req: Request, res: Response) => {
 
 // ── Weather Endpoint ─────────────────────────────────────────────────────
 app.get('/api/weather', async (req: Request, res: Response) => {
-  const { lat, lon } = req.query;
-  if (!lat || !lon) {
-    res.status(400).json({ success: false, error: 'lat and lon query parameters are required' });
+  const parsed = WeatherQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ success: false, error: 'Validation failed', details: parsed.error.issues });
     return;
   }
+  const { lat, lon } = parsed.data;
   const apiKey = process.env.OPENWEATHER_API_KEY;
   if (!apiKey) {
     res.status(500).json({ success: false, error: 'Weather API key is not configured on backend' });
@@ -351,24 +411,24 @@ app.post('/api/clever-responder', async (req: Request, res: Response) => {
   const { action } = req.body;
 
   if (action === 'trust-score') {
-    const { pH, EC, temp, ratio, days } = req.body;
-    const parsedPH = parseFloat(pH ?? '4.0');
-    const parsedEC = parseFloat(EC ?? '3.5');
-    const parsedTemp = parseFloat(temp ?? '28');
-    const parsedDays = parseInt(days ?? '9', 10);
-    const parsedRatio = ratio ?? '1:1:20';
+    const parsed = CleverResponderTrustScoreSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: 'Validation failed', details: parsed.error.issues });
+      return;
+    }
+    const { pH, EC, temp, ratio, days } = parsed.data;
 
     let score = 100;
     const pHOpt = 4.0, ECOpt = 3.5, tempOpt = 28;
-    score -= Math.abs(parsedPH - pHOpt) * 8;
-    score -= Math.abs(parsedEC - ECOpt) * 6;
-    score -= Math.abs(parsedTemp - tempOpt) * 1.2;
+    score -= Math.abs(pH - pHOpt) * 8;
+    score -= Math.abs(EC - ECOpt) * 6;
+    score -= Math.abs(temp - tempOpt) * 1.2;
     const ratioMap: Record<string, number> = { "1:1:10": -5, "1:1:20": 0, "1:1:30": -3, "1:1:40": -8 };
-    score += ratioMap[parsedRatio] ?? 0;
-    if (parsedDays < 7) {
-      score -= (7 - parsedDays) * 4;
-    } else if (parsedDays > 14) {
-      score -= (parsedDays - 14) * 2;
+    score += ratioMap[ratio] ?? 0;
+    if (days < 7) {
+      score -= (7 - days) * 4;
+    } else if (days > 14) {
+      score -= (days - 14) * 2;
     }
     const trustScore = Math.max(0, Math.min(100, Math.round(score)));
 
@@ -380,25 +440,23 @@ app.post('/api/clever-responder', async (req: Request, res: Response) => {
   }
 
   if (action === 'microclimate-metrics') {
-    const { trustScore, zone, packaging, hour, baseTemp, windSpeed, routeDuration } = req.body;
-    const parsedTS = parseFloat(trustScore ?? '80');
-    const parsedBaseTemp = parseFloat(baseTemp ?? '31');
-    const parsedHour = parseInt(hour ?? '12', 10);
-    const parsedWindSpeed = parseFloat(windSpeed ?? '8');
-    const parsedRouteDuration = parseFloat(routeDuration ?? '90');
-    const selectedZone = zone ?? 'Mirpur';
-    const selectedPkg = packaging ?? 'standard';
+    const parsed = CleverResponderMicroclimateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: 'Validation failed', details: parsed.error.issues });
+      return;
+    }
+    const { trustScore, zone, packaging, hour, baseTemp, windSpeed, routeDuration } = parsed.data;
 
     const { getZoneProfile } = require('./lib/services/merm.service');
-    const zoneProfile = getZoneProfile(selectedZone);
+    const zoneProfile = getZoneProfile(zone);
     
     const getSolarFactor = (h: number) => {
       if (h >= 11 && h < 15) return 1.0;
       if ((h >= 8 && h < 11) || (h >= 15 && h < 18)) return 0.6;
       return 0.2;
     };
-    const solarFactor = getSolarFactor(parsedHour);
-    const windCooling = parsedWindSpeed * 0.08;
+    const solarFactor = getSolarFactor(hour);
+    const windCooling = windSpeed * 0.08;
     
     const uhiOffsets: Record<string, number> = {
       "Old Dhaka": 3.4,
@@ -461,8 +519,8 @@ app.post('/api/clever-responder', async (req: Request, res: Response) => {
       "Savar": 2.8,
       "Gazipur": 2.4
     };
-    const offset = uhiOffsets[selectedZone] ?? zoneProfile.uhiOffset;
-    const adjustedTemp = parsedBaseTemp + (offset * solarFactor) - windCooling;
+    const offset = uhiOffsets[zone] ?? zoneProfile.uhiOffset;
+    const adjustedTemp = baseTemp + (offset * solarFactor) - windCooling;
 
     let thermalRiskValue = 0.1;
     let thermalRiskLabel = 'Low';
@@ -478,15 +536,15 @@ app.post('/api/clever-responder', async (req: Request, res: Response) => {
     }
 
     const trf = Math.max(0.05, Math.min(1.0, (adjustedTemp - 22) / 18));
-    const dvsBase = Math.round(parsedTS * (1 - trf * 0.42));
+    const dvsBase = Math.round(trustScore * (1 - trf * 0.42));
 
-    const pkgFactor = selectedPkg === "thermal" ? 4.0 : selectedPkg === "insulated" ? 2.0 : 1.0;
+    const pkgFactor = packaging === "thermal" ? 4.0 : packaging === "insulated" ? 2.0 : 1.0;
     const getSolarHourMultiplier = (h: number) => {
       if (h >= 11 && h < 15) return 1.5;
       if ((h >= 8 && h < 11) || (h >= 15 && h < 18)) return 1.0;
       return 0.4;
     };
-    const solarMulti = getSolarHourMultiplier(parsedHour);
+    const solarMulti = getSolarHourMultiplier(hour);
     
     const hazardMultiplierMap: Record<string, number> = {
       'CRITICAL': 1.8,
@@ -498,16 +556,16 @@ app.post('/api/clever-responder', async (req: Request, res: Response) => {
     const baseSurvivals: Record<string, number> = {
       "Old Dhaka": 0.90, "Mirpur": 1.02, "Savar": 1.00, "Gulshan": 1.20
     };
-    const baseSurvival = baseSurvivals[selectedZone] ?? (zoneProfile.hazardClass === 'CRITICAL' ? 0.9 : zoneProfile.hazardClass === 'HIGH' ? 1.0 : 1.2);
+    const baseSurvival = baseSurvivals[zone] ?? (zoneProfile.hazardClass === 'CRITICAL' ? 0.9 : zoneProfile.hazardClass === 'HIGH' ? 1.0 : 1.2);
 
     const tempFactor = Math.max(0.3, (adjustedTemp - 18) / 10);
-    const tstRaw = (parsedTS * pkgFactor * baseSurvival * 1.8) / (hazardMultiplier * solarMulti * tempFactor);
+    const tstRaw = (trustScore * pkgFactor * baseSurvival * 1.8) / (hazardMultiplier * solarMulti * tempFactor);
     const tst = Math.max(10, Math.round(tstRaw));
 
     // Deduct DVS penalty continuously based on route duration
-    const penalty = Math.round((parsedRouteDuration / tst) * 12 + (parsedRouteDuration > tst ? (parsedRouteDuration - tst) * 0.4 : 0));
+    const penalty = Math.round((routeDuration / tst) * 12 + (routeDuration > tst ? (routeDuration - tst) * 0.4 : 0));
     const dvs = Math.max(0, Math.min(100, dvsBase - penalty));
-    const deliveryTrustScore = Math.max(0, Math.min(100, Math.round(parsedTS * (1 - trf * 0.25) - (parsedRouteDuration > tst ? (parsedRouteDuration - tst) * 0.15 : 0))));
+    const deliveryTrustScore = Math.max(0, Math.min(100, Math.round(trustScore * (1 - trf * 0.25) - (routeDuration > tst ? (routeDuration - tst) * 0.15 : 0))));
 
     res.json({
       success: true,
@@ -524,7 +582,7 @@ app.post('/api/clever-responder', async (req: Request, res: Response) => {
     return;
   }
 
-  res.status(400).json({ success: false, error: 'Unknown action' });
+  res.status(400).json({ success: false, error: 'Unknown action or invalid body parameters' });
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -628,13 +686,6 @@ const dbRequiredMiddleware = (_req: Request, res: Response) => {
   });
 };
 
-// Legacy stubs requiring Supabase. Commented out batches to allow our in-memory batch store fallback to work.
-// app.get('/api/batches', dbRequiredMiddleware);
-// app.post('/api/batches', dbRequiredMiddleware);
-// app.get('/api/batches/:id', dbRequiredMiddleware);
-// app.put('/api/batches/:id', dbRequiredMiddleware);
-// app.post('/api/batches/:id/readings', dbRequiredMiddleware);
-// app.get('/api/batches/:id/readings', dbRequiredMiddleware);
 app.get('/api/users', dbRequiredMiddleware);
 app.post('/api/users', dbRequiredMiddleware);
 app.post('/api/zones', dbRequiredMiddleware);

@@ -3,36 +3,32 @@
  * ECOSORTHA AI — RATE LIMITER MIDDLEWARE
  * File: src/lib/middleware/rateLimiter.ts
  *
- * In-memory IP/Session-based sliding window rate limiter for
- * AI/agent endpoints.
+ * Implements robust IP-based rate limiting using express-rate-limit.
  * ═══════════════════════════════════════════════════════════════
  */
 
-import { Request, Response, NextFunction } from 'express';
+import rateLimit from 'express-rate-limit';
 
-const WINDOW_MS = 60 * 1000; // 1 minute window
-const MAX_REQUESTS = 30; // Max 30 requests per minute
+// Global API Rate Limiter: 100 requests per 15 minutes per IP
+export const globalRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 100,
+  standardHeaders: 'draft-7', // draft-6: `RateLimit-*` headers; draft-7: combined `RateLimit` header
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  message: {
+    success: false,
+    error: 'Too many requests. Please try again after 15 minutes.',
+  },
+});
 
-const requestLogs = new Map<string, number[]>();
-
-export function aiRateLimiter(req: Request, res: Response, next: NextFunction): void {
-  const key = req.ip || 'global';
-  const now = Date.now();
-
-  let timestamps = requestLogs.get(key) || [];
-  
-  // Filter out timestamps outside the current window
-  timestamps = timestamps.filter((time) => now - time < WINDOW_MS);
-
-  if (timestamps.length >= MAX_REQUESTS) {
-    res.status(429).json({
-      success: false,
-      error: 'Too many requests. Please try again after a minute.',
-    });
-    return;
-  }
-
-  timestamps.push(now);
-  requestLogs.set(key, timestamps);
-  next();
-}
+// Strict AI/RAG Rate Limiter: 20 requests per 15 minutes per IP
+export const aiRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 20,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: 'AI search and agent limits reached. Please try again after 15 minutes.',
+  },
+});

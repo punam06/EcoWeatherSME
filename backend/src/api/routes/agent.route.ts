@@ -27,7 +27,17 @@ const AgentMessageSchema = z.object({
   sessionId: z.string().optional(),
   farmerId: z.string().optional(),
   customProducts: z.array(z.any()).optional(),
-});
+}).strict();
+
+const VoiceOrderSchema = z.object({
+  productName: z.string().min(1).max(255).optional(),
+  quantity: z.coerce.number().int().min(1).max(100000).optional(),
+  farmerId: z.string().min(1).max(100).optional(),
+  query: z.string().min(1).max(2000).optional(),
+  language: z.enum(['en', 'bn']).optional(),
+  sessionId: z.string().min(1).max(100).optional(),
+  customProducts: z.array(z.any()).optional(),
+}).strict();
 
 /**
  * POST /api/agent/message
@@ -118,10 +128,17 @@ router.post('/voice-message', aiRateLimiter, async (req: Request, res: Response,
  * POST /api/orders/voice (also mounted as /api/agent/orders/voice)
  * Direct transactional agent endpoint. Parses speech intent, queries catalog,
  * and submits orders with Zod validation, rate limiting, and dialect normalization.
+ *
+ * TODO: Add JWT authentication middleware before production launch
  */
 router.post('/orders/voice', aiRateLimiter, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { productName, quantity, farmerId, query, language, sessionId, customProducts } = req.body;
+    const parsed = VoiceOrderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: 'Validation failed', details: parsed.error.issues });
+      return;
+    }
+    const { productName, quantity, farmerId, query, language, sessionId, customProducts } = parsed.data;
 
     // If it's a traditional text query instead of direct order values, fall back to processMessage
     if (query && !productName) {
