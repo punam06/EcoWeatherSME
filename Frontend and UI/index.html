@@ -6729,6 +6729,43 @@
 
             setInput(transcript);
             handleSend(transcript);
+
+            // Voice checkout integration (fail-silent background parser)
+            (async () => {
+              try {
+                let sessionUid = sessionStorage.getItem("voice_checkout_session_id");
+                if (!sessionUid) {
+                  sessionUid = crypto.randomUUID();
+                  sessionStorage.setItem("voice_checkout_session_id", sessionUid);
+                }
+                const availProds = ["Biochar", "Trichoderma", "Rhizobium", "Neem Oil", "Bio-Fertilizer"];
+                const checkoutRes = await fetch(`${BACKEND_URL}/api/checkout/voice`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    transcript: transcript,
+                    sessionId: sessionUid,
+                    availableProducts: availProds
+                  })
+                });
+                const checkoutData = await checkoutRes.json();
+                if (checkoutData.success) {
+                  const { parsed, orderId } = checkoutData;
+                  const confirmedMessage = `✅ Order received: ${parsed.quantity} ${parsed.unit || 'bag(s)'} of ${parsed.productName} — Order ID: ${orderId}`;
+                  
+                  setMessages(prev => [
+                    ...prev,
+                    {
+                      role: "system",
+                      content: confirmedMessage,
+                      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    }
+                  ]);
+                }
+              } catch (e) {
+                console.warn("Voice checkout pipeline error (silently ignored):", e);
+              }
+            })();
           };
 
           recognition.onerror = (event) => {
@@ -8322,6 +8359,44 @@
           recognition.onresult = (event) => {
             const transcript = event.results[0][0].transcript;
             handleSendMessage(transcript);
+
+            // Voice checkout integration (fail-silent background parser)
+            (async () => {
+              try {
+                let sessionUid = sessionStorage.getItem("voice_checkout_session_id");
+                if (!sessionUid) {
+                  sessionUid = crypto.randomUUID();
+                  sessionStorage.setItem("voice_checkout_session_id", sessionUid);
+                }
+                const availProds = ["Biochar", "Trichoderma", "Rhizobium", "Neem Oil", "Bio-Fertilizer"];
+                const checkoutRes = await fetch(`${BACKEND_URL}/api/checkout/voice`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    transcript: transcript,
+                    sessionId: sessionUid,
+                    availableProducts: availProds
+                  })
+                });
+                const checkoutData = await checkoutRes.json();
+                if (checkoutData.success) {
+                  const { parsed, orderId } = checkoutData;
+                  const confirmedMessage = `✅ Order received: ${parsed.quantity} ${parsed.unit || 'bag(s)'} of ${parsed.productName} — Order ID: ${orderId}`;
+                  
+                  setMessages(prev => [
+                    ...prev,
+                    {
+                      role: "assistant",
+                      type: "TEXT",
+                      content: confirmedMessage,
+                      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    }
+                  ]);
+                }
+              } catch (e) {
+                console.warn("Voice checkout pipeline error (silently ignored):", e);
+              }
+            })();
           };
 
           recognition.onerror = () => {
