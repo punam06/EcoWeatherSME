@@ -69,3 +69,17 @@ export interface ElNinoAlert {
   expectedImpacts: string[];
   recommendedActions: string[];
 }
+
+export interface SpotPricingResponse {
+  batchId: string;
+  productName: string;
+  basePrice: number;
+  discountedPrice: number;
+  discountPercent: number;
+  tstMinutes: number;
+  riskTier: 'high' | 'medium' | 'safe';
+  riskLabel: string;
+  warningMessage: string;
+  currency: string;
+}
+

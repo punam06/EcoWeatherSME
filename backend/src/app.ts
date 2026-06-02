@@ -49,6 +49,7 @@ import aiChatRouter from './api/routes/aiChat.route';
 import esgRouter from './api/routes/esg.route';
 import batchRouter from './api/routes/batch.route';
 import checkoutRouter from './api/routes/checkout.route';
+import spotPricingRouter from './api/routes/spotPricing.route';
 import { startSessionPruningInterval } from './lib/services/chatSession.service';
 
 // ── Supabase Guard ────────────────────────────────────────────────────────────
@@ -221,6 +222,7 @@ app.use('/api/ai/chat', aiChatRouter);
 app.use('/api/batches', batchRouter);
 app.use('/api/esg', esgRouter);
 app.use('/api/checkout', checkoutRouter);
+app.use('/api/spot-pricing', spotPricingRouter);
 
 // ── Dashboard Summary Endpoint ────────────────────────────────────────────
 app.get('/api/dashboard', async (req: Request, res: Response) => {

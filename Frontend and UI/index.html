@@ -5109,6 +5109,91 @@
           return () => clearInterval(timer);
         }, []);
 
+        const fetchSpotPricing = async (batchId) => {
+          try {
+            const res = await fetch(`${BACKEND_URL}/api/spot-pricing/${batchId}`);
+            if (res.ok) {
+              return await res.json();
+            }
+          } catch (err) {
+            console.error("Failed to fetch spot pricing:", err);
+          }
+          return null;
+        };
+
+        const renderSpotPricingCard = (data) => {
+          const panel = document.getElementById("spot-pricing-panel");
+          const originalPrice = document.getElementById("original-price-display");
+          const discountedPrice = document.getElementById("discounted-price-display");
+          const riskBadge = document.getElementById("risk-badge-display");
+          const riskWarning = document.getElementById("risk-warning-display");
+
+          if (!panel) return;
+
+          if (!data || data.riskTier === "safe") {
+            panel.style.display = "none";
+            return;
+          }
+
+          // Inject pulse badge animation into head if not already present
+          if (!document.getElementById("tst-badge-animation-style")) {
+            const style = document.createElement("style");
+            style.id = "tst-badge-animation-style";
+            style.innerHTML = `
+              @keyframes pulse-badge {
+                0% { opacity: 1.0; }
+                50% { opacity: 0.6; }
+                100% { opacity: 1.0; }
+              }
+            `;
+            document.head.appendChild(style);
+          }
+
+          if (originalPrice) {
+            originalPrice.textContent = "৳" + data.basePrice;
+            originalPrice.style.display = "inline";
+          }
+          if (discountedPrice) {
+            discountedPrice.textContent = "৳" + data.discountedPrice + " (" + data.discountPercent + "% OFF)";
+            discountedPrice.style.display = "inline";
+          }
+          if (riskBadge) {
+            riskBadge.textContent = data.riskLabel;
+            riskBadge.style.display = "inline-block";
+            riskBadge.style.animation = "pulse-badge 2s infinite";
+            
+            // Set risk colors based on tier
+            if (data.riskTier === "high") {
+              riskBadge.style.background = ACCENT.redBg;
+              riskBadge.style.color = ACCENT.red;
+              riskBadge.style.border = "1px solid " + ACCENT.redBorder;
+            } else {
+              riskBadge.style.background = ACCENT.amberBg;
+              riskBadge.style.color = ACCENT.amber;
+              riskBadge.style.border = "1px solid " + ACCENT.amberBorder;
+            }
+          }
+          if (riskWarning) {
+            riskWarning.textContent = data.warningMessage;
+            riskWarning.style.display = "block";
+          }
+
+          panel.style.display = "flex";
+        };
+
+        useEffect(() => {
+          if (!selectedBatch) {
+            const panel = document.getElementById("spot-pricing-panel");
+            if (panel) panel.style.display = "none";
+            return;
+          }
+          const loadSpotPricing = async () => {
+            const data = await fetchSpotPricing(selectedBatch.id || selectedBatch.batch_number);
+            renderSpotPricingCard(data);
+          };
+          loadSpotPricing();
+        }, [selectedBatch]);
+
         const fetchBatches = async () => {
           setIsLoading(true);
           try {
@@ -5819,6 +5904,70 @@
                       certification.
                     </div>
                   )}
+
+                  <div
+                    id="spot-pricing-panel"
+                    style={{
+                      display: "none",
+                      background: "var(--bg-input)",
+                      borderRadius: 12,
+                      padding: 20,
+                      flexDirection: "column",
+                      gap: 12,
+                      border: "1px solid var(--border-primary)"
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: "var(--text-muted)",
+                        fontWeight: 600,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase"
+                      }}
+                    >
+                      ⚡ Spot Clearance Deal
+                    </div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                      <span
+                        id="discounted-price-display"
+                        style={{
+                          fontSize: 24,
+                          fontWeight: 800,
+                          color: ACCENT.green
+                        }}
+                      />
+                      <span
+                        id="original-price-display"
+                        style={{
+                          fontSize: 14,
+                          color: "var(--text-dim)",
+                          textDecoration: "line-through"
+                        }}
+                      />
+                    </div>
+                    <div
+                      id="risk-badge-display"
+                      style={{
+                        display: "inline-block",
+                        padding: "4px 8px",
+                        borderRadius: 6,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        width: "max-content",
+                        textTransform: "uppercase"
+                      }}
+                    />
+                    <p
+                      id="risk-warning-display"
+                      style={{
+                        fontSize: 12,
+                        color: "var(--text-secondary)",
+                        lineHeight: 1.4,
+                        margin: 0
+                      }}
+                    />
+                  </div>
 
                   {/* DELETE BATCH BUTTON */}
                   <div style={{ marginTop: "auto", paddingTop: 20 }}>
