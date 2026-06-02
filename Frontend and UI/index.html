@@ -6413,6 +6413,61 @@
         const [chatSessionId, setChatSessionId] = useState(null);
         const fileInputRef = useRef(null);
 
+        // check mic availability on mount
+        useEffect(() => {
+          const checkMicAvailability = async () => {
+            const fallbackContainer = document.getElementById("text-fallback-container");
+            if (!fallbackContainer) return;
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+              fallbackContainer.style.display = "block";
+              return;
+            }
+
+            try {
+              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              stream.getTracks().forEach((track) => track.stop());
+            } catch (err) {
+              fallbackContainer.style.display = "block";
+            }
+          };
+          checkMicAvailability();
+        }, []);
+
+        const handleFallbackSubmit = async () => {
+          const textarea = document.getElementById("rag-text-input");
+          const submitBtn = document.getElementById("rag-text-submit");
+          if (!textarea || !submitBtn) return;
+
+          const text = textarea.value.trim();
+          if (!text) return;
+
+          try {
+            submitBtn.disabled = true;
+            submitBtn.textContent = "Sending...";
+
+            await handleSend(text);
+
+            textarea.value = "";
+          } catch (err) {
+            console.error("Text fallback submission failed:", err);
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "system",
+                content: "Unable to process your query. Please try again.",
+                time: new Date().toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
+              },
+            ]);
+          } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Submit";
+          }
+        };
+
         // Initialize a backend session when the chatbot page mounts
         useEffect(() => {
           const initChatSession = async () => {
@@ -6781,8 +6836,12 @@
               if (textInput) {
                 textInput.focus();
               }
-            } else if (event.error === "not-allowed") {
+            } else if (event.error === "not-allowed" || event.error === "service-not-allowed") {
               setVoiceError("মাইক্রোফোন অনুমতি দিন।");
+              const fallbackContainer = document.getElementById("text-fallback-container");
+              if (fallbackContainer) {
+                fallbackContainer.style.display = "block";
+              }
             } else if (event.error === "no-speech") {
               setVoiceError("কোনো কথা শোনা যায়নি। আবার চেষ্টা করুন।");
             } else {
@@ -7124,6 +7183,22 @@
                 >
                   ↑
                 </button>
+              </div>
+              <div id="text-fallback-container" style={{ display: "none" }}>
+                <textarea
+                  id="rag-text-input"
+                  placeholder="Type your question in Bangla or English..."
+                  rows="2"
+                  maxLength="500"
+                  aria-label="Text input for RAG assistant"
+                  aria-describedby="text-fallback-hint"
+                />
+                <button id="rag-text-submit" onClick={handleFallbackSubmit} aria-label="Submit text query to assistant">
+                  Submit
+                </button>
+                <p id="text-fallback-hint">
+                  Use text input if microphone is unavailable
+                </p>
               </div>
             </Card>
           </div>
