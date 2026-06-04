@@ -50,6 +50,7 @@ import esgRouter from './api/routes/esg.route';
 import batchRouter from './api/routes/batch.route';
 import checkoutRouter from './api/routes/checkout.route';
 import spotPricingRouter from './api/routes/spotPricing.route';
+import orderRouter from './api/routes/order.route';
 import { startSessionPruningInterval } from './lib/services/chatSession.service';
 
 // ── Supabase Guard ────────────────────────────────────────────────────────────
@@ -216,6 +217,7 @@ app.post('/api/orders/voice', (req, res, next) => {
   req.url = '/orders/voice';
   agentRouter(req, res, next);
 });
+app.use('/api/orders', orderRouter);
 
 app.use('/api/agent', agentRouter);
 app.use('/api/ai/chat', aiChatRouter);
@@ -723,22 +725,25 @@ app.use((_req: Request, res: Response) => {
 // SERVER START
 // ═══════════════════════════════════════════════════════════════
 
-// Start session pruning interval on boot
 startSessionPruningInterval();
 
-app.listen(PORT, () => {
-  console.log('\n╔══════════════════════════════════════════════════════════╗');
-  console.log('║       EcoSortha AI — ClimateShield Backend v2.0          ║');
-  console.log('╚══════════════════════════════════════════════════════════╝');
-  console.log(`\n✅  Server running on port ${PORT}`);
-  console.log(`📡  API Base URL:          http://localhost:${PORT}/api`);
-  console.log(`🏥  Health check:          http://localhost:${PORT}/api/health`);
-  console.log(`🌡️   Trust Score:           POST /api/batch/trust-score`);
-  console.log(`🚚  Delivery Viability:    POST /api/climate/dvs`);
-  console.log(`🤖  AI Recommend (RAG):    POST /api/ai/recommend`);
-  console.log(`\n🗄️   Supabase:             ${isSupabaseConfigured() ? '✅ Connected' : '⚠️  Not configured'}`);
-  console.log(`🔑  Groq AI:               ${process.env.GROQ_API_KEY ? '✅ Key set' : '⚠️  GROQ_API_KEY missing'}`);
-  console.log('\n');
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log('\n╔══════════════════════════════════════════════════════════╗');
+    console.log('║       EcoSortha AI — ClimateShield Backend v2.0          ║');
+    console.log('╚══════════════════════════════════════════════════════════╝');
+    console.log(`\n✅  Server running on port ${PORT}`);
+    console.log(`📡  API Base URL:          http://localhost:${PORT}/api`);
+    console.log(`🏥  Health check:          http://localhost:${PORT}/api/health`);
+    console.log(`🌡️   Trust Score:           POST /api/batch/trust-score`);
+    console.log(`🚚  Delivery Viability:    POST /api/climate/dvs`);
+    console.log(`🤖  AI Recommend (RAG):    POST /api/ai/recommend`);
+    console.log(`📦  Order dispatch:        POST /api/orders/:id/dispatch`);
+    console.log(`📦  Order receipt:         POST /api/orders/:id/receipt`);
+    console.log(`\n🗄️   Supabase:             ${isSupabaseConfigured() ? '✅ Connected' : '⚠️  Not configured'}`);
+    console.log(`🔑  Groq AI:               ${process.env.GROQ_API_KEY ? '✅ Key set' : '⚠️  GROQ_API_KEY missing'}`);
+    console.log('\n');
+  });
+}
 
 export default app;

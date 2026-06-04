@@ -2483,6 +2483,10 @@ const MOCK_PRODUCTS = [
 const IS_LOCAL_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 const BACKEND_URL = IS_LOCAL_DEV ? 'http://localhost:5001' : 'https://backsme.onrender.com';
 
+const isValidOrderUuid = (id) =>
+  typeof id === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+
 function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerificationDispatchZone }) {
   const [messages, setMessages] = useState([
     { role: "system", content: "Hello! I am CLimaLogix AI, your voice and text-based assistant. I can provide microclimate forecasts, smart dispatch suggestions, or analyze files and context. How can I help you today?", time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }
@@ -3322,6 +3326,10 @@ function CustomSmeView({ products, setProducts, customSmeName, setCustomSmeName 
   );
 }
 
+const isValidOrderUuid = (id) =>
+  typeof id === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+
 function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerificationDispatchZone }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
@@ -3402,6 +3410,70 @@ function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerifica
     }
   };
 
+  const callOrderLifecycle = async (endpoint, orderId) => {
+    const payload = { sessionId: sessionId || undefined };
+    if (endpoint === 'dispatch' && window.APIClient?.dispatchOrder) {
+      return window.APIClient.dispatchOrder(orderId, payload);
+    }
+    if (endpoint === 'receipt' && window.APIClient?.confirmOrderReceipt) {
+      return window.APIClient.confirmOrderReceipt(orderId, payload);
+    }
+    const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}/${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || data.message || `HTTP ${res.status}`);
+    }
+    return data;
+  };
+
+  const updateOrderMessage = (msgIndex, patch) => {
+    setMessages((prev) => prev.map((m, i) => (i === msgIndex ? { ...m, ...patch } : m)));
+  };
+
+  const handleOrderDispatch = async (orderId, msgIndex) => {
+    if (!isValidOrderUuid(orderId)) return;
+    try {
+      const res = await callOrderLifecycle('dispatch', orderId);
+      const status = res?.data?.order?.status || 'processing';
+      updateOrderMessage(msgIndex, {
+        orderStatus: status,
+        content:
+          language === 'bn'
+            ? `অর্ডার পাঠানো হয়েছে (ID: ${orderId.slice(0, 8)}…)`
+            : `Order dispatched (ID: ${orderId.slice(0, 8)}…)`,
+      });
+    } catch (err) {
+      updateOrderMessage(msgIndex, {
+        content:
+          language === 'bn' ? `ডিসপ্যাচ ব্যর্থ: ${err.message}` : `Dispatch failed: ${err.message}`,
+      });
+    }
+  };
+
+  const handleOrderReceipt = async (orderId, msgIndex) => {
+    if (!isValidOrderUuid(orderId)) return;
+    try {
+      const res = await callOrderLifecycle('receipt', orderId);
+      const status = res?.data?.order?.status || 'completed';
+      updateOrderMessage(msgIndex, {
+        orderStatus: status,
+        content:
+          language === 'bn'
+            ? `অর্ডার গ্রহণ সম্পন্ন (ID: ${orderId.slice(0, 8)}…)`
+            : `Order received (ID: ${orderId.slice(0, 8)}…)`,
+      });
+    } catch (err) {
+      updateOrderMessage(msgIndex, {
+        content:
+          language === 'bn' ? `রসিদ নিশ্চিত করা ব্যর্থ: ${err.message}` : `Receipt failed: ${err.message}`,
+      });
+    }
+  };
+
   // Send message to agent backend
   const handleSendMessage = async (textToSend) => {
     const text = textToSend || inputValue;
@@ -3447,6 +3519,8 @@ function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerifica
             products: agentData.products,
             pendingOrder: agentData.pendingOrder,
             orderResult: agentData.orderResult,
+            orderId: agentData.orderResult?.orderId,
+            orderStatus: agentData.type === 'ORDER_SUCCESS' ? 'pending' : undefined,
             navigationTarget: agentData.navigationTarget
           }
         ]);
@@ -3777,17 +3851,65 @@ function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerifica
                   {msg.type === "ORDER_SUCCESS" && (
                     <div
                       style={{
-                        padding: "10px 14px",
-                        borderRadius: "14px 14px 14px 2px",
+                        padding: 12,
+                        borderRadius: 12,
                         background: "rgba(16, 185, 129, 0.15)",
                         border: "1px solid #10B981",
                         color: "#10B981",
                         fontSize: 12.5,
-                        maxWidth: "85%",
-                        boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
+                        maxWidth: "90%",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 8
                       }}
                     >
-                      🎉 {msg.content}
+                      <div>🎉 {msg.content}</div>
+                      {msg.orderId && isValidOrderUuid(msg.orderId) && (
+                        <div style={{ fontSize: 11, opacity: 0.9 }}>
+                          {language === "bn" ? "স্ট্যাটাস" : "Status"}: {msg.orderStatus || "pending"}
+                        </div>
+                      )}
+                      {msg.orderId && isValidOrderUuid(msg.orderId) && (msg.orderStatus === "pending" || !msg.orderStatus) && (
+                        <button
+                          type="button"
+                          onClick={() => handleOrderDispatch(msg.orderId, index)}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: 6,
+                            background: "#2d6a4f",
+                            color: "#fff",
+                            border: "none",
+                            fontSize: 11,
+                            fontWeight: 600,
+                            cursor: "pointer"
+                          }}
+                        >
+                          {language === "bn" ? "ডিসপ্যাচ করুন" : "Dispatch order"}
+                        </button>
+                      )}
+                      {msg.orderId && isValidOrderUuid(msg.orderId) && msg.orderStatus === "processing" && (
+                        <button
+                          type="button"
+                          onClick={() => handleOrderReceipt(msg.orderId, index)}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: 6,
+                            background: "#10B981",
+                            color: "#fff",
+                            border: "none",
+                            fontSize: 11,
+                            fontWeight: 600,
+                            cursor: "pointer"
+                          }}
+                        >
+                          {language === "bn" ? "গ্রহণ নিশ্চিত করুন" : "Confirm receipt"}
+                        </button>
+                      )}
+                      {msg.orderId && isValidOrderUuid(msg.orderId) && msg.orderStatus === "completed" && (
+                        <div style={{ fontSize: 11 }}>
+                          ✅ {language === "bn" ? "অর্ডার সম্পূর্ণ" : "Order complete"}
+                        </div>
+                      )}
                     </div>
                   )}
 

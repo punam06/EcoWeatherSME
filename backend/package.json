@@ -9,6 +9,7 @@
     "dev": "ts-node --transpile-only src/app.ts",
     "dev:watch": "ts-node-dev --respawn --transpile-only src/app.ts",
     "lint": "tsc --noEmit --ignoreDeprecations 6.0",
+    "test": "node --experimental-strip-types --test tests/order.integration.test.ts",
     "legacy": "node index.js"
   },
   "dependencies": {
