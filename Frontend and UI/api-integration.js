@@ -16,8 +16,10 @@ const API_BASE_URL = IS_LOCAL
   : 'https://backsme.onrender.com';
 
 // Helper: some backends return { success, data: {...} } envelopes, others
-// return the payload flat. Normalize to the flat shape that the React
-// components (ESGCard, IoTForm, BatchRegistry, …) actually read.
+// return the payload flat. The bulk of the React code (IoTForm, BatchRegistry,
+// the zone loader, the order flow, …) reads `res.success && res.data` on the
+// response, so we keep the envelope intact by default. Methods that return
+// FLAT payloads (ESG, health) call `unwrap()` on their own response.
 function unwrap(payload) {
   if (payload && typeof payload === 'object' && 'success' in payload && 'data' in payload) {
     return payload.data;
@@ -42,16 +44,20 @@ const APIClient = {
         throw new Error(error.error || error.message || `HTTP ${response.status}`);
       }
 
-      const payload = await response.json();
-      return unwrap(payload);
+      // Return the raw JSON so callers that expect the {success, data} envelope
+      // (certifyBatch, getBatches, getZones, …) keep working. Methods that
+      // expect a flat payload (getESGMetrics, health) call `unwrap()` on
+      // their own response.
+      return await response.json();
     } catch (error) {
       console.error(`API Error [${endpoint}]:`, error);
       throw error;
     }
   },
 
-  // Health checks
-  health: () => APIClient.request('/health'),
+  // Health checks — health returns a flat {status, message, ...} payload,
+  // not an envelope, so we unwrap defensively (no-op for the real shape).
+  health: async () => unwrap(await APIClient.request('/health')),
   testDB: () => APIClient.request('/test-db'),
 
   // Zone operations
@@ -97,12 +103,11 @@ const APIClient = {
   // Claim verification (new route)
   verifyClaim: (batchId) => APIClient.request(`/verify/${encodeURIComponent(batchId)}`),
 
-  // ESG Metrics — returns the FLAT shape (e_score, s_score, g_score, ...) that
-  // ESGCard reads, regardless of whether the live backend wraps it in
-  // {success, data} or sends it raw.
-  getESGMetrics: (trustScore, dvs) => {
+  // ESG Metrics — backend returns a FLAT object (e_score, s_score, g_score, ...).
+  // ESGCard reads those flat fields directly, so we strip the envelope.
+  getESGMetrics: async (trustScore, dvs) => {
     const query = (trustScore !== undefined && dvs !== undefined) ? `?trustScore=${trustScore}&dvs=${dvs}` : '';
-    return APIClient.request(`/esg${query}`);
+    return unwrap(await APIClient.request(`/esg${query}`));
   },
 
   // Monthly ESG report (new route, used by the ESGCard panel)
