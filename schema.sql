@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     name VARCHAR(255) NOT NULL,
-    role VARCHAR(20) NOT NULL CHECK (role IN ('processor', 'buyer', 'admin')),
+    role VARCHAR(20) NOT NULL CHECK (role IN ('processor', 'buyer', 'admin', 'producer', 'consumer', 'sme_owner')), -- producer = processor, consumer/sme_owner = buyer for legacy compatibility
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

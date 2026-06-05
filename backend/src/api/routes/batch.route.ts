@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { z } from 'zod';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
 import { getBatchesList, addBatch, updateBatchInStore, getBatchFromStore, deleteBatchFromStore } from '../../lib/services/batchStore.service';
+import { authenticateJWT, requireRole } from '../../middleware/authenticateJWT';
 
 const router = Router();
 
@@ -111,7 +112,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
 // POST /api/batches
 // TODO: Add JWT authentication middleware before production launch
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', authenticateJWT, requireRole('processor'), async (req: Request, res: Response) => {
   try {
     const parsed = CreateBatchSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -185,7 +186,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 // PUT /api/batches/:id
 // TODO: Add JWT authentication middleware before production launch
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', authenticateJWT, requireRole('processor'), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!id || typeof id !== 'string' || id.length > 100) {
@@ -223,7 +224,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
 // POST /api/batches/certify
 // TODO: Add JWT authentication middleware before production launch
-router.post('/certify', async (req: Request, res: Response) => {
+router.post('/certify', authenticateJWT, requireRole('processor'), async (req: Request, res: Response) => {
   try {
     const parsed = CertifyBatchSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -304,7 +305,7 @@ router.post('/certify', async (req: Request, res: Response) => {
 
 // Readings stubs so they are handled cleanly inside batchRouter
 // TODO: Add JWT authentication middleware before production launch
-router.post('/:id/readings', async (req: Request, res: Response) => {
+router.post('/:id/readings', authenticateJWT, requireRole('processor'), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!id || typeof id !== 'string' || id.length > 100) {
@@ -390,7 +391,7 @@ router.get('/:id/readings', async (req: Request, res: Response) => {
 
 // DELETE /api/batches/:id
 // TODO: Add JWT authentication middleware before production launch
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', authenticateJWT, requireRole('processor'), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!id || typeof id !== 'string' || id.length > 100) {

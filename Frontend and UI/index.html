@@ -104,6 +104,9 @@
     <!-- API Integration Layer -->
     <script src="./api-integration.js"></script>
 
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <!-- React + Babel (browser) -->
     <script
       crossorigin
@@ -346,6 +349,7 @@
   <body>
     <div id="root"></div>
 
+    <script type="text/babel" src="./AuthPanel.jsx"></script>
     <script type="text/babel">
       const { useState, useEffect, useRef, useCallback } = React;
 

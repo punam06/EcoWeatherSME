@@ -15,6 +15,7 @@ import { aiRateLimiter } from '../../lib/middleware/rateLimiter';
 import { isContentClean } from '../../lib/utils/moderationFilter';
 import { detectLanguageFromText, dialectNormalizer } from '../../lib/utils/languageNormalizer';
 import { processMessage } from '../../lib/services/agentOrchestrator.service';
+import { optionalJWT, authenticateJWT } from '../../middleware/authenticateJWT';
 
 const router = Router();
 
@@ -42,7 +43,7 @@ const VoiceOrderSchema = z.object({
 /**
  * POST /api/agent/message
  */
-router.post('/message', aiRateLimiter, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+router.post('/message', optionalJWT, aiRateLimiter, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const parsed = AgentMessageSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -85,7 +86,7 @@ router.post('/message', aiRateLimiter, async (req: Request, res: Response, next:
  * POST /api/agent/voice-message
  * Voice transcripts forwarded to agent pipeline. Same handler.
  */
-router.post('/voice-message', aiRateLimiter, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+router.post('/voice-message', optionalJWT, aiRateLimiter, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const parsed = AgentMessageSchema.safeParse(req.body);
     if (!parsed.success) {
