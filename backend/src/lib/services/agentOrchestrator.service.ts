@@ -11,7 +11,7 @@
  */
 
 import { getSupabaseClient, isSupabaseConfigured } from '../supabase';
-import { getSession, createSession, appendMessage, PendingOrder } from './chatSession.service';
+import { getSession, getSessionAsync, createSession, appendMessage, PendingOrder } from './chatSession.service';
 import { cityNameNormalizer } from './intentClassifier.service';
 import { searchProducts, Product } from './productSearch.service';
 import { initiateOrder, confirmOrder, OrderResult } from './orderExecution.service';
@@ -212,7 +212,7 @@ async function handleClimateForecast(
     };
   }
 
-  const weather = await getWeatherByCity(normalizedCity, lang);
+  const weather = await getWeatherByCity(normalizedCity, lang as 'en' | 'bn');
   if (weather.found) {
     const formatted =
       lang === 'bn'
@@ -366,7 +366,7 @@ function handleGreeting(lang: string, activeSessionId: string, userName?: string
       `আস্সালামু আলাইকুম${userName ? ' ' + userName : ''}! 🌿 আপনার জৈব কৃষি কার্যক্রমে সাহায্য করতে প্রস্তুত। পণ্য, আবহাওয়া, ব্যাচের নিরাপত্তা বা অন্য কিছু জিজ্ঞাসা করুন!`,
     ],
   };
-  const options = greetings[lang as string] || greetings['en'];
+  const options = (greetings as Record<string, string[]>)[lang as string] || greetings['en'];
   const greeting = options[Math.floor(Math.random() * options.length)];
 
   return {
