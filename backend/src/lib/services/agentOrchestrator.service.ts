@@ -10,9 +10,9 @@
 
 import { getSupabaseClient, isSupabaseConfigured } from '../supabase';
 import { getSession, createSession, appendMessage, PendingOrder } from './chatSession.service';
-import { classifyIntent, cityNameNormalizer, IntentType } from './intentClassifier.service';
+import { cityNameNormalizer } from './intentClassifier.service';
 import { searchProducts, Product } from './productSearch.service';
-import { initiateOrder, confirmOrder, cancelOrder, OrderResult } from './orderExecution.service';
+import { initiateOrder, confirmOrder, OrderResult } from './orderExecution.service';
 import { queryRAGConversational } from './rag.service';
 import { getWeatherByCity } from './weather.service';
 
@@ -37,56 +37,129 @@ export interface AgentResponse {
   sessionId: string;
 }
 
+function customProductToCatalogItem(p: Record<string, unknown>): Product {
+  const priceRaw = p.price;
+  const priceVal =
+    typeof priceRaw === 'number'
+      ? priceRaw
+      : parseFloat(String(priceRaw ?? '').replace(/[৳\s,]/g, '')) || 150;
+  return {
+    id: String(p.id ?? `custom-${Date.now()}`),
+    name: String(p.name ?? 'Product'),
+    price_bdt: priceVal,
+    quantity: 100,
+    trust_score: 80,
+    dvs: typeof p.dvs === 'number' ? p.dvs : 90,
+    description: typeof p.category === 'string' ? p.category : undefined,
+  };
+}
+
 /**
- * Handles explicit order transactions: parses quantities/types, queries catalog,
- * and confirms purchase immediately.
+ * Resolves catalog product, initiates session pending order, and confirms in Supabase.
  */
-async function handleAgenticOrder(
-  message: string,
-  userId: string | undefined,
+async function handleOrderIntent(
+  query: string,
   lang: 'bn' | 'en',
-  activeSessionId: string
+  activeSessionId: string,
+  farmerId: string | undefined,
+  extracted: AgentParsedResult['extractedData'],
+  customProducts?: unknown[]
 ): Promise<AgentResponse> {
-  const text = message.toLowerCase();
+  const text = query.toLowerCase();
+  const quantity =
+    extracted.quantity && extracted.quantity > 0
+      ? extracted.quantity
+      : (() => {
+          const qtyMatch = text.match(/\b\d+\b/);
+          return qtyMatch ? parseInt(qtyMatch[0], 10) : 1;
+        })();
 
-  // Extract quantity (defaults to 1)
-  const qtyMatch = text.match(/\b\d+\b/);
-  const quantity = qtyMatch ? parseInt(qtyMatch[0], 10) : 1;
+  const productType =
+    text.includes('compost') || text.includes('কম্পোস্ট') || /compost/i.test(extracted.productName ?? '')
+      ? 'compost'
+      : 'fertilizer';
+  const cropType =
+    text.includes('tomato') || text.includes('টমেটো') || /tomato/i.test(extracted.cropContext ?? '')
+      ? 'tomato'
+      : undefined;
 
-  // Extract product types
-  const productType = text.includes('compost') || text.includes('কম্পোস্ট') ? 'compost' : 'fertilizer';
-  const cropType = text.includes('tomato') || text.includes('টমেটো') ? 'tomato' : undefined;
+  let products = await searchProducts(productType, cropType);
 
-  const products = await searchProducts(productType, cropType);
+  if (extracted.productName) {
+    const needle = extracted.productName.toLowerCase();
+    const narrowed = products.filter(
+      (p) =>
+        p.name.toLowerCase().includes(needle) ||
+        (p.description && p.description.toLowerCase().includes(needle))
+    );
+    if (narrowed.length > 0) {
+      products = narrowed;
+    }
+  }
 
-  if (products.length > 0) {
-    const best = products[0];
+  if (products.length === 0 && Array.isArray(customProducts)) {
+    const needle = (extracted.productName || productType).toLowerCase();
+    const customMatch = customProducts.find((raw) => {
+      const p = raw as Record<string, unknown>;
+      return typeof p.name === 'string' && p.name.toLowerCase().includes(needle);
+    });
+    if (customMatch) {
+      products = [customProductToCatalogItem(customMatch as Record<string, unknown>)];
+    }
+  }
 
-    // Place transaction
-    initiateOrder(activeSessionId, best, quantity, userId);
-    await confirmOrder(activeSessionId, userId || 'demo-farmer-id');
+  if (products.length === 0) {
+    const fallbackProducts: Product[] = [
+      { id: 'prod-compost', name: 'Premium Organic Compost', price_bdt: 240, quantity: 100, trust_score: 90, dvs: 85 },
+      { id: 'prod-biochar', name: 'Carbon-Neutral Biochar', price_bdt: 150, quantity: 100, trust_score: 88, dvs: 82 },
+      { id: 'prod-fertilizer', name: 'Eco-Friendly Fertilizer', price_bdt: 180, quantity: 100, trust_score: 86, dvs: 80 },
+    ];
+    const needle = (extracted.productName || productType).toLowerCase();
+    const matched = fallbackProducts.find(
+      (p) => p.name.toLowerCase().includes(needle) || needle.includes(productType)
+    );
+    products = matched ? [matched] : [fallbackProducts[0]];
+  }
 
+  const best = products[0];
+  const pending = initiateOrder(activeSessionId, best, quantity, farmerId);
+  const buyerId = farmerId || 'demo-farmer-id';
+  const orderResult = await confirmOrder(activeSessionId, buyerId);
+
+  if (orderResult.requiresAuth) {
     return {
-      type: 'ORDER_SUCCESS',
-      message:
-        lang === 'bn'
-          ? `আপনার অর্ডার সফলভাবে নেওয়া হয়েছে: ${best.name}, পরিমাণ: ${quantity}।`
-          : `Your order has been successfully placed: ${best.name}, quantity: ${quantity}.`,
+      type: 'AUTH_REQUIRED',
+      requiresAuth: true,
+      message: orderResult.message,
       language: lang,
-      products,
-      sessionId: activeSessionId,
-    };
-  } else {
-    return {
-      type: 'TEXT',
-      message:
-        lang === 'bn'
-          ? `এই মুহূর্তে কোনো ${productType === 'compost' ? 'কম্পোস্ট' : 'সার'} পাওয়া যাচ্ছে না। মার্কেটপ্লেস ট্যাব থেকে দেখুন।`
-          : `Currently no ${productType} is available. Please check the Marketplace tab.`,
-      language: lang,
+      pendingOrder: pending,
       sessionId: activeSessionId,
     };
   }
+
+  if (!orderResult.success) {
+    return {
+      type: 'TEXT',
+      message: orderResult.message,
+      language: lang,
+      pendingOrder: pending,
+      orderResult,
+      sessionId: activeSessionId,
+    };
+  }
+
+  return {
+    type: 'ORDER_SUCCESS',
+    message:
+      lang === 'bn'
+        ? `আপনার অর্ডার সফলভাবে নেওয়া হয়েছে: ${best.name}, পরিমাণ: ${quantity}।`
+        : `Your order has been successfully placed: ${best.name}, quantity: ${quantity}.`,
+    language: lang,
+    products,
+    pendingOrder: pending,
+    orderResult,
+    sessionId: activeSessionId,
+  };
 }
 
 /**
@@ -362,19 +435,17 @@ export async function processMessage(
     // Step 2: Unified dispatcher switch block based on LLM intent
     switch (llmResult.intent) {
       case 'order': {
-        result = {
-          type: 'ORDER_CONFIRM_PROMPT',
-          message: llmResult.replyMessage,
+        result = await handleOrderIntent(
+          query,
           language,
-          sessionId: activeSessionId!,
-          pendingOrder: {
-            productId: 'pending',
-            productName: llmResult.extractedData?.productName || '',
-            priceBdt: 0,
-            quantity: llmResult.extractedData?.quantity || 1,
-            totalBdt: 0,
-          }
-        };
+          activeSessionId!,
+          farmerId,
+          llmResult.extractedData,
+          customProducts
+        );
+        if (llmResult.replyMessage && result.type === 'ORDER_SUCCESS') {
+          result.message = llmResult.replyMessage;
+        }
         break;
       }
 

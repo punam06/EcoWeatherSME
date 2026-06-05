@@ -80,6 +80,18 @@ const APIClient = {
   getUsers: () => APIClient.request('/users'),
   createUser: (data) => APIClient.request('/users', { method: 'POST', body: JSON.stringify(data) }),
 
+  // Order lifecycle (dispatch / receipt)
+  dispatchOrder: (orderId, payload = {}) =>
+    APIClient.request(`/orders/${orderId}/dispatch`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  confirmOrderReceipt: (orderId, payload = {}) =>
+    APIClient.request(`/orders/${orderId}/receipt`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
   // External APIs (Weather & Geocoding)
   geocode: (query) => APIClient.request(`/geocode?q=${encodeURIComponent(query)}`),
   getWeather: (lat, lon) => APIClient.request(`/weather?lat=${lat}&lon=${lon}`),

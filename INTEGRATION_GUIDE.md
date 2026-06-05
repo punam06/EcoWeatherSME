@@ -6,7 +6,7 @@ This is a **full-stack circular commerce platform** for organic agriculture with
 - **Frontend**: React 18 (browser-based, no build step)
 - **Backend**: Express.js + PostgreSQL 
 - **Database**: Supabase (PostgreSQL with pgvector, RLS)
-- **AI**: Claude 3.5 Sonnet (RAG-grounded recommendations)
+- **AI**: Groq (Llama 3.3 70B, RAG-grounded recommendations)
 
 ---
 
@@ -22,14 +22,18 @@ cd ..
 
 ### Step 2: Configure Environment
 ```bash
-# Copy template and update with your credentials
-cp .env.template .env
+# Copy backend example and update with your credentials
+cp backend/.env.example backend/.env
 
-# Edit .env with:
+# Required for production (see backend/src/app.ts startup check):
+# - GROQ_API_KEY
+# - OPENWEATHER_API_KEY
+#
+# Required for Supabase-backed orders and catalog (see backend/src/lib/supabase.ts):
 # - SUPABASE_URL
-# - SUPABASE_ANON_KEY  
-# - DATABASE_URL (or leave as template for now)
-# - ANTHROPIC_API_KEY
+# - SUPABASE_SERVICE_ROLE_KEY
+#
+# Optional: FRONTEND_URL (CORS), WEATHER_API_KEY (alias for OPENWEATHER_API_KEY)
 ```
 
 ### Step 3: Start Backend Server
@@ -127,12 +131,14 @@ curl -X POST http://localhost:5001/api/calculate-trust-score \
 ### For Production (Supabase)
 
 1. Create Supabase project: https://supabase.com
-2. Get credentials from dashboard
-3. Update .env:
+2. Apply migrations in `supabase/migrations/` (includes `orders` for agent checkout)
+3. Get **Project URL** and **service role** key from the dashboard (Settings → API)
+4. Update `backend/.env`:
    ```env
    SUPABASE_URL=https://your-project.supabase.co
-   SUPABASE_ANON_KEY=your-anon-key
-   DATABASE_URL=postgresql://postgres:your-password@db.supabase.co:5432/postgres
+   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+   GROQ_API_KEY=your-groq-key
+   OPENWEATHER_API_KEY=your-openweather-key
    ```
 
 ---
@@ -236,16 +242,19 @@ Make sure backend is running on port 5001 and frontend makes requests to `http:/
 
 ## 📝 Environment Variables
 
-| Variable | Purpose | Example |
-|----------|---------|---------|
-| `PORT` | Backend port | `5001` |
-| `NODE_ENV` | Environment | `development` |
-| `BACKEND_API_URL` | Frontend points to this | `http://localhost:5001` |
-| `FRONTEND_URL` | CORS origin | `http://localhost:3000` |
-| `DATABASE_URL` | PostgreSQL connection | `postgresql://...` |
-| `SUPABASE_URL` | Supabase API endpoint | `https://xyz.supabase.co` |
-| `SUPABASE_ANON_KEY` | Supabase public key | `eyJ...` |
-| `ANTHROPIC_API_KEY` | Claude API key | `sk-ant-...` |
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `PORT` | No (default `5001`) | Backend listen port |
+| `NODE_ENV` | No | `development` or `production` |
+| `GROQ_API_KEY` | **Yes in production** | Groq LLM for agent / RAG |
+| `OPENWEATHER_API_KEY` | **Yes in production** | Weather and climate context |
+| `WEATHER_API_KEY` | No | Optional alias for `OPENWEATHER_API_KEY` |
+| `SUPABASE_URL` | For DB features | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | For DB features | Server-side Supabase key (orders, products) |
+| `FRONTEND_URL` | No | CORS allowed origin |
+| `CORS_ORIGIN` | No | Extra CORS origin |
+| `BACKEND_API_URL` | Frontend only | API base URL for static UI |
+| `NEXT_PUBLIC_APP_URL` | Frontend only | App URL for static UI |
 
 ---
 
@@ -289,8 +298,8 @@ PORT=5000 npm start
 
 ## ✨ Next Steps
 
-1. **Configure Database**: Update `DATABASE_URL` in `.env`
-2. **Add Supabase Credentials**: Set `SUPABASE_URL` and keys
+1. **Configure backend env**: Copy `backend/.env.example` → `backend/.env`
+2. **Set Supabase + AI keys**: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `GROQ_API_KEY`, `OPENWEATHER_API_KEY`
 3. **Deploy Backend**: Push to Railway or Render
 4. **Deploy Frontend**: Push to Vercel or Netlify
 5. **Setup CI/CD**: Configure GitHub Actions
