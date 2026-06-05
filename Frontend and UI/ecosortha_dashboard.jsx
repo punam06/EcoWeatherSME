@@ -1,9 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 const IS_STATIC_FILE_HTML = window.location.protocol === 'file:';
-    const API_BASE_URL_HTML = !IS_STATIC_FILE_HTML && window.location.hostname === 'localhost' 
-      ? 'http://localhost:5001' 
-      : '';
+// Backend API base URL. The production backend that the live dashboard talks
+// to is https://backsme.onrender.com (the previous value of '' resolved to a
+// relative path which the static frontend host can't serve, so all calls
+// to /api/* silently failed in production).
+const API_BASE_URL_HTML = (IS_STATIC_FILE_HTML || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:5001'
+  : 'https://backsme.onrender.com';
 
 /* ═══════════════════════════════════════════════════════════════
    THEME SYSTEM — CSS Custom Properties
@@ -377,7 +381,7 @@ function ThemeToggle({ theme, onToggle }) {
 /* ═══════════════════════════════════════════════════════════════
    TAB 1: BATCH VERIFICATION (IoT Intake)
    ═══════════════════════════════════════════════════════════════ */
-function IoTForm({ onResult, prefilledBatchId, prefilledDispatchZone, setPrefilledBatchId, setPrefilledDispatchZone }) {
+function IoTForm({ onResult, onResultDetail, prefilledBatchId, prefilledDispatchZone, setPrefilledBatchId, setPrefilledDispatchZone }) {
   const [pH, setPH] = useState(4.1);
   const [EC, setEC] = useState(3.4);
   const [temp, setTemp] = useState(28);
@@ -393,6 +397,8 @@ function IoTForm({ onResult, prefilledBatchId, prefilledDispatchZone, setPrefill
   const [selectedBatchId, setSelectedBatchId] = useState("");
   const [dispatchZone, setDispatchZone] = useState("");
   const [registeredBatches, setRegisteredBatches] = useState([]);
+  // Full deterministic trust score envelope (score, grade, isViable, category, breakdown, reference, notes)
+  const [tsResult, setTsResult] = useState(null);
 
   // Fetch registered batches to populate the Batch Selection Dropdown
   useEffect(() => {
@@ -442,26 +448,40 @@ function IoTForm({ onResult, prefilledBatchId, prefilledDispatchZone, setPrefill
     const fetchTrustScore = async () => {
       setIsLoading(true);
       try {
+        // Map frontend form values → canonical backend field names.
+        // ratio is a string like "1:1:20"; backend expects em1Ratio as decimal.
+        let em1Ratio = 0.001; // default 1:1000
+        if (ratio === "1:1:10") em1Ratio = 0.002;       // 1:500
+        else if (ratio === "1:1:20") em1Ratio = 0.002;  // 1:500
+        else if (ratio === "1:1:30") em1Ratio = 0.001;  // 1:1000
+        else if (ratio === "1:1:40") em1Ratio = 0.0005; // 1:2000
+
         const response = await fetch(
-          `${API_BASE_URL_HTML}/api/clever-responder`,
+          `${API_BASE_URL_HTML}/api/batch/trust-score`,
           {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              action: "trust-score",
               pH,
-              EC,
-              temp,
-              ratio,
-              days,
+              ec: EC,
+              temperatureCelsius: temp,
+              em1Ratio,
+              fermentationDays: days,
             }),
           }
         );
-        const data = await response.json();
-        setTs(data.trustScore || 0);
-        onResult(data.trustScore || 0);
+        const json = await response.json();
+        if (json.success && json.data) {
+          const result = json.data;
+          setTsResult(result);
+          setTs(result.score);
+          onResult(result.score);
+          if (typeof onResultDetail === "function") onResultDetail(result);
+        } else {
+          throw new Error(json.error || "Trust score endpoint returned no data");
+        }
         setCertified(false);
         setQrCodeImg(null);
         setBatchNum("");
@@ -470,7 +490,18 @@ function IoTForm({ onResult, prefilledBatchId, prefilledDispatchZone, setPrefill
         // Fallback to local calculation on error
         const fallbackScore = calcTrustScore({ pH, EC, temp, ratio, days });
         setTs(fallbackScore);
+        const fallbackResult = {
+          score: fallbackScore,
+          grade: fallbackScore >= 85 ? 'A' : fallbackScore >= 70 ? 'B' : fallbackScore >= 55 ? 'C' : 'F',
+          isViable: fallbackScore >= 60,
+          category: 'unknown',
+          breakdown: null,
+          reference: 'local-fallback',
+          notes: ['Using offline fallback — backend unreachable'],
+        };
+        setTsResult(fallbackResult);
         onResult(fallbackScore);
+        if (typeof onResultDetail === "function") onResultDetail(fallbackResult);
         setCertified(false);
         setQrCodeImg(null);
         setBatchNum("");
@@ -4765,6 +4796,9 @@ const TABS = [
 function CLimaLogixApp() {
   const [tab, setTab] = useState(0);
   const [trustScore, setTrustScore] = useState(84);
+  // Full deterministic trust score envelope from /api/batch/trust-score
+  // { score, grade, isViable, category, breakdown, reference, notes }
+  const [trustScoreResult, setTrustScoreResult] = useState(null);
   const [isRegisteringBatch, setIsRegisteringBatch] = useState(false);
   const [theme, setTheme] = useState("dark");
   const [dvs, setDvs] = useState(72);
@@ -4967,6 +5001,7 @@ function CLimaLogixApp() {
               <Card>
                 <IoTForm 
                   onResult={setTrustScore} 
+                  onResultDetail={setTrustScoreResult}
                   prefilledBatchId={verificationBatchId}
                   prefilledDispatchZone={verificationDispatchZone}
                   setPrefilledBatchId={setVerificationBatchId}
@@ -4980,6 +5015,72 @@ function CLimaLogixApp() {
                 <div style={{ textAlign: "center", padding: "12px 0 24px 0" }}>
                   <ScoreGauge value={trustScore} label="Global Trust Score" size={160} />
                 </div>
+                {/* Trust Score Grade Band (A/B/C/F) + Category + Reference */}
+                {trustScoreResult && (
+                  <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 4, marginBottom: 14, flexWrap: "wrap" }}>
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 6,
+                      background: trustScoreResult.isViable ? ACCENT.greenBg : "rgba(239,68,68,0.12)",
+                      color: trustScoreResult.isViable ? ACCENT.green : ACCENT.red,
+                      border: `1px solid ${trustScoreResult.isViable ? ACCENT.greenBorder : "rgba(239,68,68,0.3)"}`,
+                      letterSpacing: "0.05em",
+                    }}>
+                      GRADE {trustScoreResult.grade} · {trustScoreResult.isViable ? "VIABLE" : "NOT VIABLE"}
+                    </span>
+                    {trustScoreResult.category && trustScoreResult.category !== 'unknown' && (
+                      <span style={{
+                        fontSize: 10, padding: "4px 8px", borderRadius: 6,
+                        background: "var(--bg-input)", color: "var(--text-secondary)",
+                        border: "1px solid var(--border-primary)",
+                        fontFamily: "'JetBrains Mono', monospace",
+                      }}>
+                        {String(trustScoreResult.category).replace(/_/g, ' ')}
+                      </span>
+                    )}
+                    {trustScoreResult.reference && (
+                      <span style={{
+                        fontSize: 9, padding: "4px 8px", borderRadius: 6,
+                        background: "var(--bg-input)", color: "var(--text-dim)",
+                        border: "1px solid var(--border-primary)",
+                        fontFamily: "'JetBrains Mono', monospace",
+                      }}>
+                        ref: {trustScoreResult.reference}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {/* Sub-score breakdown bars */}
+                {trustScoreResult && trustScoreResult.breakdown && (
+                  <div style={{ marginTop: 8, padding: "12px", borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)" }}>
+                    <div style={{ fontSize: 10, color: "var(--text-dim)", marginBottom: 8, letterSpacing: "0.08em", fontWeight: 600 }}>
+                      SUB-SCORE BREAKDOWN
+                    </div>
+                    {[
+                      { key: "ph",    label: "pH",         v: trustScoreResult.breakdown.ph    },
+                      { key: "ec",    label: "EC",         v: trustScoreResult.breakdown.ec    },
+                      { key: "temp",  label: "Temp",       v: trustScoreResult.breakdown.temp  },
+                      { key: "ratio", label: "EM-1 Ratio", v: trustScoreResult.breakdown.ratio },
+                      { key: "days",  label: "Ferment D.", v: trustScoreResult.breakdown.days  },
+                    ].map(row => (
+                      <div key={row.key} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                        <div style={{ width: 80, fontSize: 10, color: "var(--text-secondary)", fontFamily: "'JetBrains Mono', monospace" }}>
+                          {row.label}
+                        </div>
+                        <div style={{ flex: 1, height: 6, borderRadius: 3, background: "var(--border-primary)", overflow: "hidden" }}>
+                          <div style={{
+                            width: `${Math.max(0, Math.min(100, row.v || 0))}%`,
+                            height: "100%",
+                            background: (row.v || 0) >= 70 ? ACCENT.green : (row.v || 0) >= 50 ? ACCENT.amber : ACCENT.red,
+                            transition: "width 0.4s ease",
+                          }} />
+                        </div>
+                        <div style={{ width: 36, fontSize: 10, color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace", textAlign: "right" }}>
+                          {Math.round(row.v || 0)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.6, textAlign: "center", marginTop: 12 }}>
                   Adjust IoT parameters on the left to simulate a batch. A score of 60+ is required for BARI certification and cryptographic signing.
                 </div>

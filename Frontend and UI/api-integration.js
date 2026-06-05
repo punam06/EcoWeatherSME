@@ -7,9 +7,23 @@
 // API Client - Simple fetch wrapper for backend communication
 const IS_STATIC_FILE = window.location.protocol === 'file:';
 const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
+// IMPORTANT: The production backend that the live dashboard talks to is
+// https://backsme.onrender.com. The previous value
+// (https://ecosortha.onrender.com) is a dead host that 404s on every route
+// and was the root cause of the "ESG page failed to load" bug.
 const API_BASE_URL = IS_LOCAL
   ? 'http://localhost:5001'
-  : 'https://ecosortha.onrender.com';
+  : 'https://backsme.onrender.com';
+
+// Helper: some backends return { success, data: {...} } envelopes, others
+// return the payload flat. Normalize to the flat shape that the React
+// components (ESGCard, IoTForm, BatchRegistry, …) actually read.
+function unwrap(payload) {
+  if (payload && typeof payload === 'object' && 'success' in payload && 'data' in payload) {
+    return payload.data;
+  }
+  return payload;
+}
 
 const APIClient = {
   async request(endpoint, options = {}) {
@@ -25,10 +39,11 @@ const APIClient = {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || `HTTP ${response.status}`);
+        throw new Error(error.error || error.message || `HTTP ${response.status}`);
       }
 
-      return await response.json();
+      const payload = await response.json();
+      return unwrap(payload);
     } catch (error) {
       console.error(`API Error [${endpoint}]:`, error);
       throw error;
@@ -67,11 +82,31 @@ const APIClient = {
     body: JSON.stringify(params),
   }),
 
-  // ESG Metrics
+  // Direct trust score (new route, returns {score, grade, breakdown, ...})
+  getTrustScore: (params) => APIClient.request('/batch/trust-score', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  }),
+
+  // Direct DVS (new route)
+  getDVS: (params) => APIClient.request('/climate/dvs', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  }),
+
+  // Claim verification (new route)
+  verifyClaim: (batchId) => APIClient.request(`/verify/${encodeURIComponent(batchId)}`),
+
+  // ESG Metrics — returns the FLAT shape (e_score, s_score, g_score, ...) that
+  // ESGCard reads, regardless of whether the live backend wraps it in
+  // {success, data} or sends it raw.
   getESGMetrics: (trustScore, dvs) => {
     const query = (trustScore !== undefined && dvs !== undefined) ? `?trustScore=${trustScore}&dvs=${dvs}` : '';
     return APIClient.request(`/esg${query}`);
   },
+
+  // Monthly ESG report (new route, used by the ESGCard panel)
+  getESGReport: (months = 12) => APIClient.request(`/esg/report?months=${months}`),
 
   // Forecast
   getDemandForecast: () => APIClient.request('/demand-forecast'),
@@ -105,24 +140,42 @@ async function initializeConnections() {
   }
 
   console.log('🔄 Initializing connections...');
-  
+
+  // After `unwrap()` the envelope is gone. We treat a response as "ok" if:
+  //   - the call didn't throw, AND
+  //   - the payload doesn't have a `success: false` flag, AND
+  //   - if it has a `status` field, that field is "ok".
+  const isOk = (r) => {
+    if (r == null || r instanceof Error) return false;
+    if (r.success === false) return false;
+    if (typeof r.status === 'string' && r.status !== 'ok') return false;
+    return true;
+  };
+
   try {
-    // Test backend health
     const healthResponse = await APIClient.health();
-    if (healthResponse.success) {
+    if (isOk(healthResponse)) {
       console.log('✅ Backend server connected');
+    } else {
+      console.warn('⚠️ Backend health check returned non-ok payload:', healthResponse);
     }
 
-    // Test database connection
     const dbResponse = await APIClient.testDB();
-    if (dbResponse.success) {
+    if (isOk(dbResponse)) {
       console.log('✅ Database connected');
+    } else {
+      console.warn('⚠️ Database check failed (this is expected in production where DATABASE_URL is not set):', dbResponse);
     }
 
-    // Load zones
     const zonesResponse = await APIClient.getZones();
-    if (zonesResponse.success) {
-      console.log(`✅ Loaded ${zonesResponse.count || zonesResponse.data.length} zones`);
+    if (isOk(zonesResponse)) {
+      const zones = Array.isArray(zonesResponse)
+        ? zonesResponse
+        : (zonesResponse.data || zonesResponse.zones || []);
+      const count = zonesResponse.count != null ? zonesResponse.count : (Array.isArray(zones) ? zones.length : 0);
+      console.log(`✅ Loaded ${count} zones`);
+    } else {
+      console.warn('⚠️ Failed to load zones (DATABASE_URL may not be set in this environment):', zonesResponse);
     }
 
     return true;
