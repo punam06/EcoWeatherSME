@@ -787,6 +787,143 @@ function IoTForm({ onResult, onResultDetail, prefilledBatchId, prefilledDispatch
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   CLAIM VERIFIER
+   ──────────────────────────────────────────────────────────────
+   Looks up an existing batch by ID (or a full verification URL
+   extracted from a QR code) and calls GET /api/verify/:batch_id.
+   Surfaces the on-chain signature, certified-at timestamp, and
+   trust score so buyers can confirm a claim is genuine. Falls
+   back to a friendly placeholder when the route is missing.
+   ═══════════════════════════════════════════════════════════════ */
+function ClaimVerifier({ onSelectBatch }) {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("idle"); // idle | loading | ok | missing | error
+  const [result, setResult] = useState(null);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const extractBatchId = (raw) => {
+    if (!raw) return "";
+    const trimmed = raw.trim();
+    // Accept full URLs like https://ecoweathersme.onrender.com/verify/BCH-123
+    const urlMatch = trimmed.match(/\/verify\/([^/?#]+)/i);
+    if (urlMatch) return urlMatch[1];
+    return trimmed;
+  };
+
+  const handleVerify = async () => {
+    const id = extractBatchId(query);
+    if (!id) { setStatus("error"); setErrorMsg("Enter a batch ID or verification URL."); return; }
+    setStatus("loading");
+    setErrorMsg("");
+    setResult(null);
+    try {
+      if (!window.APIClient || !window.APIClient.verifyClaim) {
+        throw new Error("verifyClaim API is not available in this build.");
+      }
+      const r = await window.APIClient.verifyClaim(id);
+      // accept both envelope ({success, data}) and flat shapes
+      const payload = r && r.success === false ? null : (r && r.data ? r.data : r);
+      if (!payload || (payload.verified === false)) {
+        setStatus("missing");
+        setResult({ batchId: id, ...(payload || {}) });
+      } else {
+        setStatus("ok");
+        setResult({ batchId: id, ...payload });
+        if (onSelectBatch) onSelectBatch(id);
+      }
+    } catch (e) {
+      // Route 404 (not yet deployed) — degrade gracefully.
+      const msg = String(e && e.message || e);
+      if (msg.includes("HTTP 404") || msg.includes("Failed to fetch")) {
+        setStatus("missing");
+        setErrorMsg("Live verification endpoint not yet deployed. Showing structural preview only.");
+        setResult({ batchId: id, preview: true });
+      } else {
+        setStatus("error");
+        setErrorMsg(msg);
+      }
+    }
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleVerify(); }}
+          placeholder="Paste batch ID (e.g. BCH-123456) or full verification URL"
+          style={{
+            flex: 1, padding: "10px 12px", fontSize: 13,
+            background: "var(--bg-input)", color: "var(--text-primary)",
+            border: "1px solid var(--border-primary)", borderRadius: 8,
+            fontFamily: "'JetBrains Mono', monospace", outline: "none",
+          }}
+        />
+        <button
+          onClick={handleVerify}
+          disabled={status === "loading"}
+          style={{
+            padding: "10px 18px", fontSize: 12, fontWeight: 700,
+            background: ACCENT.greenBg, color: ACCENT.green,
+            border: `1px solid ${ACCENT.greenBorder}`, borderRadius: 8,
+            cursor: status === "loading" ? "wait" : "pointer",
+            letterSpacing: "0.06em", fontFamily: "inherit",
+          }}
+        >
+          {status === "loading" ? "VERIFYING…" : "🪪 VERIFY CLAIM"}
+        </button>
+      </div>
+
+      {status === "ok" && result && (
+        <div style={{ padding: 14, borderRadius: 8, background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.35)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: 16 }}>✅</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: ACCENT.green, letterSpacing: "0.05em" }}>CLAIM VERIFIED · GENUINE</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 12px", fontSize: 11, color: "var(--text-secondary)" }}>
+            <span style={{ color: "var(--text-dim)" }}>Batch ID</span>
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-primary)" }}>{result.batchId || result.batch_id || "—"}</span>
+            {result.trustScore != null && (<><span style={{ color: "var(--text-dim)" }}>Trust Score</span><span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{result.trustScore}</span></>)}
+            {result.grade && (<><span style={{ color: "var(--text-dim)" }}>Grade</span><span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{result.grade}</span></>)}
+            {result.certifiedAt && (<><span style={{ color: "var(--text-dim)" }}>Certified At</span><span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{result.certifiedAt}</span></>)}
+            {result.signature && (<><span style={{ color: "var(--text-dim)" }}>Signature</span><span style={{ fontFamily: "'JetBrains Mono', monospace", wordBreak: "break-all" }}>{String(result.signature).slice(0, 40)}…</span></>)}
+            {result.zone && (<><span style={{ color: "var(--text-dim)" }}>Zone</span><span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{result.zone}</span></>)}
+          </div>
+        </div>
+      )}
+
+      {status === "missing" && result && (
+        <div style={{ padding: 14, borderRadius: 8, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.35)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: 16 }}>⚠️</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#f59e0b", letterSpacing: "0.05em" }}>
+              {result.preview ? "VERIFICATION ENDPOINT OFFLINE" : "NO CLAIM FOUND"}
+            </span>
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+            {errorMsg || `No certified batch found for ID "${result.batchId}". Make sure you scanned the right QR code.`}
+          </div>
+        </div>
+      )}
+
+      {status === "error" && (
+        <div style={{ padding: 12, borderRadius: 8, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.35)", color: "#ef4444", fontSize: 12 }}>
+          ❌ {errorMsg}
+        </div>
+      )}
+
+      {status === "idle" && (
+        <div style={{ fontSize: 11, color: "var(--text-dim)", lineHeight: 1.5 }}>
+          🔍 Paste any batch ID or scan a QR code's URL to confirm a claim is genuine.
+          Verification chain: <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>GET /api/verify/:batch_id</span> → signature check → ESG cross-check.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
    TAB 2: MICROCLIMATE INTELLIGENCE (MERM Pipeline)
    ═══════════════════════════════════════════════════════════════ */
 function DispatchCalendar({ baseTemp, zone, trustScore, windSpeed, packaging }) {
@@ -1754,6 +1891,184 @@ function ESGCard({ trustScore, dvs }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   BUSINESS INTELLIGENCE VIEW
+   ──────────────────────────────────────────────────────────────
+   Layer 2 — Intelligence output: pulls the monthly ESG report
+   (GET /api/esg/report) and pairs it with the demand forecast chart
+   so decision-makers see both sustainability trend and market pull
+   in one panel. Degrades gracefully when the new BI route is not
+   yet deployed on the live backend.
+   ═══════════════════════════════════════════════════════════════ */
+function BusinessIntelligenceView({ trustScore, dvs }) {
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [months, setMonths] = useState(12);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        // getESGReport is not on the live backend yet — fall back to a
+        // synthesised series derived from the live ESG snapshot so the
+        // panel is never empty.
+        if (window.APIClient && window.APIClient.getESGReport) {
+          try {
+            const r = await window.APIClient.getESGReport(months);
+            if (!cancelled) {
+              // accept both {data: …} envelope and flat shapes
+              const payload = r && r.data ? r.data : r;
+              setReport(payload && Object.keys(payload).length ? payload : null);
+              setError(null);
+            }
+            return;
+          } catch (e) {
+            // route missing on live — fall through to synthetic series
+          }
+        }
+        if (!cancelled) {
+          setReport(null);
+          setError("Live ESG-report endpoint not yet deployed; showing projected trend.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [months]);
+
+  // Build a 12-month projection from the current ESG snapshot. The shape
+  // intentionally mirrors what /api/esg/report returns so the chart will
+  // automatically upgrade to real data once the route is live.
+  const months_back = months;
+  const synthetic = useMemo(() => {
+    const labels = [];
+    const e = [], s = [], g = [];
+    const now = new Date();
+    for (let i = months_back - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      labels.push(d.toLocaleString('default', { month: 'short' }) + " '" + String(d.getFullYear()).slice(-2));
+      // gentle upward trend, damped by current trust/DVS
+      const factor = (i / months_back) * 0.35;
+      const baseE = Math.max(20, Math.min(95, 60 + trustScore * 0.25 - factor * 10));
+      const baseS = Math.max(20, Math.min(95, 55 + trustScore * 0.30 - factor * 8));
+      const baseG = Math.max(20, Math.min(95, 50 + dvs * 0.35 - factor * 6));
+      e.push(Math.round(baseE));
+      s.push(Math.round(baseS));
+      g.push(Math.round(baseG));
+    }
+    return { labels, e, s, g, source: "synthetic" };
+  }, [trustScore, dvs, months]);
+
+  const series = report && report.months ? report : synthetic;
+  const maxY = 100;
+
+  return (
+    <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
+      <SectionLabel icon="🧠" text="Business Intelligence · Sustainability × Market" />
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 20 }}>
+        {/* ── ESG Report panel ─────────────────────────────── */}
+        <Card>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", letterSpacing: "0.05em", fontWeight: 600 }}>
+              MONTHLY ESG REPORT
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 9, color: "var(--text-dim)" }}>WINDOW</span>
+              <select
+                value={months}
+                onChange={(e) => setMonths(Number(e.target.value))}
+                style={{ background: "var(--bg-input)", color: "var(--text-primary)", border: "1px solid var(--border-primary)", borderRadius: 6, fontSize: 11, padding: "2px 6px" }}>
+                <option value={6}>6 mo</option>
+                <option value={12}>12 mo</option>
+                <option value={24}>24 mo</option>
+              </select>
+            </div>
+          </div>
+
+          {error && (
+            <div style={{ fontSize: 10, color: "var(--text-dim)", marginBottom: 8, padding: "6px 8px", borderRadius: 6, background: "var(--bg-input)", border: "1px dashed var(--border-primary)" }}>
+              ℹ️ {error}
+            </div>
+          )}
+
+          {/* Stacked ESG trend chart */}
+          <div style={{ height: 220, display: "flex", alignItems: "flex-end", gap: 4, padding: "0 4px", borderBottom: "1px solid var(--border-primary)", position: "relative" }}>
+            {[20, 40, 60, 80, 100].map((g) => (
+              <div key={g} style={{ position: "absolute", left: 0, right: 0, bottom: `${g}%`, borderTop: "1px dashed rgba(148,163,184,0.15)", pointerEvents: "none" }} />
+            ))}
+            {series.labels.map((label, i) => {
+              const e = series.e[i] || 0;
+              const s = series.s[i] || 0;
+              const g = series.g[i] || 0;
+              const avg = Math.round((e + s + g) / 3);
+              return (
+                <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, minWidth: 0 }} title={`${label} · ESG ${avg}`}>
+                  <div style={{ width: "70%", display: "flex", flexDirection: "column-reverse", height: `${avg}%`, minHeight: 2, borderRadius: "3px 3px 0 0", overflow: "hidden" }}>
+                    <div style={{ flex: g, background: "#3b82f6" }} />
+                    <div style={{ flex: s, background: "#a855f7" }} />
+                    <div style={{ flex: e, background: "#10b981" }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 9, color: "var(--text-dim)" }}>
+            {series.labels.map((l, i) => (
+              <span key={i} style={{ flex: 1, textAlign: "center" }}>{i % 2 === 0 ? l : ""}</span>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 14, marginTop: 10, fontSize: 10, color: "var(--text-secondary)" }}>
+            <span><span style={{ display: "inline-block", width: 8, height: 8, background: "#10b981", borderRadius: 2, marginRight: 4 }} />Environmental</span>
+            <span><span style={{ display: "inline-block", width: 8, height: 8, background: "#a855f7", borderRadius: 2, marginRight: 4 }} />Social</span>
+            <span><span style={{ display: "inline-block", width: 8, height: 8, background: "#3b82f6", borderRadius: 2, marginRight: 4 }} />Governance</span>
+          </div>
+        </Card>
+
+        {/* ── KPI summary panel ────────────────────────────── */}
+        <Card>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", letterSpacing: "0.05em", fontWeight: 600, marginBottom: 12 }}>
+            PIPELINE KPIs
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {[
+              { label: "Trust Score",  value: trustScore, target: 60, color: trustScore >= 60 ? "#10b981" : "#ef4444" },
+              { label: "DVS",          value: dvs,        target: 75, color: dvs >= 75 ? "#10b981" : dvs >= 55 ? "#f59e0b" : "#ef4444" },
+              { label: "Cert Rate",    value: "—",        target: null, color: "#94a3b8" },
+              { label: "Plastic Saved",value: "—",        target: null, color: "#10b981" },
+            ].map((kpi, i) => (
+              <div key={i} style={{ padding: 12, borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)" }}>
+                <div style={{ fontSize: 9, color: "var(--text-dim)", letterSpacing: "0.08em", fontWeight: 600 }}>{kpi.label.toUpperCase()}</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: kpi.color, fontFamily: "'JetBrains Mono', monospace", marginTop: 4 }}>{kpi.value}</div>
+                {kpi.target != null && (
+                  <div style={{ fontSize: 9, color: "var(--text-dim)", marginTop: 2 }}>target ≥ {kpi.target}</div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 14, padding: 10, borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)" }}>
+            <div style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 600, marginBottom: 4 }}>3-Layer Snapshot</div>
+            <div style={{ fontSize: 11, color: "var(--text-primary)", lineHeight: 1.55 }}>
+              <span style={{ color: "#3b82f6" }}>Sensing</span>: {trustScore >= 60 ? "✓" : "✗"} viability · <span style={{ color: "#a855f7" }}>Intelligence</span>: DVS {dvs} · <span style={{ color: "#10b981" }}>Presentation</span>: ESG ledger live
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <div style={{ marginTop: 18 }}>
+        <Card>
+          <SectionLabel icon="📊" text="Demand Forecast" />
+          <DemandChart />
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
    MAIN APPLICATION
    ═══════════════════════════════════════════════════════════════ */
 
@@ -1863,6 +2178,47 @@ function DashboardView({ onNewBatch }) {
           </div>
         }
       />
+
+      {/* ── 3-LAYER ARCHITECTURE STRIP ── */}
+      <Card title="🌐 3-Layer Architecture" style={{ marginBottom: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+          {[
+            { code: "L1", icon: "📡", name: "Sensing", desc: "IoT sensors + BARI knowledge base", kpi: "Real-time field data" },
+            { code: "L2", icon: "🧠", name: "Intelligence", desc: "Trust scores, DVS, climate alerts", kpi: "AI-driven decisions" },
+            { code: "L3", icon: "🛍️", name: "Presentation", desc: "Marketplace, ESG report, QR claims", kpi: "Buyer-facing outputs" },
+          ].map((layer) => {
+            const meta = LAYER_META[layer.code] || LAYER_META.L0;
+            return (
+              <div key={layer.code} style={{
+                padding: "14px 16px", borderRadius: 10,
+                background: meta.bg, border: `1px solid ${meta.border}`,
+                display: "flex", flexDirection: "column", gap: 6,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 18 }}>{layer.icon}</span>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, letterSpacing: "0.08em",
+                    color: meta.color, background: "rgba(0,0,0,0.2)",
+                    padding: "2px 6px", borderRadius: 4,
+                  }}>{layer.code}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{layer.name}</span>
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.4 }}>{layer.desc}</div>
+                <div style={{ fontSize: 10, color: "var(--text-dim)", fontFamily: "'JetBrains Mono', monospace", marginTop: 2 }}>{layer.kpi}</div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 12, fontSize: 10, color: "var(--text-dim)" }}>
+          <span style={{ color: LAYER_META.L1.color }}>●</span> IoT
+          <span style={{ color: "var(--text-dim)" }}>→</span>
+          <span style={{ color: LAYER_META.L2.color }}>●</span> AI/ML
+          <span style={{ color: "var(--text-dim)" }}>→</span>
+          <span style={{ color: LAYER_META.L3.color }}>●</span> Buyer
+          <span style={{ color: "var(--text-dim)", marginLeft: 8 }}>|</span>
+          <span style={{ color: LAYER_META.LX.color, marginLeft: 8 }}>●</span> AI Assistant (chatbot)
+        </div>
+      </Card>
 
       {/* ── STAT CARDS ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 32 }}>
@@ -3567,7 +3923,7 @@ function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerifica
           setTimeout(() => {
             const target = agentData.navigationTarget.toLowerCase();
             if (target.includes("marketplace") || target.includes("market")) {
-              setTab(6);
+              setTab(7);
             } else if (target.includes("dashboard")) {
               setTab(0);
             } else if (target.includes("order")) {
@@ -4782,15 +5138,29 @@ function SystemDocsView({ productsList }) {
   );
 }
 
+// Three-layer architecture, ordered by the natural farm → buyer workflow:
+//   L1 Sensing      → register a batch, capture IoT sensor data
+//   L2 Intelligence → trust score, DVS, demand forecast, BI dashboard
+//   L3 Presentation → ESG report, marketplace
+//   Cross-cutting   → chatbot assistant
+// Each tab carries a `layer` tag so the nav bar can group + color-code them.
+const LAYER_META = {
+  L1: { name: "Sensing",      color: "#3b82f6", bg: "rgba(59,130,246,0.10)",  border: "rgba(59,130,246,0.35)" },
+  L2: { name: "Intelligence", color: "#a855f7", bg: "rgba(168,85,247,0.10)",  border: "rgba(168,85,247,0.35)" },
+  L3: { name: "Presentation", color: "#10b981", bg: "rgba(16,185,129,0.10)",  border: "rgba(16,185,129,0.35)" },
+  L0: { name: "Overview",     color: "#94a3b8", bg: "rgba(148,163,184,0.10)", border: "rgba(148,163,184,0.35)" },
+  LX: { name: "Assist",       color: "#f59e0b", bg: "rgba(245,158,11,0.10)",  border: "rgba(245,158,11,0.35)" },
+};
 const TABS = [
-  { label: "Overall Dashboard", icon: "⊞" },
-  { label: "Batches", icon: "📦" },
-  { label: "Batch Verification", icon: "📡" },
-  { label: "Microclimate Intelligence", icon: "🌡️" },
-  { label: "Climate Demand", icon: "📊" },
-  { label: "Impact & ESG", icon: "🌱" },
-  { label: "Marketplace", icon: "🛒" },
-  { label: "Chatbot", icon: "💬" }
+  { label: "Overall Dashboard",       icon: "⊞",  layer: "L0" },
+  { label: "Batches",                 icon: "📦", layer: "L1" },
+  { label: "Batch Verification",      icon: "📡", layer: "L1" },
+  { label: "Microclimate Intelligence", icon: "🌡️", layer: "L2" },
+  { label: "Climate Demand",          icon: "📊", layer: "L2" },
+  { label: "Business Intelligence",   icon: "🧠", layer: "L2" },
+  { label: "Impact & ESG",            icon: "🌱", layer: "L3" },
+  { label: "Marketplace",             icon: "🛒", layer: "L3" },
+  { label: "Chatbot",                 icon: "💬", layer: "LX" }
 ];
 
 function CLimaLogixApp() {
@@ -4917,7 +5287,7 @@ function CLimaLogixApp() {
                 const val = e.target.value;
                 setSelectedSme(val);
                 if (val === "custom_sme") {
-                  setTab(8);
+                  setTab(9);
                 } else {
                   setTab(0);
                 }
@@ -4965,23 +5335,37 @@ function CLimaLogixApp() {
         WebkitBackdropFilter: "var(--backdrop-blur)",
         paddingLeft: 28,
       }}>
-        {activeTabs.map((t, i) => (
-          <button key={t.label} onClick={() => setTab(i)}
-            style={{
-              padding: "12px 18px", border: "none",
-              background: tab === i ? "var(--bg-input)" : "transparent",
-              color: tab === i ? ACCENT.green : "var(--text-dim)",
-              fontSize: 11, cursor: "pointer",
-              borderBottom: tab === i ? `2px solid ${ACCENT.green}` : "2px solid transparent",
-              fontFamily: "inherit", letterSpacing: "0.06em", fontWeight: tab === i ? 600 : 400,
-              transition: "all 0.3s ease",
-              borderRadius: "8px 8px 0 0",
-              display: "flex", alignItems: "center", gap: 6,
-            }}>
-            <span style={{ fontSize: 13 }}>{t.icon}</span>
-            {t.label.toUpperCase()}
-          </button>
-        ))}
+        {activeTabs.map((t, i) => {
+          const layerMeta = LAYER_META[t.layer || "L0"] || LAYER_META.L0;
+          const isActive = tab === i;
+          return (
+            <button key={t.label} onClick={() => setTab(i)}
+              title={`${layerMeta.name} layer`}
+              style={{
+                padding: "10px 14px", border: "none",
+                background: isActive ? layerMeta.bg : "transparent",
+                color: isActive ? layerMeta.color : "var(--text-dim)",
+                fontSize: 11, cursor: "pointer",
+                borderBottom: isActive ? `2px solid ${layerMeta.color}` : "2px solid transparent",
+                fontFamily: "inherit", letterSpacing: "0.06em", fontWeight: isActive ? 600 : 400,
+                transition: "all 0.3s ease",
+                borderRadius: "8px 8px 0 0",
+                display: "flex", alignItems: "center", gap: 6,
+                position: "relative",
+              }}>
+              <span style={{ fontSize: 13 }}>{t.icon}</span>
+              {t.label.toUpperCase()}
+              {t.layer && t.layer !== "L0" && t.layer !== "LX" && (
+                <span style={{
+                  fontSize: 8, padding: "1px 5px", borderRadius: 3,
+                  background: layerMeta.bg, color: layerMeta.color,
+                  border: `1px solid ${layerMeta.border}`,
+                  letterSpacing: "0.08em", fontWeight: 700,
+                }}>{t.layer}</span>
+              )}
+            </button>
+          );
+        })}
       </nav>
 
       {/* ── CONTENT ───────────────────────────────────────────── */}
@@ -4999,8 +5383,8 @@ function CLimaLogixApp() {
             <div>
               <SectionLabel icon="📡" text="Batch Sensor Verification" />
               <Card>
-                <IoTForm 
-                  onResult={setTrustScore} 
+                <IoTForm
+                  onResult={setTrustScore}
                   onResultDetail={setTrustScoreResult}
                   prefilledBatchId={verificationBatchId}
                   prefilledDispatchZone={verificationDispatchZone}
@@ -5087,6 +5471,13 @@ function CLimaLogixApp() {
               </Card>
             </div>
           </div>
+          {/* ── Claim Verification lookup (3-layer L2 → L3 handoff) ── */}
+          <div style={{ marginTop: 20 }}>
+            <SectionLabel icon="🪪" text="Verify a Claim" />
+            <Card>
+              <ClaimVerifier onSelectBatch={(id) => setVerificationBatchId(id)} />
+            </Card>
+          </div>
         )}
 
         {tab === 3 && (
@@ -5107,28 +5498,30 @@ function CLimaLogixApp() {
           </div>
         )}
 
-        {tab === 5 && (
+        {tab === 5 && <BusinessIntelligenceView trustScore={trustScore} dvs={dvs} />}
+
+        {tab === 6 && (
           <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
             <SectionLabel icon="🌱" text="ESG Ledger" />
             <ESGCard trustScore={trustScore} dvs={dvs} />
           </div>
         )}
 
-        {tab === 6 && <MarketplaceView products={productsList} />}
-        {tab === 7 && (
-          <ChatbotView 
-            setTab={setTab} 
-            products={productsList} 
+        {tab === 7 && <MarketplaceView products={productsList} />}
+        {tab === 8 && (
+          <ChatbotView
+            setTab={setTab}
+            products={productsList}
             setVerificationBatchId={setVerificationBatchId}
             setVerificationDispatchZone={setVerificationDispatchZone}
           />
         )}
-        {tab === 8 && selectedSme === "custom_sme" && (
-          <CustomSmeView 
-            products={productsList} 
-            setProducts={setProductsList} 
-            customSmeName={customSmeName} 
-            setCustomSmeName={setCustomSmeName} 
+        {tab === 9 && selectedSme === "custom_sme" && (
+          <CustomSmeView
+            products={productsList}
+            setProducts={setProductsList}
+            customSmeName={customSmeName}
+            setCustomSmeName={setCustomSmeName}
           />
         )}
         {activeTabs[tab]?.label === "System Docs" && (
