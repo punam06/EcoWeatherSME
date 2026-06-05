@@ -13,11 +13,14 @@ CREATE TABLE IF NOT EXISTS public.orders (
   buyer_id TEXT NOT NULL,
   product_id TEXT,
   quantity INTEGER NOT NULL CHECK (quantity > 0),
-  "totalBdt" NUMERIC(12, 2) NOT NULL,
+  "totalBdt" NUMERIC(12, 2) NOT NULL DEFAULT 0,
   status VARCHAR(20) NOT NULL DEFAULT 'pending'
     CHECK (status IN ('pending', 'processing', 'completed', 'canceled', 'cancelled')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS "totalBdt" NUMERIC(12, 2) NOT NULL DEFAULT 0;
+
 
 COMMENT ON TABLE public.orders IS
   'Checkout orders from agent voice commerce and session confirmation flows.';
