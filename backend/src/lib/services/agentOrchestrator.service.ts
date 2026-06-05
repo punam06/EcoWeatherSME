@@ -75,7 +75,7 @@ function customProductToCatalogItem(p: Record<string, unknown>): Product {
  */
 async function handleOrderIntent(
   query: string,
-  lang: 'bn' | 'en',
+  lang: string,
   activeSessionId: string,
   farmerId: string | undefined,
   extracted: AgentParsedResult['extractedData'],
@@ -366,7 +366,7 @@ function handleGreeting(lang: string, activeSessionId: string, userName?: string
       `আস্সালামু আলাইকুম${userName ? ' ' + userName : ''}! 🌿 আপনার জৈব কৃষি কার্যক্রমে সাহায্য করতে প্রস্তুত। পণ্য, আবহাওয়া, ব্যাচের নিরাপত্তা বা অন্য কিছু জিজ্ঞাসা করুন!`,
     ],
   };
-  const options = greetings[lang as 'bn' | 'en'] || greetings['en'];
+  const options = greetings[lang as string] || greetings['en'];
   const greeting = options[Math.floor(Math.random() * options.length)];
 
   return {

@@ -51,6 +51,7 @@ import batchRouter from './api/routes/batch.route';
 import checkoutRouter from './api/routes/checkout.route';
 import spotPricingRouter from './api/routes/spotPricing.route';
 import orderRouter from './api/routes/order.route';
+import languageRouter from './routes/language';
 import { startSessionPruningInterval } from './lib/services/chatSession.service';
 import { authenticateJWT, optionalJWT } from './middleware/authenticateJWT';
 
