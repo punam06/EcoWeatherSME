@@ -264,6 +264,7 @@ export async function getOrderById(orderId: string): Promise<OrderRecord | null>
  * Marks order as dispatched (pending → processing).
  */
 export async function dispatchOrder(orderId: string, audit?: OrderAuditContext): Promise<OrderStatusResult> {
+  // existing dispatch implementation
   if (!useMemoryStore() && !isSupabaseConfigured()) {
     return { success: false, message: 'Database connection is temporarily offline.' };
   }
@@ -339,6 +340,8 @@ export async function dispatchOrder(orderId: string, audit?: OrderAuditContext):
  * Confirms order receipt (processing → completed).
  */
 export async function completeOrderReceipt(orderId: string, audit?: OrderAuditContext): Promise<OrderStatusResult> {
+  // existing receipt implementation
+
   if (!useMemoryStore() && !isSupabaseConfigured()) {
     return { success: false, message: 'Database connection is temporarily offline.' };
   }
