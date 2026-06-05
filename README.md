@@ -50,6 +50,8 @@ Generates downloadable PDF certificates with public verification URLs showing un
 
 ## 🛠️ Technology Stack & Architecture
 
+The target product architecture is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), with a Mermaid workflow diagram in [docs/recommended-workflow-diagram.md](docs/recommended-workflow-diagram.md). The implementation keeps the existing Render backend and Supabase deployment structure intact while organizing the platform into authenticated commerce, product trust, climate supply chain, AI decisioning, execution, and business intelligence layers.
+
 ```mermaid
 graph TD
     UI[React 18 Dashboard & Web Speech API] -->|API Client| Express[Express.js TS Backend]

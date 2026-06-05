@@ -10,6 +10,8 @@
     "dev:watch": "ts-node-dev --respawn --transpile-only src/app.ts",
     "lint": "tsc --noEmit --ignoreDeprecations 6.0",
     "test": "node --experimental-strip-types --test tests/order.integration.test.ts",
+    "test:smoke": "bash ../scripts/smoke-trust-layer-v2.sh",
+    "test:all": "npm test && npm run test:smoke",
     "legacy": "node index.js"
   },
   "dependencies": {
@@ -22,7 +24,7 @@
     "express-rate-limit": "^8.5.2",
     "franc-min": "^6.2.0",
     "groq-sdk": "^0.33.0",
-    "helmet": "^7.1.0",
+    "helmet": "^7.2.0",
     "jsonwebtoken": "^9.0.3",
     "node-fetch": "^2.7.0",
     "pg": "^8.11.5",

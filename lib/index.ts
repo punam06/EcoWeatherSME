@@ -4,3 +4,6 @@ export * from './services/esg.service';
 export * from './services/trustScore.service';
 export * from './services/ai.service';
 export * from './services/elNinoAlert.service';
+export * from './services/standardsRegistry.service';
+export * from './services/qaIngestion.service';
+export * from './services/provenance.service';

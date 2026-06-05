@@ -11,7 +11,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { TrustScoreRequestSchema } from '../schemas';
-import { calculateTrustScore } from '../../lib/services/trustScore.service';
+import { calculateTrustScoreLegacy } from '../../lib/services/trustScore.service';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
 
 const router = Router();
@@ -52,8 +52,9 @@ router.post('/', async (req: Request, res: Response, next: NextFunction): Promis
 
     const { pH, ec, temperatureCelsius, em1Ratio, fermentationDays } = parsed.data;
 
-    // ── 2. Calculate trust score ───────────────────────────
-    const result = calculateTrustScore({
+    // ── 2. Calculate trust score (category-aware v2 engine,
+    //         routed through the legacy shim for backward compat) ─
+    const result = calculateTrustScoreLegacy({
       pH,
       ec,
       temperatureCelsius,

@@ -1,3 +1,14 @@
+/**
+ * ═══════════════════════════════════════════════════════════════
+ * ECOSORTHA AI — SHARED LIBRARY TYPES (BACKEND)
+ * File: src/lib/types.ts
+ *
+ * Core domain types. The legacy types below are preserved for
+ * backward compatibility with the original trust-score route.
+ * Trust Layer v2 (category-aware) types are added at the bottom.
+ * ═══════════════════════════════════════════════════════════════
+ */
+
 export interface MicroclimateProfile {
   id?: string;
   zone: string;
@@ -81,5 +92,99 @@ export interface SpotPricingResponse {
   riskLabel: string;
   warningMessage: string;
   currency: string;
+}
+
+// ─── Trust Layer v2 — Category-Aware Types ─────────────────────
+
+/**
+ * Product categories that have distinct regulatory / quality
+ * standards. Adding a new category requires adding an entry to
+ * `STANDARDS` in `standardsRegistry.service.ts`.
+ */
+export type ProductCategory =
+  | 'organic'
+  | 'retail'
+  | 'pharma'
+  | 'dairy'
+  | 'manufacturing';
+
+export interface ProductStandard {
+  category: ProductCategory;
+  /** Display label, e.g. "Organic Compost (BARI aligned)" */
+  label: string;
+  /** Acceptable pH range [low, high] */
+  phRange: [number, number];
+  /** Acceptable electrical conductivity dS/m [low, high] */
+  ecRange: [number, number];
+  /** Acceptable temperature Celsius [low, high] */
+  tempRange: [number, number];
+  /** EM-1 or microbial ratio required for biological safety */
+  requiredRatio: number;
+  /** Minimum fermentation / curing / maturation days */
+  minFermentationDays: number;
+  /** Whether a BSTI license number is required for compliance */
+  requiresBSTI: boolean;
+  /** Citable regulatory reference (BARI / BSTI / DGDA etc.) */
+  reference: string;
+  /** Weights for the 5 scoring components (sum should be 1.0) */
+  weights: {
+    ph: number;
+    ec: number;
+    temp: number;
+    ratio: number;
+    days: number;
+  };
+}
+
+export type QAReportSource = 'iot' | 'inspector' | 'manufacturer';
+
+export interface QAReport {
+  id?: string;
+  batch_id: string;
+  source: QAReportSource;
+  category: ProductCategory;
+  metrics: {
+    pH: number;
+    ec: number;
+    temp: number;
+    em1Ratio: number;
+    fermentationDays: number;
+  };
+  /** Optional BSTI license when required by the category */
+  bstiCredential?: string;
+  /** Optional inspector notes (free text) */
+  inspectorNotes?: string;
+  /** SHA-256 of canonical metrics, signed at ingest time */
+  signature: string;
+  signed_at: string;
+  signed_by?: string;
+}
+
+export type ProvenanceEventType =
+  | 'genesis'
+  | 'qa_ingested'
+  | 'dispatched'
+  | 'in_transit'
+  | 'delivered'
+  | 'verified'
+  | 'flagged';
+
+export interface ProvenanceEvent {
+  seq: number;
+  type: ProvenanceEventType;
+  actor?: string;
+  data: Record<string, unknown>;
+  prev_hash: string;
+  current_hash: string;
+  timestamp: string;
+}
+
+export interface ProvenanceChain {
+  batch_id: string;
+  events: ProvenanceEvent[];
+  /** SHA-256 of the last event — used as the chain fingerprint */
+  head_hash: string;
+  /** true if recomputed hashes match all stored current_hash values */
+  verified: boolean;
 }
 

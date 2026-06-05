@@ -1,0 +1,115 @@
+flowchart TB
+  %% EcoSortha ClimateShield target architecture
+  %% Paste into Mermaid Live Editor, GitHub Markdown, or documentation tools.
+
+  subgraph auth[Authentication + Access Control Layer]
+    login[Login / Signup]
+    roles[Role-Based Access Control<br/>SME Owner, Buyer, Warehouse, Delivery, Admin]
+    session[Secure Session / JWT]
+    permissions[Permissions + Audit Logs]
+  end
+
+  subgraph users[Users + External Actors]
+    owner[SME Owner]
+    buyer[Buyer / Customer]
+    warehouse[Warehouse / Industry]
+    delivery[Delivery Partner<br/>Pathao / Uber / Local Rider]
+  end
+
+  subgraph commerce[Commerce Layer]
+    marketplace[Marketplace]
+    order[Order + Destination]
+    registry[Batch Registry]
+  end
+
+  subgraph trust[Product Trust Layer]
+    iot[IoT / QA Readings<br/>pH, EC, temp, fermentation days]
+    verify[Product Verification]
+    trustScore[Trust Score]
+  end
+
+  subgraph climate[Climate Supply Chain Layer]
+    weather[Weather Signals]
+    micro[Microclimate Intelligence]
+    routeRisk[Route + Zone Risk]
+    dvs[Delivery Viability Score]
+  end
+
+  subgraph decision[AI Decision Layer]
+    assistant[AI Assistant / Copilot]
+    ai[AI Decision Engine]
+    cost[AI CostShield<br/>budget, tokens, ROI]
+  end
+
+  subgraph execution[Execution Layer]
+    recommendation[Dispatch Recommendation<br/>accept, delay, reroute, change packaging, reject]
+    confirm[SME / Warehouse Confirmation]
+    dispatch[Climate-Safe Dispatch]
+    receipt[Customer Receipt Confirmation]
+  end
+
+  subgraph intelligence[Business Intelligence Layer]
+    impact[Impact Dashboard]
+    esg[ESG Report]
+    roi[AI ROI + Spoilage Prevented]
+  end
+
+  subgraph platform[Platform Infrastructure]
+    api[Express API on Render]
+    db[(Supabase PostgreSQL + pgvector)]
+    edge[Supabase Edge Functions]
+    llm[Groq / LLM Provider]
+    weatherApi[Weather APIs]
+  end
+
+  buyer --> login
+  owner --> login
+  warehouse --> login
+  delivery --> login
+  login --> roles
+  roles --> session
+  session --> permissions
+
+  permissions --> api
+  api --> marketplace
+  api --> registry
+  api --> verify
+  api --> confirm
+  api --> receipt
+  api --> db
+  api --> edge
+  ai --> llm
+  weather --> weatherApi
+
+  marketplace --> order
+  order --> registry
+
+  registry --> iot
+  iot --> verify
+  verify --> trustScore
+
+  order --> weather
+  weather --> micro
+  micro --> routeRisk
+  routeRisk --> dvs
+
+  trustScore --> ai
+  dvs --> ai
+  order --> ai
+  assistant <--> ai
+  cost <--> ai
+
+  ai --> recommendation
+  recommendation --> confirm
+  confirm --> warehouse
+  warehouse --> dispatch
+  dispatch --> delivery
+  delivery --> receipt
+  receipt --> buyer
+
+  receipt --> impact
+  trustScore --> impact
+  dvs --> impact
+  cost --> roi
+  impact --> esg
+  impact --> roi

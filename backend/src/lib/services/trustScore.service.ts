@@ -1,159 +1,177 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — TRUST SCORE ENGINE
+ * ECOSORTHA AI — CATEGORY-AWARE TRUST SCORE ENGINE
  * File: src/lib/services/trustScore.service.ts
  *
- * Deterministic, pure mathematical scoring function.
- * Starts at 100 and subtracts penalties per BARI specification.
+ * Deterministic 0–100 scoring. The ideal ranges, ratio, days and
+ * weights are pulled from `standardsRegistry.service.ts` based on
+ * the product category. A `calculateTrustScoreLegacy` shim keeps
+ * the old BARI-only behaviour for any caller that has not yet
+ * been migrated.
  * ═══════════════════════════════════════════════════════════════
  */
 
-// ─── Input / Output Types ────────────────────────────────────────────────────
+import { ProductCategory, ProductStandard } from '../types';
+import { getStandard } from './standardsRegistry.service';
+
+// ─── Public Types ──────────────────────────────────────────────
 
 export interface TrustScoreInput {
-  /** pH of the biological material — ideal range: 6.5–7.5 */
+  category: ProductCategory;
   pH: number;
-  /** Electrical Conductivity in dS/m — ideal range: 1.5–3.5 */
   ec: number;
-  /** Temperature in Celsius — ideal range: 25–35 */
   temperatureCelsius: number;
-  /**
-   * EM-1 Ratio expressed as a decimal:
-   *   1:500  → 0.002
-   *   1:1000 → 0.001
-   *   1:2000 → 0.0005
-   */
   em1Ratio: number;
-  /** Fermentation duration in days — minimum: 21 */
   fermentationDays: number;
 }
 
-export interface TrustScorePenalties {
-  phPenalty: number;
-  ecPenalty: number;
-  temperaturePenalty: number;
-  em1Penalty: number;
-  fermentationPenalty: number;
+export interface TrustScoreBreakdown {
+  ph: number;
+  ec: number;
+  temp: number;
+  ratio: number;
+  days: number;
 }
 
 export interface TrustScoreResult {
-  /** Final score clamped to [0, 100] */
   score: number;
-  /** "A" ≥ 85, "B" ≥ 70, "C" ≥ 55, "F" < 55 */
-  grade: string;
-  /** Itemised breakdown of every deduction */
-  penalties: TrustScorePenalties;
-  /** true if score ≥ 55 */
+  grade: 'A' | 'B' | 'C' | 'F';
   isViable: boolean;
+  category: ProductCategory;
+  reference: string;
+  breakdown: TrustScoreBreakdown;
+  notes: string[];
 }
 
-// ─── Approved EM-1 ratio values ──────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────
 
-const APPROVED_EM1_RATIOS: ReadonlySet<number> = new Set([
-  0.002,  // 1:500
-  0.001,  // 1:1000
-  0.0005, // 1:2000
-]);
+const clamp = (n: number, lo: number, hi: number) =>
+  Math.max(lo, Math.min(hi, n));
 
-// ─── Ideal parameter ranges ───────────────────────────────────────────────────
+const distanceOutside = (
+  value: number,
+  range: [number, number],
+): number => {
+  if (value < range[0]) return range[0] - value;
+  if (value > range[1]) return value - range[1];
+  return 0;
+};
 
-const PH_LOW = 6.5;
-const PH_HIGH = 7.5;
-const EC_LOW = 1.5;
-const EC_HIGH = 3.5;
-const TEMP_LOW = 25;
-const TEMP_HIGH = 35;
-const FERM_MIN = 21;
-
-// ─── Penalty rate constants ───────────────────────────────────────────────────
-
-const PH_PENALTY_PER_0_1_UNIT = 2;    // −2 pts per 0.1 unit outside ideal
-const EC_PENALTY_PER_0_5_DSPM = 3;    // −3 pts per 0.5 dS/m outside ideal
-const TEMP_PENALTY_PER_DEGREE = 1.5;  // −1.5 pts per °C outside ideal
-const EM1_PENALTY = 10;               // −10 pts if ratio not in approved list
-const FERM_PENALTY_PER_DAY = 4;       // −4 pts per day below 21
-
-// ─── Grade thresholds ─────────────────────────────────────────────────────────
-
-function deriveGrade(score: number): string {
+/**
+ * Returns the A/B/C/F grade for a numeric score.
+ * A ≥ 85, B ≥ 70, C ≥ 55, F < 55.
+ */
+function deriveGrade(score: number): TrustScoreResult['grade'] {
   if (score >= 85) return 'A';
   if (score >= 70) return 'B';
   if (score >= 55) return 'C';
   return 'F';
 }
 
-// ─── Main calculation function ────────────────────────────────────────────────
+// ─── Main Scoring Function ────────────────────────────────────
 
 /**
- * Calculates the BARI-aligned Trust Score for a biological batch.
+ * Computes the category-aware Trust Score.
  *
- * @param readings - IoT sensor readings and fermentation metadata
- * @returns Structured score result with penalties breakdown
+ * Each of the 5 components (pH, EC, temperature, ratio, days) is
+ * normalised to a 0–1 sub-score where 1 means perfectly within
+ * spec and 0 means completely out of spec. The final score is
+ * the weighted sum, scaled to 0–100.
  */
-export function calculateTrustScore(readings: TrustScoreInput): TrustScoreResult {
-  const { pH, ec, temperatureCelsius, em1Ratio, fermentationDays } = readings;
+export function calculateTrustScore(
+  input: TrustScoreInput,
+): TrustScoreResult {
+  const std = getStandard(input.category);
+  const notes: string[] = [];
 
-  // ── 1. pH Penalty ──────────────────────────────────────────
-  // −2 points per 0.1 unit outside [6.5, 7.5]
-  let phDeviation = 0;
-  if (pH < PH_LOW) {
-    phDeviation = PH_LOW - pH;
-  } else if (pH > PH_HIGH) {
-    phDeviation = pH - PH_HIGH;
-  }
-  // Convert deviation to units of 0.1 and multiply by penalty rate
-  const phPenalty = parseFloat((Math.round(phDeviation / 0.1) * PH_PENALTY_PER_0_1_UNIT).toFixed(4));
+  // pH sub-score: linear decay from 1.0 at the range edge to 0.0
+  // at 1.0 units beyond the range.
+  const phDev = distanceOutside(input.pH, std.phRange);
+  const phSub = clamp(1 - phDev, 0, 1);
 
-  // ── 2. EC Penalty ──────────────────────────────────────────
-  // −3 points per 0.5 dS/m outside [1.5, 3.5]
-  let ecDeviation = 0;
-  if (ec < EC_LOW) {
-    ecDeviation = EC_LOW - ec;
-  } else if (ec > EC_HIGH) {
-    ecDeviation = ec - EC_HIGH;
-  }
-  // Convert deviation to units of 0.5 dS/m and multiply by penalty rate
-  const ecPenalty = parseFloat((Math.round(ecDeviation / 0.5) * EC_PENALTY_PER_0_5_DSPM).toFixed(4));
+  // EC sub-score: same idea, scaled to 1.0 dS/m beyond range.
+  const ecDev = distanceOutside(input.ec, std.ecRange);
+  const ecSub = clamp(1 - ecDev, 0, 1);
 
-  // ── 3. Temperature Penalty ─────────────────────────────────
-  // −1.5 points per °C outside [25, 35]
-  let tempDeviation = 0;
-  if (temperatureCelsius < TEMP_LOW) {
-    tempDeviation = TEMP_LOW - temperatureCelsius;
-  } else if (temperatureCelsius > TEMP_HIGH) {
-    tempDeviation = temperatureCelsius - TEMP_HIGH;
-  }
-  const temperaturePenalty = parseFloat((tempDeviation * TEMP_PENALTY_PER_DEGREE).toFixed(4));
+  // Temperature sub-score: linear decay over 5 °C of headroom.
+  const tempDev = distanceOutside(input.temperatureCelsius, std.tempRange);
+  const tempSub = clamp(1 - tempDev / 5, 0, 1);
 
-  // ── 4. EM-1 Ratio Penalty ──────────────────────────────────
-  // −10 points if ratio not in approved set
-  // Use approximate comparison with tolerance to handle floating point
-  const em1IsApproved = [...APPROVED_EM1_RATIOS].some(
-    (approved) => Math.abs(em1Ratio - approved) < 1e-9
-  );
-  const em1Penalty = em1IsApproved ? 0 : EM1_PENALTY;
+  // Ratio sub-score: 1.0 if within 5% of required, else linear
+  // decay to 0 at 50% off.
+  const ratioDelta = Math.abs(input.em1Ratio - std.requiredRatio);
+  const ratioTolerance = std.requiredRatio * 0.05;
+  const ratioSub =
+    ratioDelta <= ratioTolerance
+      ? 1
+      : clamp(1 - (ratioDelta - ratioTolerance) / (std.requiredRatio * 0.5), 0, 1);
 
-  // ── 5. Fermentation Days Penalty ───────────────────────────
-  // −4 points per day below 21 (no penalty at or above 21)
-  const daysBelow21 = Math.max(0, FERM_MIN - fermentationDays);
-  const fermentationPenalty = daysBelow21 * FERM_PENALTY_PER_DAY;
+  // Days sub-score: 1.0 at the minimum, 1.0 above, ramps in from 0
+  // when below.
+  const daysRatio = input.fermentationDays / std.minFermentationDays;
+  const daysSub = clamp(daysRatio, 0, 1);
 
-  // ── Final Score ────────────────────────────────────────────
-  const rawScore =
-    100 - phPenalty - ecPenalty - temperaturePenalty - em1Penalty - fermentationPenalty;
+  const w = std.weights;
+  const weighted =
+    phSub * w.ph +
+    ecSub * w.ec +
+    tempSub * w.temp +
+    ratioSub * w.ratio +
+    daysSub * w.days;
 
-  const score = Math.max(0, parseFloat(rawScore.toFixed(2)));
+  const score = Math.round(weighted * 1000) / 10; // one decimal
+  const grade = deriveGrade(score);
+
+  if (phSub < 0.5) notes.push('pH outside acceptable band');
+  if (ecSub < 0.5) notes.push('EC outside acceptable band');
+  if (tempSub < 0.5) notes.push('Temperature outside acceptable band');
+  if (ratioSub < 1) notes.push('Microbial ratio off-spec');
+  if (daysSub < 1) notes.push('Fermentation days below minimum');
 
   return {
     score,
-    grade: deriveGrade(score),
-    penalties: {
-      phPenalty,
-      ecPenalty,
-      temperaturePenalty,
-      em1Penalty,
-      fermentationPenalty,
-    },
+    grade,
     isViable: score >= 55,
+    category: input.category,
+    reference: std.reference,
+    breakdown: {
+      ph: Math.round(phSub * 1000) / 10,
+      ec: Math.round(ecSub * 1000) / 10,
+      temp: Math.round(tempSub * 1000) / 10,
+      ratio: Math.round(ratioSub * 1000) / 10,
+      days: Math.round(daysSub * 1000) / 10,
+    },
+    notes,
   };
 }
+
+// ─── Legacy Shim ───────────────────────────────────────────────
+
+/**
+ * Backward-compatible shim for callers that still pass the old
+ * BARI-only readings shape. Defaults to category='organic'.
+ */
+export interface LegacyReadings {
+  pH: number;
+  ec: number;
+  temperatureCelsius: number;
+  em1Ratio: number;
+  fermentationDays: number;
+}
+
+export function calculateTrustScoreLegacy(
+  readings: LegacyReadings,
+): TrustScoreResult {
+  return calculateTrustScore({
+    category: 'organic',
+    pH: readings.pH,
+    ec: readings.ec,
+    temperatureCelsius: readings.temperatureCelsius,
+    em1Ratio: readings.em1Ratio,
+    fermentationDays: readings.fermentationDays,
+  });
+}
+
+// ─── Re-export for convenience ─────────────────────────────────
+export { getStandard, tryGetStandard, PRODUCT_CATEGORIES, isValidBSTICredential } from './standardsRegistry.service';
+export type { ProductStandard } from '../types';

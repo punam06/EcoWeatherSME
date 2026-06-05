@@ -116,3 +116,63 @@ export const AIRecommendRequestSchema = z.object({
 }).strict();
 
 export type AIRecommendRequest = z.infer<typeof AIRecommendRequestSchema>;
+
+// ─── Trust Score v2 Schema (Category-Aware) ────────────────
+
+export const ProductCategorySchema = z.enum(
+  ['organic', 'retail', 'pharma', 'dairy', 'manufacturing'],
+  {
+    required_error: 'category is required',
+    invalid_type_error: 'category must be one of: organic, retail, pharma, dairy, manufacturing',
+  },
+);
+
+export const TrustScoreV2RequestSchema = z
+  .object({
+    category: ProductCategorySchema.default('organic'),
+    pH: z.number().min(0).max(14),
+    ec: z.number().min(0).max(20),
+    temperatureCelsius: z.number().min(-50).max(100),
+    em1Ratio: z.number().min(0).max(1),
+    fermentationDays: z.number().int().min(0).max(365),
+  })
+  .strict();
+
+export type TrustScoreV2Request = z.infer<typeof TrustScoreV2RequestSchema>;
+
+// ─── QA Ingestion Schema ────────────────────────────────────
+
+export const QAReportSourceSchema = z.enum(['iot', 'inspector', 'manufacturer'], {
+  required_error: 'source is required',
+  invalid_type_error: 'source must be one of: iot, inspector, manufacturer',
+});
+
+export const IngestQARequestSchema = z
+  .object({
+    batch_id: z.string().min(1).max(100),
+    source: QAReportSourceSchema,
+    category: ProductCategorySchema,
+    metrics: z.object({
+      pH: z.number().min(0).max(14),
+      ec: z.number().min(0).max(20),
+      temp: z.number().min(-50).max(100),
+      em1Ratio: z.number().min(0).max(1),
+      fermentationDays: z.number().int().min(0).max(365),
+    }),
+    bstiCredential: z.string().min(1).max(100).optional(),
+    inspectorNotes: z.string().max(2000).optional(),
+    signed_by: z.string().max(200).optional(),
+  })
+  .strict();
+
+export type IngestQARequest = z.infer<typeof IngestQARequestSchema>;
+
+// ─── Verify Schema (Public QR endpoint) ─────────────────────
+
+export const VerifyBatchRequestSchema = z
+  .object({
+    batch_id: z.string().min(1).max(100),
+  })
+  .strict();
+
+export type VerifyBatchRequest = z.infer<typeof VerifyBatchRequestSchema>;

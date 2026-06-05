@@ -1,0 +1,287 @@
+flowchart TB
+  %% ============================================================
+  %% EcoSortha AI (ClimateShield) — Architecture v2
+  %% NEW: Real-Time Notifications, Feedback & Recommendation,
+  %%      Improved SME Page, Carbon Credits from ESG
+  %% Deployment-safe: Render + Supabase unchanged
+  %% ============================================================
+
+  %% ── ACTORS ──────────────────────────────────────────────────
+  subgraph actors["👥 Users + External Actors"]
+    owner["🏭 SME Owner"]
+    buyer["🛒 Buyer / Customer"]
+    warehouse["🏢 Warehouse / Industry"]
+    delivery["🚚 Delivery Partner\nPathao / Uber / Local"]
+    admin["🔐 Admin"]
+  end
+
+  %% ── AUTH LAYER ───────────────────────────────────────────────
+  subgraph auth["🔒 Authentication + Access Control Layer"]
+    login["Login / Signup"]
+    roles["Role-Based Access Control\nSME Owner · Buyer · Warehouse · Delivery · Admin"]
+    session["Secure Session / JWT"]
+    permissions["Permissions + Audit Logs"]
+  end
+
+  %% ── SME PORTAL (IMPROVED) ────────────────────────────────────
+  subgraph sme["🖥️ Improved SME Owner Portal"]
+    direction TB
+    smeDashboard["📊 SME Dashboard\nKPI cards · spoilage · revenue · DVS"]
+    batchMgmt["📦 Batch Registry & IoT Readings\npH · EC · temp · fermentation days · QR cert"]
+    spotPricing["🏷️ Dynamic Spot Pricing\ncrossed-out price · clearance badge · DVS < 70"]
+    smeNotifCenter["🔔 Notification Center\nalerts · confirmations · system events"]
+    smeFeedbackHub["⭐ Feedback Hub\nrate buyer · view reviews · respond"]
+    carbonDashboard["🌿 Carbon Credits Dashboard\nScope 3 offsets · milestones · certificates"]
+    esgReport["📋 ESG Report Generator\nplastic_offset_kg · carbon_seq_kg · BARI compliance"]
+  end
+
+  %% ── COMMERCE LAYER ───────────────────────────────────────────
+  subgraph commerce["🛒 Commerce Layer"]
+    marketplace["Marketplace\nproduct listing · catalog"]
+    order["Order + Destination"]
+    registry["Batch Registry"]
+    checkout["Voice / Text Checkout"]
+  end
+
+  %% ── TRUST LAYER ──────────────────────────────────────────────
+  subgraph trust["🔬 Product Trust Layer"]
+    iot["IoT / QA Readings\npH · EC · temp · fermentation days"]
+    verify["Product Verification\nBARl-Aligned score"]
+    trustScore["Trust Score\ndeterministic certificate"]
+    qrCert["QR Certificate\ndownloadable · scannable"]
+  end
+
+  %% ── CLIMATE SUPPLY CHAIN ─────────────────────────────────────
+  subgraph climate["🌡️ Climate Supply Chain Layer"]
+    weather["Weather Signals\nOpenWeather API"]
+    micro["Microclimate Intelligence\nMERM / UHI exposure"]
+    routeRisk["Route + Zone Risk\nBUET-UHI thermal path"]
+    dvs["Delivery Viability Score\nDVS engine"]
+  end
+
+  %% ── AI DECISION LAYER ────────────────────────────────────────
+  subgraph decision["🤖 AI Decision Layer"]
+    assistant["AI Assistant / Copilot\nBangla Voice RAG · Groq Llama-3.3"]
+    intentEngine["Intent Classifier\nagentOrchestrator.service.ts"]
+    ragEngine["RAG Engine\nbari_knowledge_chunks · pgvector"]
+    costShield["AI CostShield\nbudget · tokens · ROI tracking"]
+    aiDecision["AI Decision Engine\naccept · delay · reroute · reject"]
+  end
+
+  %% ── RECOMMENDATION ENGINE (NEW) ──────────────────────────────
+  subgraph recommend["💡 Feedback & Recommendation System  ✨ NEW"]
+    feedbackCapture["📝 Buyer Feedback Capture\nrating · review · delivery experience"]
+    feedbackStore["💾 Feedback Store\nfeedback_logs · sentiment_score"]
+    recEngine["🎯 AI Recommendation Engine\naiRecommend.route.ts · personalized results"]
+    productRank["📈 Product Ranking\nby trust score + feedback + DVS"]
+    sellerInsights["📊 Seller Insights\navg rating · return rate · peak demand"]
+  end
+
+  %% ── REAL-TIME NOTIFICATIONS (NEW) ────────────────────────────
+  subgraph realtime["⚡ Real-Time Notification System  ✨ NEW"]
+    realtimeChannel["Supabase Realtime Channel\nPostgres CDC · broadcast"]
+    notifRouter["Notification Router\nevent type → recipient role"]
+    smeAlert["🔴 SME Alerts\nDVS breach · order placed · feedback received"]
+    buyerAlert["🟢 Buyer Alerts\norder confirmed · dispatch · delivery update"]
+    warehouseAlert["🟡 Warehouse Alerts\npickup request · packaging change"]
+    toastUI["🖥️ In-App Toast / Banner\nrealtime push → frontend listener"]
+  end
+
+  %% ── CARBON CREDIT / ESG ENGINE (NEW) ─────────────────────────
+  subgraph carbon["🌍 Carbon Credit & ESG Reporting  ✨ NEW"]
+    esgMetrics["ESG Metrics Ledger\nesg_metrics table · monthly milestones"]
+    carbonCalc["Carbon Calculator\nplastic_offset_kg · carbon_seq_kg · biochar"]
+    scope3["Scope 3 Compliance Pack\ncircular milestone bundles"]
+    creditCert["🏅 Digital Carbon Credit Certificate\ndownloadable · verifiable hash"]
+    carbonMarket["🌐 Carbon Marketplace Bridge\ncorporate buyer offset purchase"]
+    greenScore["💳 Green Finance Score\nBARl compliance → micro-loan eligibility"]
+  end
+
+  %% ── EXECUTION LAYER ──────────────────────────────────────────
+  subgraph execution["⚙️ Execution Layer"]
+    dispatchRec["Dispatch Recommendation\naccept · delay · reroute · packaging · reject"]
+    confirm["SME / Warehouse Confirmation"]
+    dispatch["Climate-Safe Dispatch"]
+    receipt["Customer Receipt Confirmation"]
+  end
+
+  %% ── PLATFORM INFRASTRUCTURE (DEPLOYMENT-SAFE) ────────────────
+  subgraph platform["🏗️ Platform Infrastructure  [DEPLOYMENT SAFE]"]
+    api["☁️ Express API\nbackend/src/app.ts → Render"]
+    db[("🗄️ Supabase PostgreSQL\n+ pgvector + RLS Policies")]
+    edge["⚡ Supabase Edge Functions\nai-processing · climate-dvs · trust-score"]
+    llm["🧠 Groq LLM Provider\nLlama-3.3-70b-versatile"]
+    weatherApi["🌦️ OpenWeather / Climate APIs"]
+    realtimeInfra["📡 Supabase Realtime\nPostgres Changes broadcast"]
+  end
+
+  %% ── BUSINESS INTELLIGENCE ────────────────────────────────────
+  subgraph intelligence["📊 Business Intelligence Layer"]
+    impactDash["Impact Dashboard\nspoilage prevented · routes saved"]
+    roiTracker["AI ROI + Spoilage Prevented"]
+    auditLog["Audit Trail\nagent_interaction_logs · dvs_logs"]
+  end
+
+  %% ═══════════════════════════════════════════════════════════
+  %% EDGES — ACTOR → AUTH
+  %% ═══════════════════════════════════════════════════════════
+  owner --> login
+  buyer --> login
+  warehouse --> login
+  delivery --> login
+  admin --> login
+  login --> roles --> session --> permissions
+
+  %% AUTH → PLATFORM
+  permissions --> api
+
+  %% ═══════════════════════════════════════════════════════════
+  %% PLATFORM INFRA CONNECTIONS
+  %% ═══════════════════════════════════════════════════════════
+  api --> db
+  api --> edge
+  api --> llm
+  api --> weatherApi
+  api --> realtimeInfra
+  db --> realtimeInfra
+
+  %% ═══════════════════════════════════════════════════════════
+  %% SME PORTAL (IMPROVED) — internal links
+  %% ═══════════════════════════════════════════════════════════
+  permissions --> smeDashboard
+  smeDashboard --> batchMgmt
+  smeDashboard --> spotPricing
+  smeDashboard --> smeNotifCenter
+  smeDashboard --> smeFeedbackHub
+  smeDashboard --> carbonDashboard
+  carbonDashboard --> esgReport
+
+  %% ═══════════════════════════════════════════════════════════
+  %% COMMERCE FLOW
+  %% ═══════════════════════════════════════════════════════════
+  smeDashboard --> marketplace
+  buyer --> marketplace
+  marketplace --> order
+  order --> registry
+  registry --> checkout
+  checkout --> api
+
+  %% ═══════════════════════════════════════════════════════════
+  %% PRODUCT TRUST FLOW
+  %% ═══════════════════════════════════════════════════════════
+  batchMgmt --> iot
+  iot --> verify
+  verify --> trustScore
+  trustScore --> qrCert
+  trustScore --> productRank
+  trustScore --> db
+
+  %% ═══════════════════════════════════════════════════════════
+  %% CLIMATE SUPPLY CHAIN FLOW
+  %% ═══════════════════════════════════════════════════════════
+  order --> weather
+  weather --> weatherApi
+  weather --> micro
+  micro --> routeRisk
+  routeRisk --> dvs
+  dvs --> spotPricing
+  dvs --> productRank
+
+  %% ═══════════════════════════════════════════════════════════
+  %% AI DECISION FLOW
+  %% ═══════════════════════════════════════════════════════════
+  checkout --> intentEngine
+  intentEngine --> ragEngine
+  ragEngine --> db
+  ragEngine --> assistant
+  assistant --> llm
+  trustScore --> aiDecision
+  dvs --> aiDecision
+  order --> aiDecision
+  aiDecision --> costShield
+  costShield --> db
+  aiDecision --> dispatchRec
+
+  %% ═══════════════════════════════════════════════════════════
+  %% RECOMMENDATION & FEEDBACK FLOW (NEW)
+  %% ═══════════════════════════════════════════════════════════
+  receipt --> feedbackCapture
+  feedbackCapture --> feedbackStore
+  feedbackStore --> db
+  feedbackStore --> recEngine
+  productRank --> recEngine
+  recEngine --> api
+  recEngine --> sellerInsights
+  sellerInsights --> smeFeedbackHub
+  feedbackStore --> smeFeedbackHub
+
+  %% ═══════════════════════════════════════════════════════════
+  %% REAL-TIME NOTIFICATION FLOW (NEW)
+  %% ═══════════════════════════════════════════════════════════
+  realtimeInfra --> realtimeChannel
+  realtimeChannel --> notifRouter
+  notifRouter --> smeAlert
+  notifRouter --> buyerAlert
+  notifRouter --> warehouseAlert
+  smeAlert --> toastUI
+  buyerAlert --> toastUI
+  warehouseAlert --> toastUI
+  toastUI --> smeNotifCenter
+  dvs --> realtimeChannel
+  order --> realtimeChannel
+  feedbackCapture --> realtimeChannel
+  dispatch --> realtimeChannel
+
+  %% ═══════════════════════════════════════════════════════════
+  %% CARBON CREDIT / ESG FLOW (NEW)
+  %% ═══════════════════════════════════════════════════════════
+  receipt --> esgMetrics
+  trustScore --> esgMetrics
+  dvs --> esgMetrics
+  esgMetrics --> db
+  esgMetrics --> carbonCalc
+  carbonCalc --> scope3
+  scope3 --> creditCert
+  creditCert --> carbonMarket
+  creditCert --> carbonDashboard
+  esgMetrics --> greenScore
+  greenScore --> esgReport
+  scope3 --> esgReport
+
+  %% ═══════════════════════════════════════════════════════════
+  %% EXECUTION FLOW
+  %% ═══════════════════════════════════════════════════════════
+  dispatchRec --> confirm
+  confirm --> warehouse
+  confirm --> realtimeChannel
+  warehouse --> dispatch
+  dispatch --> delivery
+  delivery --> receipt
+  receipt --> buyer
+
+  %% ═══════════════════════════════════════════════════════════
+  %% BUSINESS INTELLIGENCE
+  %% ═══════════════════════════════════════════════════════════
+  receipt --> impactDash
+  trustScore --> impactDash
+  dvs --> impactDash
+  costShield --> roiTracker
+  impactDash --> roiTracker
+  impactDash --> esgMetrics
+  api --> auditLog
+  auditLog --> db
+
+  %% ═══════════════════════════════════════════════════════════
+  %% STYLE — colour-code the new systems
+  %% ═══════════════════════════════════════════════════════════
+  classDef newSystem fill:#0d4f3c,stroke:#22c55e,color:#d1fae5,stroke-width:2px
+  classDef platform  fill:#1e3a5f,stroke:#3b82f6,color:#dbeafe,stroke-width:2px
+  classDef actor     fill:#3b1f5e,stroke:#a855f7,color:#f3e8ff,stroke-width:1px
+  classDef auth      fill:#4c1d13,stroke:#f97316,color:#ffedd5,stroke-width:1px
+  classDef sme       fill:#1a2e1a,stroke:#86efac,color:#dcfce7,stroke-width:2px
+
+  class realtime,recommend,carbon newSystem
+  class api,db,edge,llm,weatherApi,realtimeInfra platform
+  class owner,buyer,warehouse,delivery,admin actor
+  class login,roles,session,permissions auth
+  class smeDashboard,batchMgmt,spotPricing,smeNotifCenter,smeFeedbackHub,carbonDashboard,esgReport sme
