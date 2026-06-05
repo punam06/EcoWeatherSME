@@ -24,7 +24,8 @@ const AgentMessageSchema = z.object({
     .string({ required_error: 'query is required' })
     .min(1, 'query cannot be empty')
     .max(2000, 'query too long'),
-  language: z.enum(['en', 'bn'], { required_error: 'language must be en or bn' }),
+  language: z.string().optional(),
+  userLanguage: z.string().optional(),
   sessionId: z.string().optional(),
   farmerId: z.string().optional(),
   customProducts: z.array(z.any()).optional(),
@@ -35,7 +36,8 @@ const VoiceOrderSchema = z.object({
   quantity: z.coerce.number().int().min(1).max(100000).optional(),
   farmerId: z.string().min(1).max(100).optional(),
   query: z.string().min(1).max(2000).optional(),
-  language: z.enum(['en', 'bn']).optional(),
+  language: z.string().optional(),
+  userLanguage: z.string().optional(),
   sessionId: z.string().min(1).max(100).optional(),
   customProducts: z.array(z.any()).optional(),
 }).strict();
@@ -51,27 +53,28 @@ router.post('/message', optionalJWT, aiRateLimiter, async (req: Request, res: Re
       return;
     }
 
-    const { query, language, sessionId, farmerId, customProducts } = parsed.data;
+    const { query, language, userLanguage, sessionId, farmerId, customProducts } = parsed.data;
     
     // Normalise incoming dialects / accent variants (Sylheti, Chittagonian, North Bengal)
     const normalizedQuery = dialectNormalizer(query);
     
-    // Auto-detect language if the user sent the default 'en'
-    const detectedLanguage = detectLanguageFromText(normalizedQuery);
-    const finalLanguage = language !== 'en' ? language : detectedLanguage;
+    // Use the new language service directly? No, agentOrchestrator will do the detection, 
+    // but the prompt says: "In the agent orchestrator, make these precise changes: ... 2. On every incoming message, call detectLanguageFromText(message)..."
+    // So the orchestrator handles it. We just pass `userLanguage || language` to processMessage.
+    const providedLanguage = userLanguage || language || 'en';
 
     // Safety moderation check
     if (!isContentClean(normalizedQuery)) {
       res.status(400).json({
         success: false,
-        error: finalLanguage === 'bn'
+        error: providedLanguage === 'bn'
           ? 'সংবেদনশীল বা অননুমোদিত কন্টেন্ট সনাক্ত করা হয়েছে।'
           : 'Sensitive or disallowed content detected in message.',
       });
       return;
     }
 
-    const agentResult = await processMessage(normalizedQuery, finalLanguage, sessionId, farmerId, customProducts);
+    const agentResult = await processMessage(normalizedQuery, providedLanguage, sessionId, farmerId, customProducts);
 
     res.status(200).json({
       success: true,
@@ -94,27 +97,25 @@ router.post('/voice-message', optionalJWT, aiRateLimiter, async (req: Request, r
       return;
     }
 
-    const { query, language, sessionId, farmerId, customProducts } = parsed.data;
+    const { query, language, userLanguage, sessionId, farmerId, customProducts } = parsed.data;
 
     // Normalise incoming dialects / accent variants
     const normalizedQuery = dialectNormalizer(query);
 
-    // Auto-detect language if the user sent the default 'en'
-    const detectedLanguage = detectLanguageFromText(normalizedQuery);
-    const finalLanguage = language !== 'en' ? language : detectedLanguage;
+    const providedLanguage = userLanguage || language || 'en';
 
     // Safety moderation check
     if (!isContentClean(normalizedQuery)) {
       res.status(400).json({
         success: false,
-        error: finalLanguage === 'bn'
+        error: providedLanguage === 'bn'
           ? 'সংবেদনশীল বা অননুমোদিত কন্টেন্ট সনাক্ত করা হয়েছে।'
           : 'Sensitive or disallowed content detected in message.',
       });
       return;
     }
 
-    const agentResult = await processMessage(normalizedQuery, finalLanguage, sessionId, farmerId, customProducts);
+    const agentResult = await processMessage(normalizedQuery, providedLanguage, sessionId, farmerId, customProducts);
 
     res.status(200).json({
       success: true,
@@ -139,25 +140,24 @@ router.post('/orders/voice', aiRateLimiter, async (req: Request, res: Response, 
       res.status(400).json({ success: false, error: 'Validation failed', details: parsed.error.issues });
       return;
     }
-    const { productName, quantity, farmerId, query, language, sessionId, customProducts } = parsed.data;
+    const { productName, quantity, farmerId, query, language, userLanguage, sessionId, customProducts } = parsed.data;
 
     // If it's a traditional text query instead of direct order values, fall back to processMessage
     if (query && !productName) {
       const normalizedQuery = dialectNormalizer(query);
-      const detectedLanguage = detectLanguageFromText(normalizedQuery);
-      const finalLanguage = (language && language !== 'en') ? language : detectedLanguage;
+      const providedLanguage = userLanguage || language || 'en';
 
       if (!isContentClean(normalizedQuery)) {
         res.status(400).json({
           success: false,
-          error: finalLanguage === 'bn'
+          error: providedLanguage === 'bn'
             ? 'সংবেদনশীল বা অননুমোদিত কন্টেন্ট সনাক্ত করা হয়েছে।'
             : 'Sensitive or disallowed content detected in message.',
         });
         return;
       }
 
-      const agentResult = await processMessage(normalizedQuery, finalLanguage, sessionId, farmerId, customProducts);
+      const agentResult = await processMessage(normalizedQuery, providedLanguage, sessionId, farmerId, customProducts);
       res.status(200).json({
         success: true,
         data: agentResult,

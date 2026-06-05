@@ -24,6 +24,7 @@ import { initiateOrder, confirmOrder, cancelOrder, OrderResult } from './orderEx
 import { queryRAGConversational } from './rag.service';
 import { getWeatherByCity } from './weather.service';
 import { groq, GROQ_MODEL } from '../groq';
+import { detectLanguageFromText, isGroqSupported } from './language.service';
 
 // ── App Help Knowledge Base ───────────────────────────────────────────────────
 
@@ -45,7 +46,7 @@ export interface AgentResponse {
     | 'ORDER_STATUS'
     | 'BATCH_EXPLAIN';
   message: string;
-  language: 'bn' | 'en';
+  language: string;
   products?: Product[];
   pendingOrder?: PendingOrder;
   orderResult?: OrderResult;
@@ -63,7 +64,7 @@ export interface AgentResponse {
 async function handleAgenticOrder(
   message: string,
   userId: string | undefined,
-  lang: 'bn' | 'en',
+  lang: string,
   activeSessionId: string
 ): Promise<AgentResponse> {
   const text = message.toLowerCase();
@@ -108,7 +109,7 @@ async function handleAgenticOrder(
 
 async function handleClimateForecast(
   message: string,
-  lang: 'bn' | 'en',
+  lang: string,
   activeSessionId: string
 ): Promise<AgentResponse> {
   const normalizedCity = cityNameNormalizer(message);
@@ -168,7 +169,7 @@ async function handleClimateForecast(
 
 async function handleProductSearch(
   message: string,
-  lang: 'bn' | 'en',
+  lang: string,
   activeSessionId: string
 ): Promise<AgentResponse> {
   const text = message.toLowerCase().trim();
@@ -224,14 +225,19 @@ async function handleProductSearch(
 
 // ── Explain With Groq Helper ────────────────────────────────────────────────────
 
-async function explainWithGroq(rawData: any, lang: 'bn' | 'en'): Promise<string> {
+async function explainWithGroq(rawData: any, lang: string): Promise<string> {
   try {
     const completion = await groq.chat.completions.create({
       model: GROQ_MODEL,
       messages: [
         {
           role: 'system',
-          content: 'You are a helpful assistant for EcoSortha. Given this raw data, explain it to the user in simple, friendly language in 2–3 sentences. If the user wrote in Bangla, reply in Bangla. If English, reply in English.',
+          content: `You are a helpful assistant for EcoSortha. Given this raw data, explain it to the user in simple, friendly language in 2–3 sentences.
+
+LANGUAGE INSTRUCTION (HIGHEST PRIORITY):
+The user's detected primary language is: ${lang}.
+You MUST generate your final replyMessage natively in ${lang}.
+Do NOT output English unless the detected language is English.`,
         },
         { role: 'user', content: `Language: ${lang}\nRaw Data:\n${JSON.stringify(rawData, null, 2)}` }
       ],
@@ -246,7 +252,7 @@ async function explainWithGroq(rawData: any, lang: 'bn' | 'en'): Promise<string>
 
 // ── App Help Handler ──────────────────────────────────────────────────────────
 
-async function handleAppHelp(query: string, lang: 'bn' | 'en', activeSessionId: string): Promise<AgentResponse> {
+async function handleAppHelp(query: string, lang: string, activeSessionId: string): Promise<AgentResponse> {
   const lowerQuery = query.toLowerCase();
 
   let bestMatch = APP_HELP_ENTRIES[0];
@@ -276,7 +282,7 @@ async function handleAppHelp(query: string, lang: 'bn' | 'en', activeSessionId: 
 
 // ── Greeting Handler ──────────────────────────────────────────────────────────
 
-function handleGreeting(lang: 'bn' | 'en', activeSessionId: string, userName?: string): AgentResponse {
+function handleGreeting(lang: string, activeSessionId: string, userName?: string): AgentResponse {
   const greetings = {
     en: [
       `Hello${userName ? ' ' + userName : ''}! 👋 I'm EcoSortha AI — your agricultural assistant for BARI compliance, organic product orders, climate forecasts, and platform navigation. How can I help you today?`,
@@ -287,7 +293,7 @@ function handleGreeting(lang: 'bn' | 'en', activeSessionId: string, userName?: s
       `আস্সালামু আলাইকুম${userName ? ' ' + userName : ''}! 🌿 আপনার জৈব কৃষি কার্যক্রমে সাহায্য করতে প্রস্তুত। পণ্য, আবহাওয়া, ব্যাচের নিরাপত্তা বা অন্য কিছু জিজ্ঞাসা করুন!`,
     ],
   };
-  const options = greetings[lang];
+  const options = greetings[lang as 'bn' | 'en'] || greetings['en'];
   const greeting = options[Math.floor(Math.random() * options.length)];
 
   return {
@@ -302,7 +308,7 @@ function handleGreeting(lang: 'bn' | 'en', activeSessionId: string, userName?: s
 
 async function handleProductExplain(
   query: string,
-  lang: 'bn' | 'en',
+  lang: string,
   activeSessionId: string,
   llmReply?: string
 ): Promise<AgentResponse> {
@@ -338,7 +344,7 @@ async function handleProductExplain(
 
 async function handleOrderStatus(
   userId: string | undefined,
-  lang: 'bn' | 'en',
+  lang: string,
   activeSessionId: string
 ): Promise<AgentResponse> {
   if (!userId || userId === 'guest') {
@@ -374,7 +380,7 @@ async function handleOrderStatus(
 
 async function handleBatchExplain(
   query: string,
-  lang: 'bn' | 'en',
+  lang: string,
   activeSessionId: string,
   batchId?: string
 ): Promise<AgentResponse> {
@@ -458,7 +464,7 @@ IMPORTANT: Respond ONLY with a valid JSON object. No markdown. No preambles.
 
 interface AgentParsedResult {
   intent: 'weather' | 'navigate' | 'order' | 'product_search' | 'bari_advice' | 'general_chat' | 'greeting' | 'product_explain' | 'app_help' | 'order_status' | 'batch_explain';
-  language: 'bn' | 'en' | 'mixed';
+  language: string;
   extractedData: {
     city: string | null;
     page: 'dashboard' | 'orders' | 'marketplace' | 'batches' | 'batch_verification' | 'microclimate' | 'climate_demand' | 'impact_esg' | 'chatbot' | null;
@@ -475,7 +481,8 @@ interface AgentParsedResult {
 async function queryLLMIntent(
   query: string,
   history: { role: 'user' | 'assistant'; content: string }[],
-  customProductsContext?: string
+  customProductsContext?: string,
+  effectiveLanguage: string = 'en'
 ): Promise<AgentParsedResult> {
   const conversationHistory = history.slice(-6).map((m) => ({
     role: m.role === 'user' ? ('user' as const) : ('assistant' as const),
@@ -490,7 +497,12 @@ async function queryLLMIntent(
     const completion = await groq.chat.completions.create({
       model: GROQ_MODEL,
       messages: [
-        { role: 'system', content: AGENT_SYSTEM_PROMPT + (customProductsContext ? `\n\n${customProductsContext}` : '') },
+        { role: 'system', content: AGENT_SYSTEM_PROMPT + (customProductsContext ? `\n\n${customProductsContext}` : '') + `
+
+LANGUAGE INSTRUCTION (HIGHEST PRIORITY):
+The user's detected primary language is: ${effectiveLanguage}.
+You MUST generate your final replyMessage natively in ${effectiveLanguage}.
+Do NOT output English unless the detected language is English.` },
         ...messages,
       ],
       temperature: 0.3,
@@ -535,7 +547,7 @@ async function queryLLMIntent(
 
 export async function processMessage(
   query: string,
-  language: 'bn' | 'en',
+  language: string,
   sessionId?: string,
   farmerId?: string,
   customProducts?: any[],
@@ -559,12 +571,18 @@ export async function processMessage(
       customProducts.map((p: any) => `- ${p.name} (${p.category || 'Agriculture'}): Price: ${p.price}, Unit: ${p.unit || 'Kg'}, DVS Score: ${p.dvs || 90}, Seller: ${p.seller || 'Custom SME'}`).join('\n')
     : '';
 
+  const detected = detectLanguageFromText(query);
+  let effectiveLanguage = language;
+  if (detected && detected !== language && isGroqSupported(detected)) {
+    effectiveLanguage = detected;
+  }
+
   // Query LLM Intent Layer
-  const llmResult = await queryLLMIntent(query, session.history, customProductsContext);
+  const llmResult = await queryLLMIntent(query, session.history, customProductsContext, effectiveLanguage);
 
   appendMessage(activeSessionId!, 'user', query);
 
-  const lang: 'bn' | 'en' = (llmResult.language === 'bn') ? 'bn' : 'en';
+  const lang: string = effectiveLanguage;
 
   try {
     let result: AgentResponse;

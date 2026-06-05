@@ -50,6 +50,7 @@ import esgRouter from './api/routes/esg.route';
 import batchRouter from './api/routes/batch.route';
 import checkoutRouter from './api/routes/checkout.route';
 import spotPricingRouter from './api/routes/spotPricing.route';
+import languageRouter from './routes/language';
 import { startSessionPruningInterval } from './lib/services/chatSession.service';
 import { authenticateJWT, optionalJWT } from './middleware/authenticateJWT';
 
@@ -224,6 +225,7 @@ app.use('/api/agent', agentRouter);
 app.use('/api/ai/chat', aiChatRouter);
 app.use('/api/batches', batchRouter);
 app.use('/api/esg', esgRouter);
+app.use('/api/language', languageRouter);
 app.use('/api/checkout', checkoutRouter);
 app.use('/api/spot-pricing', spotPricingRouter);
 

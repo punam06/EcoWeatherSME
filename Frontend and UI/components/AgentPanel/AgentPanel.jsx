@@ -37,7 +37,16 @@ export default function AgentPanel({ setTab, products, setVerificationBatchId, s
   });
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [language, setLanguage] = useState('bn');
+  const [language, setLanguage] = useState(window.EcoLang ? window.EcoLang.getCurrentLanguage() : 'en');
+
+  useEffect(() => {
+    if (window.EcoLang) {
+      setLanguage(window.EcoLang.getCurrentLanguage());
+      return window.EcoLang.onLanguageChange((newLang) => {
+        setLanguage(newLang);
+      });
+    }
+  }, []);
   const [voiceSupported, setVoiceSupported] = useState(true);
 
   const messagesEndRef = useRef(null);
@@ -139,6 +148,22 @@ export default function AgentPanel({ setTab, products, setVerificationBatchId, s
     if (!textToSend) setInputValue('');
     setIsProcessing(true);
 
+    let effectiveLang = language;
+    try {
+      const langRes = await fetch(`${BACKEND_URL}/api/language/detect-text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      const langData = await langRes.json();
+      if (langData.language && langData.language !== language && langData.isSupported) {
+        effectiveLang = langData.language;
+        if (window.EcoLang) window.EcoLang.setLanguage(effectiveLang);
+      }
+    } catch (e) {
+      console.warn('Language detection failed:', e);
+    }
+
     try {
       const response = await fetch(`${BACKEND_URL}/api/agent/message`, {
         method: 'POST',
@@ -148,7 +173,8 @@ export default function AgentPanel({ setTab, products, setVerificationBatchId, s
         },
         body: JSON.stringify({
           query: text,
-          language,
+          language: 'en',
+          userLanguage: effectiveLang,
           sessionId: sessionId || undefined,
           farmerId: currentUser ? currentUser.id : undefined
         })
@@ -220,7 +246,7 @@ export default function AgentPanel({ setTab, products, setVerificationBatchId, s
 
     recognitionRef.current = new SpeechRecognition();
     const recognition = recognitionRef.current;
-    recognition.lang = language === 'bn' ? 'bn-BD' : 'en-US';
+    recognition.lang = window.EcoLang ? window.EcoLang.getSpeechCode() : (language === 'bn' ? 'bn-BD' : 'en-US');
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
