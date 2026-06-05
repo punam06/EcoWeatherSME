@@ -41,7 +41,16 @@ export default function AgentPanel({ setTab }) {
   });
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [language, setLanguage] = useState('bn');
+  const [language, setLanguage] = useState(window.EcoLang ? window.EcoLang.getCurrentLanguage() : 'en');
+
+  useEffect(() => {
+    if (window.EcoLang) {
+      setLanguage(window.EcoLang.getCurrentLanguage());
+      return window.EcoLang.onLanguageChange((newLang) => {
+        setLanguage(newLang);
+      });
+    }
+  }, []);
   const [voiceSupported, setVoiceSupported] = useState(true);
 
   const messagesEndRef = useRef(null);
@@ -87,13 +96,13 @@ export default function AgentPanel({ setTab }) {
       return;
     }
     try {
-      const userStr = localStorage.getItem('user') || localStorage.getItem('farmer');
-      const user = userStr ? JSON.parse(userStr) : null;
-      
       const response = await fetch(`${BACKEND_URL}/api/ai/chat/start`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ farmerId: user ? user.id : undefined })
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+        },
+        body: JSON.stringify({ farmerId: currentUser ? currentUser.id : undefined })
       });
       const resData = await response.json();
       if (resData.success && resData.data) {
@@ -110,7 +119,10 @@ export default function AgentPanel({ setTab }) {
     try {
       await fetch(`${BACKEND_URL}/api/ai/chat/end`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+        },
         body: JSON.stringify({ sessionId })
       });
       setSessionId('');
@@ -210,18 +222,35 @@ export default function AgentPanel({ setTab }) {
     if (!textToSend) setInputValue('');
     setIsProcessing(true);
 
+    let effectiveLang = language;
     try {
-      const userStr = localStorage.getItem('user') || localStorage.getItem('farmer');
-      const user = userStr ? JSON.parse(userStr) : null;
-
-      const response = await fetch(`${BACKEND_URL}/api/agent/message`, {
+      const langRes = await fetch(`${BACKEND_URL}/api/language/detect-text`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      const langData = await langRes.json();
+      if (langData.language && langData.language !== language && langData.isSupported) {
+        effectiveLang = langData.language;
+        if (window.EcoLang) window.EcoLang.setLanguage(effectiveLang);
+      }
+    } catch (e) {
+      console.warn('Language detection failed:', e);
+    }
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/agent/message`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+        },
         body: JSON.stringify({
           query: text,
-          language,
+          language: 'en',
+          userLanguage: effectiveLang,
           sessionId: sessionId || undefined,
-          farmerId: user ? user.id : undefined
+          farmerId: currentUser ? currentUser.id : undefined
         })
       });
       const resData = await response.json();
@@ -294,7 +323,7 @@ export default function AgentPanel({ setTab }) {
 
     recognitionRef.current = new SpeechRecognition();
     const recognition = recognitionRef.current;
-    recognition.lang = language === 'bn' ? 'bn-BD' : 'en-US';
+    recognition.lang = window.EcoLang ? window.EcoLang.getSpeechCode() : (language === 'bn' ? 'bn-BD' : 'en-US');
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
 
@@ -498,6 +527,32 @@ export default function AgentPanel({ setTab }) {
                       🚀 {msg.content}
                     </div>
                   )}
+                  {/* APP HELP TYPE */}
+                  {msg.type === 'APP_HELP' && (
+                    <div style={{ padding: '10px 14px', borderRadius: '14px 14px 14px 2px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3B82F6', color: 'var(--text-primary)', fontSize: 12.5, maxWidth: '85%' }}>
+                      <div style={{ fontWeight: 700, color: '#3B82F6', marginBottom: 6 }}>ℹ️ {msg.helpTopic ? msg.helpTopic.toUpperCase() : 'GUIDANCE'}</div>
+                      <div style={{ lineHeight: 1.5 }}>{msg.content}</div>
+                    </div>
+                  )}
+
+                  {/* ORDER STATUS TYPE */}
+                  {msg.type === 'ORDER_STATUS' && (
+                    <div style={{ padding: '12px', borderRadius: '12px 12px 12px 2px', background: 'var(--bg-input)', border: '1px solid var(--border-primary)', width: '90%', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ fontSize: 12.5, color: 'var(--text-primary)', lineHeight: 1.5 }}>{msg.content}</div>
+                      {msg.rawOrders && msg.rawOrders.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>RECENT ORDERS</div>
+                          {msg.rawOrders.map((order, idx) => (
+                            <div key={idx} style={{ padding: '8px', background: 'var(--bg-primary)', borderRadius: 6, border: '1px solid var(--border-primary)', display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                              <span><strong style={{color:'var(--text-primary)'}}>{order.product_name}</strong> ({order.quantity}x)</span>
+                              <span style={{color: order.status === 'delivered' ? '#10B981' : '#F59E0B', fontWeight:600}}>{order.status}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                 </div>
               );
             })}

@@ -89,7 +89,7 @@ const BARI_KNOWLEDGE_CHUNKS: ReadonlyArray<KnowledgeChunk> = [
 
 export interface RAGResult {
   answer: string;
-  language: 'bn' | 'en';
+  language: string;
   contextUsed: string[];
   tokensUsed: number;
 }
@@ -157,7 +157,7 @@ export async function getEmbedding(text: string): Promise<number[]> {
 /**
  * Grounded QA recommendations utilizing Groq exclusively.
  */
-export async function queryClaudeRAG(query: string, language: 'bn' | 'en'): Promise<RAGResult> {
+export async function queryClaudeRAG(query: string, language: string): Promise<RAGResult> {
   const relevantChunks = await retrieveRelevantChunksFromDB(query, 2);
   const contextText = relevantChunks.map((c) => c.content).join('\n\n');
   const contextCategories = relevantChunks.map((c) => c.category);
@@ -170,7 +170,7 @@ export async function queryClaudeRAG(query: string, language: 'bn' | 'en'): Prom
  */
 export async function queryRAGConversational(
   query: string,
-  language: 'bn' | 'en',
+  language: string,
   history: { role: 'user' | 'assistant'; content: string }[]
 ): Promise<RAGResult> {
   const relevantChunks = await retrieveRelevantChunksFromDB(query, 2);
@@ -184,7 +184,7 @@ export async function queryRAGConversational(
 
 export async function queryRAG(
   query: string,
-  language: 'bn' | 'en',
+  language: string,
   contextTextOverride?: string,
   contextCategoriesOverride?: string[]
 ): Promise<RAGResult> {
@@ -192,10 +192,12 @@ export async function queryRAG(
   const contextCategories = contextCategoriesOverride ?? retrieveTopChunks(query, 2).map((c) => c.category);
 
   const systemPrompt =
-    `You MUST respond exclusively in ${language === 'bn' ? 'Bangla (Bengali script)' : 'English'}. ` +
-    `Do not switch languages under any circumstance.\n\n` +
     `You are an expert agricultural AI assistant for Bangladesh's organic farming sector.\n` +
-    `Answer strictly based on BARI context:\n${contextText}`;
+    `Answer strictly based on BARI context:\n${contextText}\n\n` +
+    `LANGUAGE INSTRUCTION (HIGHEST PRIORITY):\n` +
+    `The user's detected primary language is: ${language}.\n` +
+    `You MUST generate your final replyMessage natively in ${language}.\n` +
+    `Do NOT output English unless the detected language is English.`;
 
   let answer: string;
   let tokensUsed = 0;
@@ -245,16 +247,18 @@ export async function queryRAG(
 
 async function queryRAGConversationalGroq(
   query: string,
-  language: 'bn' | 'en',
+  language: string,
   history: { role: 'user' | 'assistant'; content: string }[],
   contextText: string,
   contextCategories: string[]
 ): Promise<RAGResult> {
   const systemPrompt =
-    `You MUST respond exclusively in ${language === 'bn' ? 'Bangla (Bengali script)' : 'English'}. ` +
-    `Do not switch languages under any circumstance.\n\n` +
     `You are an expert agricultural AI assistant for Bangladesh's organic farming sector.\n` +
-    `Answer strictly based on BARI context:\n${contextText}`;
+    `Answer strictly based on BARI context:\n${contextText}\n\n` +
+    `LANGUAGE INSTRUCTION (HIGHEST PRIORITY):\n` +
+    `The user's detected primary language is: ${language}.\n` +
+    `You MUST generate your final replyMessage natively in ${language}.\n` +
+    `Do NOT output English unless the detected language is English.`;
 
   const conversationMessages = history.map((msg) => ({
     role: msg.role === 'user' ? 'user' as const : 'assistant' as const,

@@ -52,6 +52,7 @@ import checkoutRouter from './api/routes/checkout.route';
 import spotPricingRouter from './api/routes/spotPricing.route';
 import orderRouter from './api/routes/order.route';
 import { startSessionPruningInterval } from './lib/services/chatSession.service';
+import { authenticateJWT, optionalJWT } from './middleware/authenticateJWT';
 
 // ── Supabase Guard ────────────────────────────────────────────────────────────
 import { isSupabaseConfigured } from './lib/supabase';
@@ -210,10 +211,12 @@ app.get('/api/test-db', async (_req: Request, res: Response) => {
 // NEW TYPED API ROUTES (TypeScript, Zod-validated)
 // ═══════════════════════════════════════════════════════════════
 
+// Removed custom authRouter, using Supabase Auth
+// app.use('/api/auth', authRouter);
 app.use('/api/batch/trust-score', trustScoreRouter);
 app.use('/api/climate/dvs', climateDVSRouter);
 app.use('/api/ai/recommend', aiRecommendRouter);
-app.post('/api/orders/voice', (req, res, next) => {
+app.post('/api/orders/voice', authenticateJWT, (req, res, next) => {
   req.url = '/orders/voice';
   agentRouter(req, res, next);
 });
@@ -223,6 +226,7 @@ app.use('/api/agent', agentRouter);
 app.use('/api/ai/chat', aiChatRouter);
 app.use('/api/batches', batchRouter);
 app.use('/api/esg', esgRouter);
+app.use('/api/language', languageRouter);
 app.use('/api/checkout', checkoutRouter);
 app.use('/api/spot-pricing', spotPricingRouter);
 
