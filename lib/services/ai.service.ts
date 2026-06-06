@@ -26,7 +26,7 @@ export function buildClaudeRAGPrompt(
     : 'Provide the final recommendation response in clean, helpful, natural-sounding conversational spoken English.';
 
   return `
-You are the EcoSortha AI Agricultural Compliance Advisor. Your job is to help green SMEs, commercial nurseries, and organic refineries analyze bio-asset parameters and choose quality circular inputs.
+You are the ClimaLogix AI Agricultural Compliance Advisor. Your job is to help green SMEs, commercial nurseries, and organic refineries analyze bio-asset parameters and choose quality circular inputs.
 
 Retrieved BARI Scientific Guidelines:
 ----------------------------------

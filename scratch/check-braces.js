@@ -1,6 +1,6 @@
 const fs = require('fs');
 
-const content = fs.readFileSync('Frontend and UI/ecosortha_dashboard.jsx', 'utf8');
+const content = fs.readFileSync('Frontend and UI/climalogix_dashboard.jsx', 'utf8');
 const lines = content.split('\n');
 
 let braceDepth = 0;

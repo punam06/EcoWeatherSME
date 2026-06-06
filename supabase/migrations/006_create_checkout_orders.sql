@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- ECOSORTHA AI — MIGRATION 006: Create checkout_orders Table
+-- CLIMALOGIX AI — MIGRATION 006: Create checkout_orders Table
 -- File: supabase/migrations/006_create_checkout_orders.sql
 -- ═══════════════════════════════════════════════════════════════
 

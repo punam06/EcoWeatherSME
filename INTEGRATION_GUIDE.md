@@ -1,4 +1,4 @@
-# 🚀 EcoSortha AI - Complete Integration & Setup Guide
+# 🚀 ClimaLogix AI - Complete Integration & Setup Guide
 
 ## 📋 Project Structure Overview
 
@@ -119,13 +119,13 @@ curl -X POST http://localhost:5001/api/calculate-trust-score \
 
 2. **Create Database**:
    ```bash
-   createdb ecosortha
-   psql ecosortha < schema.sql
+   createdb climalogix
+   psql climalogix < schema.sql
    ```
 
 3. **Update .env**:
    ```env
-   DATABASE_URL=postgresql://postgres:password@localhost:5432/ecosortha
+   DATABASE_URL=postgresql://postgres:password@localhost:5432/climalogix
    ```
 
 ### For Production (Supabase)
@@ -175,7 +175,7 @@ await window.APIClient.getZones();
 Frontend and UI/
 ├── index.html              # Main dashboard (React 18 JSX)
 ├── api-integration.js      # API client layer (auto-loaded)
-├── ecosortha_dashboard.jsx # Alternative component view
+├── climalogix_dashboard.jsx # Alternative component view
 └── UI update/             # Additional UI components
 ```
 

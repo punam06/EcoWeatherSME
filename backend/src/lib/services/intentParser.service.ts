@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — INTENT PARSER SERVICE
+ * CLIMALOGIX AI — INTENT PARSER SERVICE
  * File: src/lib/services/intentParser.service.ts
  *
  * Fuses Bangla & English speech transcripts into structured order payloads.

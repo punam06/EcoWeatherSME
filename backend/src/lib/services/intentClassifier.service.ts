@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — INTENT CLASSIFIER SERVICE
+ * CLIMALOGIX AI — INTENT CLASSIFIER SERVICE
  * File: src/lib/services/intentClassifier.service.ts
  *
  * Implements regex-based intent classification and comprehensive 

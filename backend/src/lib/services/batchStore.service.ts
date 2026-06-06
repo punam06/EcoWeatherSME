@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — SHARED BATCH STORE SERVICE
+ * CLIMALOGIX AI — SHARED BATCH STORE SERVICE
  * File: src/lib/services/batchStore.service.ts
  *
  * Implements a shared in-memory database store for organic batches.

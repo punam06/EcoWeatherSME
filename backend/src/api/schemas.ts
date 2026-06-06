@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — ZOD VALIDATION SCHEMAS
+ * CLIMALOGIX AI — ZOD VALIDATION SCHEMAS
  * File: src/api/schemas.ts
  *
  * All incoming request body shapes validated with strict Zod schemas.

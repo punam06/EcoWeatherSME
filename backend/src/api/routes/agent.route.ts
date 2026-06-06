@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — AGENT CHAT & TRANSACTION COMMERCE ROUTES
+ * CLIMALOGIX AI — AGENT CHAT & TRANSACTION COMMERCE ROUTES
  * File: src/api/routes/agent.route.ts
  *
  * Implements agent messaging, dialect normalization, and dedicated

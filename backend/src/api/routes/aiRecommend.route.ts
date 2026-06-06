@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — AI RECOMMEND ROUTE
+ * CLIMALOGIX AI — AI RECOMMEND ROUTE
  * File: src/api/routes/aiRecommend.route.ts
  *
  * POST /api/ai/recommend

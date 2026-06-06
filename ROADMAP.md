@@ -1,6 +1,6 @@
-# 🗺️ EcoSortha AI (ClimateShield) — Simplified Strategic Roadmap
+# 🗺️ ClimaLogix AI (ClimateShield) — Simplified Strategic Roadmap
 
-Welcome to the unified strategic blueprint for **EcoSortha AI (ClimateShield)**. This document is engineered to accomplish three goals:
+Welcome to the unified strategic blueprint for **ClimaLogix AI (ClimateShield)**. This document is engineered to accomplish three goals:
 1. **Simplify the pitch narrative** for judges into a memorable 3-pillar framework.
 2. **Provide a 100% finishable 7-day build plan** by separating active core features from high-valuation future roadmap features.
 3. **Secure maximum marks** across all judging criteria of the **Infinity AI BuildFest 2026**.
@@ -8,11 +8,11 @@ Welcome to the unified strategic blueprint for **EcoSortha AI (ClimateShield)**.
 ---
 
 ## 🎯 The Simplified Pitch: The 3-Pillar Architecture
-To impress the judges, explain EcoSortha AI as **"The only circular commerce platform in Bangladesh that verifies biological quality twice—at production and during transit—overcoming adoption barriers via speech."**
+To impress the judges, explain ClimaLogix AI as **"The only circular commerce platform in Bangladesh that verifies biological quality twice—at production and during transit—overcoming adoption barriers via speech."**
 
 ```
                   ┌──────────────────────────────────────────────┐
-                  │          EcoSortha AI (ClimateShield)        │
+                  │          ClimaLogix AI (ClimateShield)        │
                   └──────────────────────┬───────────────────────┘
                                          │
          ┌───────────────────────────────┼───────────────────────────────┐

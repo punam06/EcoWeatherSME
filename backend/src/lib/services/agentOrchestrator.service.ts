@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — AGENT ORCHESTRATOR SERVICE
+ * CLIMALOGIX AI — AGENT ORCHESTRATOR SERVICE
  * File: src/lib/services/agentOrchestrator.service.ts
  *
  * Full multi-intent dispatcher with:
@@ -305,7 +305,7 @@ async function explainWithGroq(rawData: any, lang: string): Promise<string> {
       messages: [
         {
           role: 'system',
-          content: `You are a helpful assistant for EcoSortha. Given this raw data, explain it to the user in simple, friendly language in 2–3 sentences.
+          content: `You are a helpful assistant for ClimaLogix. Given this raw data, explain it to the user in simple, friendly language in 2–3 sentences.
 
 LANGUAGE INSTRUCTION (HIGHEST PRIORITY):
 The user's detected primary language is: ${lang}.
@@ -358,11 +358,11 @@ async function handleAppHelp(query: string, lang: string, activeSessionId: strin
 function handleGreeting(lang: string, activeSessionId: string, userName?: string): AgentResponse {
   const greetings = {
     en: [
-      `Hello${userName ? ' ' + userName : ''}! 👋 I'm EcoSortha AI — your agricultural assistant for BARI compliance, organic product orders, climate forecasts, and platform navigation. How can I help you today?`,
+      `Hello${userName ? ' ' + userName : ''}! 👋 I'm ClimaLogix AI — your agricultural assistant for BARI compliance, organic product orders, climate forecasts, and platform navigation. How can I help you today?`,
       `Hi there${userName ? ', ' + userName : ''}! 🌱 Ready to help with your organic farming operations. Ask me about products, weather, batch safety, or anything else!`,
     ],
     bn: [
-      `নমস্কার${userName ? ' ' + userName : ''}! 👋 আমি EcoSortha AI — BARI কমপ্লায়েন্স, জৈব পণ্য অর্ডার, আবহাওয়া পূর্বাভাস এবং প্ল্যাটফর্ম নেভিগেশনে আপনার সহকারী। আজ কীভাবে সাহায্য করতে পারি?`,
+      `নমস্কার${userName ? ' ' + userName : ''}! 👋 আমি ClimaLogix AI — BARI কমপ্লায়েন্স, জৈব পণ্য অর্ডার, আবহাওয়া পূর্বাভাস এবং প্ল্যাটফর্ম নেভিগেশনে আপনার সহকারী। আজ কীভাবে সাহায্য করতে পারি?`,
       `আস্সালামু আলাইকুম${userName ? ' ' + userName : ''}! 🌿 আপনার জৈব কৃষি কার্যক্রমে সাহায্য করতে প্রস্তুত। পণ্য, আবহাওয়া, ব্যাচের নিরাপত্তা বা অন্য কিছু জিজ্ঞাসা করুন!`,
     ],
   };
@@ -491,7 +491,7 @@ async function handleBatchExplain(
 // ── LLM Intent Query ──────────────────────────────────────────────────────────
 
 const AGENT_SYSTEM_PROMPT = `
-You are EcoSortha AI, an intelligent agricultural commerce assistant for Bangladesh's organic farming sector. You understand Bangla, English, and Banglish (mixed) naturally.
+You are ClimaLogix AI, an intelligent agricultural commerce assistant for Bangladesh's organic farming sector. You understand Bangla, English, and Banglish (mixed) naturally.
 
 You help farmers and SMEs with: weather/climate data, BARI agricultural guidelines, product browsing, placing orders, analyzing batch safety/verification, navigating the platform dashboard, and answering questions about how the platform works.
 

@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- ECOSORTHA AI — MIGRATION 004: Orders and Agent Logs
+-- CLIMALOGIX AI — MIGRATION 004: Orders and Agent Logs
 -- File: supabase/migrations/004_orders_agent_log.sql
 -- ═══════════════════════════════════════════════════════════════
 

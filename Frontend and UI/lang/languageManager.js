@@ -1,5 +1,5 @@
 /**
- * EcoSortha Global Language Manager (EcoLang)
+ * ClimaLogix Global Language Manager (EcoLang)
  * Handles IP-based fallback, local storage persistence, and component state syncing.
  */
 const EcoLang = (function () {

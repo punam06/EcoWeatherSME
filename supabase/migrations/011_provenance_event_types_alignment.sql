@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- ECOSORTHA AI — PROVENANCE EVENT TYPES ALIGNMENT
+-- CLIMALOGIX AI — PROVENANCE EVENT TYPES ALIGNMENT
 -- File: supabase/migrations/011_provenance_event_types_alignment.sql
 --
 -- Aligns the provenance_records.event_type CHECK constraint

@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI (ClimateShield) — EXPRESS BACKEND
+ * CLIMALOGIX AI (ClimateShield) — EXPRESS BACKEND
  * File: src/app.ts
  *
  * Entry point for the standalone Node.js/Express TypeScript server.
@@ -85,7 +85,7 @@ const FRONTEND_ORIGINS = [
   process.env.CORS_ORIGIN,
   process.env.FRONTEND_URL,
   'https://eco-sortha.vercel.app',
-  'https://ecosortha.onrender.com',
+  'https://climalogix.onrender.com',
   'http://localhost:3000',
   'http://localhost:5173',
   'http://localhost:5001',
@@ -160,7 +160,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
     success: true,
     data: {
       status: 'ok',
-      message: 'EcoSortha AI backend is running.',
+      message: 'ClimaLogix AI backend is running.',
       version: '2.0.0',
       environment: process.env.NODE_ENV ?? 'development',
       supabaseConfigured: isSupabaseConfigured(),
@@ -741,7 +741,7 @@ startSessionPruningInterval();
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log('\n╔══════════════════════════════════════════════════════════╗');
-    console.log('║       EcoSortha AI — ClimateShield Backend v2.0          ║');
+    console.log('║       ClimaLogix AI — ClimateShield Backend v2.0          ║');
     console.log('╚══════════════════════════════════════════════════════════╝');
     console.log(`\n✅  Server running on port ${PORT}`);
     console.log(`📡  API Base URL:          http://localhost:${PORT}/api`);

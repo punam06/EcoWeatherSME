@@ -2,7 +2,7 @@ import { calculateMicroclimate, calculateTST } from '../lib/services/climate.ser
 import { calculatePlasticOffset, calculateCarbonSequestration, calculateSpoilageAverted } from '../lib/services/esg.service';
 
 function runTests() {
-  console.log('🧪 Starting EcoSortha AI Mathematical Engine Test Suite...\n');
+  console.log('🧪 Starting ClimaLogix AI Mathematical Engine Test Suite...\n');
 
   let passed = true;
 
@@ -146,7 +146,7 @@ function runTests() {
   // ----------------------------------------------------
   console.log('==================================================');
   if (passed) {
-    console.log('🏆 ALL TESTS PASSED: EcoSortha AI Core Math Engines are 100% verified and type-safe.');
+    console.log('🏆 ALL TESTS PASSED: ClimaLogix AI Core Math Engines are 100% verified and type-safe.');
   } else {
     console.error('⚠️ SOME TESTS FAILED. Review calculations and float constraints.');
     process.exit(1);

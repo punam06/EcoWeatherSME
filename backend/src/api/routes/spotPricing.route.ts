@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — SPOT PRICING ROUTE
+ * CLIMALOGIX AI — SPOT PRICING ROUTE
  * File: src/api/routes/spotPricing.route.ts
  *
  * GET /api/spot-pricing/:batchId

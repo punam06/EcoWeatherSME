@@ -1,7 +1,7 @@
 {
-  "name": "ecosortha-backend",
+  "name": "climalogix-backend",
   "version": "2.0.0",
-  "description": "EcoSortha AI (ClimateShield) — TypeScript Express Backend",
+  "description": "ClimaLogix AI (ClimateShield) — TypeScript Express Backend",
   "main": "dist/app.js",
   "scripts": {
     "build": "tsc --ignoreDeprecations 6.0",

@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — PROVENANCE HASH CHAIN (Trust Layer v2)
+ * CLIMALOGIX AI — PROVENANCE HASH CHAIN (Trust Layer v2)
  * File: lib/services/provenance.service.ts
  *
  * Replaces the old static QR code with a tamper-evident SHA-256

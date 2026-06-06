@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — DELIVERY VIABILITY SCORE (DVS) SERVICE
+ * CLIMALOGIX AI — DELIVERY VIABILITY SCORE (DVS) SERVICE
  * File: src/lib/services/dvs.service.ts
  *
  * Combines Trust Score and MERM result into a single Delivery

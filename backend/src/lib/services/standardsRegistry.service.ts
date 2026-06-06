@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — STANDARDS REGISTRY
+ * CLIMALOGIX AI — STANDARDS REGISTRY
  * File: src/lib/services/standardsRegistry.service.ts
  *
  * Central lookup of category-specific quality standards. Adding

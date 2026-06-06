@@ -64,7 +64,7 @@ function AuthPanel({ onClose, onAuthSuccess }) {
             <div style={{ fontWeight:800,fontSize:17,color:"var(--text-primary)",letterSpacing:"-0.01em" }}>
               {mode==="login"?"Welcome Back 🌱":"Create Account 🌱"}
             </div>
-            <div style={{ fontSize:11.5,color:"var(--text-muted)",marginTop:2 }}>EcoSortha AI — ClimateShield Platform</div>
+            <div style={{ fontSize:11.5,color:"var(--text-muted)",marginTop:2 }}>ClimaLogix AI — ClimateShield Platform</div>
           </div>
           <button onClick={onClose} style={{ background:"transparent",border:"none",color:"var(--text-muted)",fontSize:22,cursor:"pointer",lineHeight:1,padding:"0 4px" }}>×</button>
         </div>

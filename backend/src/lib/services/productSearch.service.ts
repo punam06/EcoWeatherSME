@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — PRODUCT SEARCH SERVICE
+ * CLIMALOGIX AI — PRODUCT SEARCH SERVICE
  * File: src/lib/services/productSearch.service.ts
  *
  * Queries the Supabase product catalog using exact schema definitions.

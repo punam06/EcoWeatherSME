@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — QA REPORT INGESTION
+ * CLIMALOGIX AI — QA REPORT INGESTION
  * File: src/lib/services/qaIngestion.service.ts
  *
  * Multi-source QA validation. Sources:

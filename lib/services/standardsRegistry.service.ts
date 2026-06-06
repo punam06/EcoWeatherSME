@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — STANDARDS REGISTRY (Trust Layer v2)
+ * CLIMALOGIX AI — STANDARDS REGISTRY (Trust Layer v2)
  * File: lib/services/standardsRegistry.service.ts
  *
  * Replaces the hardcoded BARI EM-1 ranges in trustScore.service.ts

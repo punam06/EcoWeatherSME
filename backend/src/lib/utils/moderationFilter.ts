@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — MODERATION FILTER UTILITY
+ * CLIMALOGIX AI — MODERATION FILTER UTILITY
  * File: src/lib/utils/moderationFilter.ts
  *
  * Checks queries for profanity, malicious code injection, or off-topic

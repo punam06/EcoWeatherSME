@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- ECOSORTHA AI — QA REPORTS COLUMN ALIGNMENT
+-- CLIMALOGIX AI — QA REPORTS COLUMN ALIGNMENT
 -- File: supabase/migrations/010_qa_reports_column_alignment.sql
 --
 -- Aligns the qa_reports table with what the TypeScript service

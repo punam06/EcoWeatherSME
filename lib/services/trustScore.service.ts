@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — TRUST SCORE (Trust Layer v2, category-aware)
+ * CLIMALOGIX AI — TRUST SCORE (Trust Layer v2, category-aware)
  * File: lib/services/trustScore.service.ts
  *
  * Deterministic, BARI-aligned quality trust score (0-100) for any

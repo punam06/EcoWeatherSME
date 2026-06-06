@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════
-# ECOSORTHA AI — TRUST LAYER v2 SMOKE TEST
+# CLIMALOGIX AI — TRUST LAYER v2 SMOKE TEST
 # File: scripts/smoke-trust-layer-v2.sh
 #
 # Starts the backend in dev mode (no Supabase / no Groq required),
@@ -17,7 +17,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND="$ROOT/backend"
 PORT="${PORT:-4799}"
 BASE="http://127.0.0.1:${PORT}"
-SERVER_LOG="$(mktemp -t ecosortha-smoke.XXXXXX.log)"
+SERVER_LOG="$(mktemp -t climalogix-smoke.XXXXXX.log)"
 PASS=0
 FAIL=0
 

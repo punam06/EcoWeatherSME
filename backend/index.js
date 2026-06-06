@@ -953,7 +953,7 @@ function normalizeCity(input) {
   return null;
 }
 
-const AGENT_SYSTEM_PROMPT = `You are EcoSortha AI, an intelligent agricultural commerce assistant for Bangladesh's organic farming sector. You understand Bangla, English, and Banglish naturally.
+const AGENT_SYSTEM_PROMPT = `You are ClimaLogix AI, an intelligent agricultural commerce assistant for Bangladesh's organic farming sector. You understand Bangla, English, and Banglish naturally.
 
 You help farmers with: weather/climate data, BARI agricultural guidelines, product browsing, placing orders, and navigating the platform.
 
@@ -1356,7 +1356,7 @@ app.post('/api/batches/certify', asyncHandler(async (req, res) => {
     const displayBatchId = batchId || `BCH-${Date.now().toString().slice(-6)}`;
     
     // Create the public verification URL
-    const verificationUrl = `https://ecosortha.build/verify/${displayBatchId}`;
+    const verificationUrl = `https://climalogix.build/verify/${displayBatchId}`;
     
     // Generate QR code data URL (Base64 image) securely on the backend
     const qrCodeDataUrl = await QRCode.toDataURL(verificationUrl, {

@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — AGENT PANEL COMPONENT (React / JavaScript)
+ * CLIMALOGIX AI — AGENT PANEL COMPONENT (React / JavaScript)
  * File: Frontend and UI/components/AgentPanel/AgentPanel.jsx
  *
  * Fully modular self-contained component for Next.js / Vite.
@@ -11,7 +11,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 const IS_LOCAL_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
-const BACKEND_URL = IS_LOCAL_DEV ? 'http://localhost:5001' : 'https://ecosortha.onrender.com';
+const BACKEND_URL = IS_LOCAL_DEV ? 'http://localhost:5001' : 'https://climalogix.onrender.com';
 
 const isValidOrderUuid = (id) =>
   typeof id === 'string' &&
@@ -21,21 +21,21 @@ export default function AgentPanel({ setTab }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState(() => {
     if (typeof window !== 'undefined') {
-      const saved = sessionStorage.getItem('ecosortha_agent_panel_messages');
+      const saved = sessionStorage.getItem('climalogix_agent_panel_messages');
       if (saved) return JSON.parse(saved);
     }
     return [
       {
         role: 'assistant',
         type: 'TEXT',
-        content: 'Hello! I am your EcoSortha AI Agricultural Assistant. How can I help you with BARI compliance, product catalog searches, or order dispatches today?'
+        content: 'Hello! I am your ClimaLogix AI Agricultural Assistant. How can I help you with BARI compliance, product catalog searches, or order dispatches today?'
       }
     ];
   });
   const [inputValue, setInputValue] = useState('');
   const [sessionId, setSessionId] = useState(() => {
     if (typeof window !== 'undefined') {
-      return sessionStorage.getItem('ecosortha_agent_panel_session_id') || '';
+      return sessionStorage.getItem('climalogix_agent_panel_session_id') || '';
     }
     return '';
   });
@@ -66,7 +66,7 @@ export default function AgentPanel({ setTab }) {
   // Persist messages
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem('ecosortha_agent_panel_messages', JSON.stringify(messages));
+      sessionStorage.setItem('climalogix_agent_panel_messages', JSON.stringify(messages));
     }
   }, [messages]);
 
@@ -74,9 +74,9 @@ export default function AgentPanel({ setTab }) {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       if (sessionId) {
-        sessionStorage.setItem('ecosortha_agent_panel_session_id', sessionId);
+        sessionStorage.setItem('climalogix_agent_panel_session_id', sessionId);
       } else {
-        sessionStorage.removeItem('ecosortha_agent_panel_session_id');
+        sessionStorage.removeItem('climalogix_agent_panel_session_id');
       }
     }
   }, [sessionId]);
@@ -91,8 +91,8 @@ export default function AgentPanel({ setTab }) {
 
   // Initialize Session
   const initSession = async () => {
-    if (typeof window !== 'undefined' && sessionStorage.getItem('ecosortha_agent_panel_session_id')) {
-      console.log("[AgentPanel] Restoring existing session:", sessionStorage.getItem('ecosortha_agent_panel_session_id'));
+    if (typeof window !== 'undefined' && sessionStorage.getItem('climalogix_agent_panel_session_id')) {
+      console.log("[AgentPanel] Restoring existing session:", sessionStorage.getItem('climalogix_agent_panel_session_id'));
       return;
     }
     try {
@@ -403,7 +403,7 @@ export default function AgentPanel({ setTab }) {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#10B981' }}></div>
-              <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>EcoSortha AI Agent</span>
+              <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>ClimaLogix AI Agent</span>
             </div>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -560,7 +560,7 @@ export default function AgentPanel({ setTab }) {
             {isProcessing && (
               <div style={{ display: 'flex', gap: 4, padding: 8 }}>
                 <span style={{ fontSize: 14 }}>⏳</span>
-                <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>EcoSortha Agent thinking...</span>
+                <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>ClimaLogix Agent thinking...</span>
               </div>
             )}
             <div ref={messagesEndRef} />

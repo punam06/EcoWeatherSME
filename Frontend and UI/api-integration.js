@@ -9,7 +9,7 @@ const IS_STATIC_FILE = window.location.protocol === 'file:';
 const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
 // IMPORTANT: The production backend that the live dashboard talks to is
 // https://backsme.onrender.com. The previous value
-// (https://ecosortha.onrender.com) is a dead host that 404s on every route
+// (https://climalogix.onrender.com) is a dead host that 404s on every route
 // and was the root cause of the "ESG page failed to load" bug.
 const API_BASE_URL = IS_LOCAL
   ? 'http://localhost:5001'

@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — QA INGESTION (Trust Layer v2, multi-source)
+ * CLIMALOGIX AI — QA INGESTION (Trust Layer v2, multi-source)
  * File: lib/services/qaIngestion.service.ts
  *
  * Accepts quality-assurance reports from three independent sources:

@@ -2,7 +2,7 @@ import { fetchRegionalWeather, calculateMicroclimate, calculateTST, HAZARD_REGIS
 
 async function runDemo() {
   console.log('========================================================================');
-  console.log('🌤️  EcoSortha AI (ClimateShield) - Microclimate Pipeline Demonstration  ');
+  console.log('🌤️  ClimaLogix AI (ClimateShield) - Microclimate Pipeline Demonstration  ');
   console.log('========================================================================\n');
 
   console.log('🛰️  Step 1: Querying regional real-time weather from Open-Meteo API...');

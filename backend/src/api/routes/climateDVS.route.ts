@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — CLIMATE DVS ROUTE
+ * CLIMALOGIX AI — CLIMATE DVS ROUTE
  * File: src/api/routes/climateDVS.route.ts
  *
  * POST /api/climate/dvs

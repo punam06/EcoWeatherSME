@@ -1,6 +1,6 @@
 const fs = require('fs');
 
-const jsxPath = 'Frontend and UI/ecosortha_dashboard.jsx';
+const jsxPath = 'Frontend and UI/climalogix_dashboard.jsx';
 const htmlPath = 'Frontend and UI/index.html';
 
 const jsxContent = fs.readFileSync(jsxPath, 'utf8');
@@ -34,5 +34,5 @@ const reactImports = '\n    const { useState, useEffect, useRef, useCallback } =
 const newHtmlContent = htmlStart + reactImports + reactBody + '\n  ' + htmlEnd;
 
 fs.writeFileSync(htmlPath, newHtmlContent);
-console.log("Successfully synced ecosortha_dashboard.jsx into index.html");
+console.log("Successfully synced climalogix_dashboard.jsx into index.html");
 

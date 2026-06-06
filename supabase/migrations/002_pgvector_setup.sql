@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- ECOSORTHA AI — MIGRATION 002: pgvector Setup
+-- CLIMALOGIX AI — MIGRATION 002: pgvector Setup
 -- File: supabase/migrations/002_pgvector_setup.sql
 -- ═══════════════════════════════════════════════════════════════
 

@@ -16,7 +16,7 @@ INSERT INTO batches (
 )
 VALUES
 (
-  (SELECT id FROM users WHERE email='processor.demo@ecosortha.local'),
+  (SELECT id FROM users WHERE email='processor.demo@climalogix.local'),
   'BATCH-DEMO-001',
   'Food waste + molasses',
   'Liquid Nutrient A',
@@ -29,7 +29,7 @@ VALUES
   NULL
 ),
 (
-  (SELECT id FROM users WHERE email='processor.demo@ecosortha.local'),
+  (SELECT id FROM users WHERE email='processor.demo@climalogix.local'),
   'BATCH-DEMO-002',
   'Leaf litter + EM-1',
   'Liquid Nutrient B',
@@ -42,7 +42,7 @@ VALUES
   NULL
 ),
 (
-  (SELECT id FROM users WHERE email='processor.demo@ecosortha.local'),
+  (SELECT id FROM users WHERE email='processor.demo@climalogix.local'),
   'BATCH-DEMO-003',
   'Market waste + jaggery',
   'Carbon Enhancer A',
@@ -55,7 +55,7 @@ VALUES
   NULL
 ),
 (
-  (SELECT id FROM users WHERE email='processor.demo@ecosortha.local'),
+  (SELECT id FROM users WHERE email='processor.demo@climalogix.local'),
   'BATCH-DEMO-004',
   'Rice husk biochar + EM-1',
   'Carbon Enhancer B',
@@ -68,7 +68,7 @@ VALUES
   NULL
 ),
 (
-  (SELECT id FROM users WHERE email='processor.demo@ecosortha.local'),
+  (SELECT id FROM users WHERE email='processor.demo@climalogix.local'),
   'BATCH-DEMO-005',
   'Mixed compost tea',
   'Liquid Nutrient C',

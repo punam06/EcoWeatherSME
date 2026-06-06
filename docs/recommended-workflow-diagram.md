@@ -1,4 +1,4 @@
-# EcoSortha ClimateShield Recommended Workflow
+# ClimaLogix ClimateShield Recommended Workflow
 
 This diagram upgrades the product from a module dashboard into an SME operating system:
 
@@ -127,4 +127,4 @@ flowchart TB
 
 ## Pitch Version
 
-EcoSortha ClimateShield connects authenticated commerce, product trust, weather intelligence, and climate-safe logistics into one SME operating layer. Every order is checked against user permissions, batch quality, and route climate risk before dispatch. The AI Decision Engine recommends whether to accept, delay, reroute, improve packaging, or reject a delivery. AI CostShield keeps the SME protected from uncontrolled token spending by linking every AI call to business ROI.
+ClimaLogix ClimateShield connects authenticated commerce, product trust, weather intelligence, and climate-safe logistics into one SME operating layer. Every order is checked against user permissions, batch quality, and route climate risk before dispatch. The AI Decision Engine recommends whether to accept, delay, reroute, improve packaging, or reject a delivery. AI CostShield keeps the SME protected from uncontrolled token spending by linking every AI call to business ROI.

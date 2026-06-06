@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — TRUST SCORE ROUTE
+ * CLIMALOGIX AI — TRUST SCORE ROUTE
  * File: src/api/routes/trustScore.route.ts
  *
  * POST /api/batch/trust-score

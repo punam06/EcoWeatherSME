@@ -1,5 +1,5 @@
 /**
- * ECOSORTHA AI — ORDER API ZOD SCHEMAS
+ * CLIMALOGIX AI — ORDER API ZOD SCHEMAS
  * File: src/api/schemas/order.schema.ts
  */
 

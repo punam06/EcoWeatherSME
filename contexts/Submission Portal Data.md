@@ -1,6 +1,6 @@
 \--- PAGE 1 \---
 
-# **EcoSortha AI \- ClimateShield**
+# **ClimaLogix AI \- ClimateShield**
 
 **Infinity AI BuildFest 2026 | Submission Portal Reference**  
 **Track 4:** Online Commerce (E-Commerce) | **SME Dashboard Challenge**  
@@ -9,11 +9,11 @@
 
 ## **TAB 1: Project Info**
 
-**Project Name:** EcoSortha AI  
+**Project Name:** ClimaLogix AI  
 **Elevator Pitch:** An AI-native Resource Intelligence Platform that converts organic bio-assets into IoT-verified commodities. It is the only marketplace in Bangladesh that certifies product quality TWICE: at production via an IoT Trust Score, and at delivery via a proprietary Microclimate Exposure Risk Model (MERM) that calculates exact Thermal Survival Time (TST) based on Dhaka's Urban Heat Island (UHI) hazard zones.  
-**Public Summary:** EcoSortha AI is a climate-resilient circular economy marketplace and SME intelligence platform built for Bangladesh. Less than 3% of the country's BDT 800 crore organic fertilizer market is verifiably certified, leaving buyers unable to distinguish genuine organic products from synthetic imitations.  
-EcoSortha AI solves three compounding failures in one integrated PaaS. **First**, the IoT Trust Score Engine certifies every batch at production using five sensor parameters (pH, EC, temperature, EM-1 ratio, fermentation days) through a deterministic, bias-free formula, generating a QR-linked PDF certificate. **Second**, our proprietary Microclimate Exposure Risk Model (MERM) solves transit spoilage. Instead of guessing based on generic weather, it calculates a batch's exact Thermal Survival Time (TST) using BUET-calibrated UHI Hazard Profiles (e.g., Old Dhaka Class A vs. Gulshan Class C), solar loading hours, and packaging insulation types. **Third**, a Voice-First Bangla AI Assistant powered by Claude 3.5 Sonnet allows semi-literate farmers to query BARI agricultural databases using natural speech, breaking the tech-literacy barrier.  
-Built on a cloud-native architecture (Next.js 14, Supabase PostgreSQL, PGVector, Node.js Express, Claude 3.5 Sonnet), EcoSortha AI prevents BDT 300 crore in annual biological cold-chain spoilage while generating audit-ready ESG reports for green SMEs.  
+**Public Summary:** ClimaLogix AI is a climate-resilient circular economy marketplace and SME intelligence platform built for Bangladesh. Less than 3% of the country's BDT 800 crore organic fertilizer market is verifiably certified, leaving buyers unable to distinguish genuine organic products from synthetic imitations.  
+ClimaLogix AI solves three compounding failures in one integrated PaaS. **First**, the IoT Trust Score Engine certifies every batch at production using five sensor parameters (pH, EC, temperature, EM-1 ratio, fermentation days) through a deterministic, bias-free formula, generating a QR-linked PDF certificate. **Second**, our proprietary Microclimate Exposure Risk Model (MERM) solves transit spoilage. Instead of guessing based on generic weather, it calculates a batch's exact Thermal Survival Time (TST) using BUET-calibrated UHI Hazard Profiles (e.g., Old Dhaka Class A vs. Gulshan Class C), solar loading hours, and packaging insulation types. **Third**, a Voice-First Bangla AI Assistant powered by Claude 3.5 Sonnet allows semi-literate farmers to query BARI agricultural databases using natural speech, breaking the tech-literacy barrier.  
+Built on a cloud-native architecture (Next.js 14, Supabase PostgreSQL, PGVector, Node.js Express, Claude 3.5 Sonnet), ClimaLogix AI prevents BDT 300 crore in annual biological cold-chain spoilage while generating audit-ready ESG reports for green SMEs.  
 **Domain:** Online Commerce (E-Commerce)  
 **Challenge:** SME Dashboard  
 **Problem Statement:** Bangladesh's organic fertilizer market is worth BDT 800 crore annually, yet less than 3% of products carry verifiable quality certification. Green SMEs face three compounding failures that destroy circular economy value:
@@ -22,7 +22,7 @@ Built on a cloud-native architecture (Next.js 14, Supabase PostgreSQL, PGVector,
 2. THE THERMAL BLIND SPOT (Delivery Side): Liquid biofertilizer contains live EM-1 microbial cultures that degrade rapidly above 38°C. Dhaka's summer heat regularly exceeds 40-44°C surface temperatures due to Urban Heat Island (UHI) effects. Current e-commerce platforms completely ignore thermal transit risk, resulting in 40% of biological products arriving degraded in summer. Estimated national loss: BDT 300 crore annually.  
 3. THE ADOPTION BARRIER (Operations Side): Existing supply chain tools require complex English text interfaces, alienating the semi-literate local processors and agricultural co-ops who actually run the physical circular economy.
 
-**Solution Description:** EcoSortha AI is a 7-layer, AI-native Resource Intelligence Platform operating as a PaaS for Green SMEs. It guarantees trust and climate resilience through three core features:  
+**Solution Description:** ClimaLogix AI is a 7-layer, AI-native Resource Intelligence Platform operating as a PaaS for Green SMEs. It guarantees trust and climate resilience through three core features:  
 FEATURE A: THE LIVE DVS SIMULATOR & MICROCLIMATE MODEL (Delivery Layer)  
 Our proprietary Microclimate Exposure Risk Model (MERM) evaluates transit risk. Users input a Dhaka zone, and the system applies BUET-calibrated UHI offsets (e.g., Old Dhaka \+3.4°C, Mirpur \+2.1°C). It calculates the Thermal Survival Time (TST) dynamically by dividing the batch's Trust Score and packaging insulation multiplier by the zone's Hazard Multiplier and Solar Loading Hour. Output: Actionable dispatch windows (e.g., "Critical Risk: TST is 31 mins but transit is 90 mins. Upgrade to thermal-insulated bins or dispatch before 07:00 AM").  
 FEATURE B: IOT TRUST SCORE & QR CERTIFICATION (Production Layer)  
@@ -85,7 +85,7 @@ Supabase PostgreSQL serves as the primary data warehouse with Row-Level Security
 *Insights Details:*
 
 * *LLM Inference (Claude 3.5 Sonnet):* Semantic RAG orchestration processes Bangla voice inputs, searches BARI guidelines, and returns localized agricultural advice with exact citations.  
-* *Rule Engine (Non-AI):* The core IP of EcoSortha is the Microclimate Exposure Risk Model (MERM). It is a physics-inspired heuristic engine. It calculates Thermal Survival Time (TST) by fusing batch Trust Scores, packaging insulation multipliers, Zone Hazard Classes, and Solar Loading Hours. This deliberate non-AI approach ensures absolute transparency and auditability for financial ESG metrics.
+* *Rule Engine (Non-AI):* The core IP of ClimaLogix is the Microclimate Exposure Risk Model (MERM). It is a physics-inspired heuristic engine. It calculates Thermal Survival Time (TST) by fusing batch Trust Scores, packaging insulation multipliers, Zone Hazard Classes, and Solar Loading Hours. This deliberate non-AI approach ensures absolute transparency and auditability for financial ESG metrics.
 
 **7\. Pipelines & Orchestration:**  
 Orchestration is handled by Node.js event-driven triggers and Railway cron jobs to minimize latency overhead:
@@ -111,7 +111,7 @@ Public REST APIs built with Express.js and protected by custom JWT middleware:
 
 **10\. Quality, Governance & Observability:**
 
-* *Transparency by Design:* EcoSortha rejects black-box ML for quality scoring. The Trust Score and DVS/TST formulas are hardcoded heuristics visible to all users. A farmer can manually calculate the exact same score on a piece of paper, ensuring total trust.  
+* *Transparency by Design:* ClimaLogix rejects black-box ML for quality scoring. The Trust Score and DVS/TST formulas are hardcoded heuristics visible to all users. A farmer can manually calculate the exact same score on a piece of paper, ensuring total trust.  
 * *Privacy:* Public endpoints expose only anonymized Processor IDs. Supabase RLS policies guarantee SMEs cannot view competitor batch formulations or IoT logs.  
 * *LLM Guardrails:* Claude 3.5 Sonnet is heavily constrained by system prompts requiring strict Bangla-only responses, mandatory inline BARI citations, and explicit refusal protocols for non-agricultural queries.
 
@@ -181,14 +181,14 @@ No LLM fine-tuning was performed. To maximize the 3-day sprint efficiency and en
 \[x\] Yes we will run the /docs module prompt and ship a live documentation page  
 *Details:* We shipped an interactive public documentation page. It serves as a technical whitepaper detailing the exact mathematics behind the Microclimate Exposure Risk Model (MERM), the BUET UHI offsets, the 12-table SQL schema, and the API endpoint references.  
 **Anything else about your AI usage?**  
-*RESPONSIBLE AI AS A COMPETITIVE ADVANTAGE:* The most distinctive aspect of EcoSortha AI is knowing *when NOT to use AI*. We explicitly rejected Machine Learning for quality scoring (Trust Score) and thermal risk (DVS). Using ML for these would introduce dangerous black-box biases into financial supply chains. By using published, deterministic heuristic models for physics/chemistry, and reserving LLMs (Claude 3.5 Sonnet) strictly for human-computer linguistic translation (Voice-First RAG), we built a platform that is 100% auditable, transparent, and trusted by regulators and farmers alike.
+*RESPONSIBLE AI AS A COMPETITIVE ADVANTAGE:* The most distinctive aspect of ClimaLogix AI is knowing *when NOT to use AI*. We explicitly rejected Machine Learning for quality scoring (Trust Score) and thermal risk (DVS). Using ML for these would introduce dangerous black-box biases into financial supply chains. By using published, deterministic heuristic models for physics/chemistry, and reserving LLMs (Claude 3.5 Sonnet) strictly for human-computer linguistic translation (Voice-First RAG), we built a platform that is 100% auditable, transparent, and trusted by regulators and farmers alike.
 
 ## **TAB 3: Links**
 
 **Live App URL:**  
-https://ecosortha-climateshield.vercel.app *(Update to your actual Vercel URL)*  
+https://climalogix-climateshield.vercel.app *(Update to your actual Vercel URL)*  
 **GitHub Repository URL:**  
-https://github.com/punam06/ecosortha-climateshield  
+https://github.com/punam06/climalogix-climateshield  
 **YouTube Demo Video URL:**  
 https://youtube.com/watch?v=\[INSERT\_VIDEO\_ID\] *(Update prior to submission)*
 

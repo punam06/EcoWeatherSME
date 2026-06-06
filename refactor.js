@@ -123,7 +123,7 @@ if (clAppStart !== -1) {
       `;
       // Replace the old checkAuth logic if it exists, or just insert.
       // The old logic probably uses useEffect to check localStorage.
-      const oldUseEffectMatch = html.match(/useEffect\(\(\) => \{[\s\S]*?const token = localStorage\.getItem\("ecosortha_access_token"\);[\s\S]*?\}, \[\]\);/);
+      const oldUseEffectMatch = html.match(/useEffect\(\(\) => \{[\s\S]*?const token = localStorage\.getItem\("climalogix_access_token"\);[\s\S]*?\}, \[\]\);/);
       if (oldUseEffectMatch) {
         html = html.replace(oldUseEffectMatch[0], injection);
       }

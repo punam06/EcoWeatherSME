@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — RAG AI SERVICE (Groq & Supabase Text Search)
+ * CLIMALOGIX AI — RAG AI SERVICE (Groq & Supabase Text Search)
  * File: src/lib/services/rag.service.ts
  *
  * Implements native Groq Llama-3.3 RAG grounded in Supabase

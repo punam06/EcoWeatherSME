@@ -238,7 +238,7 @@ router.post('/certify', authenticateJWT, requireRole('processor'), async (req: R
     const displayBatchId = batchId || `BCH-${Date.now().toString().slice(-6)}`;
     
     // Create the public verification URL
-    const verificationUrl = `https://ecosortha.build/verify/${displayBatchId}`;
+    const verificationUrl = `https://climalogix.build/verify/${displayBatchId}`;
     
     // Generate QR code data URL (Base64 image) securely on the backend
     const qrCodeDataUrl = await QRCode.toDataURL(verificationUrl, {

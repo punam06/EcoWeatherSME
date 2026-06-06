@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — RATE LIMITER MIDDLEWARE
+ * CLIMALOGIX AI — RATE LIMITER MIDDLEWARE
  * File: src/lib/middleware/rateLimiter.ts
  *
  * Implements robust IP-based rate limiting using express-rate-limit.

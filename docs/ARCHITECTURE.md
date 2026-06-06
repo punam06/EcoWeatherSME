@@ -1,10 +1,10 @@
-# EcoSortha ClimateShield Target Architecture
+# ClimaLogix ClimateShield Target Architecture
 
-EcoSortha can be built in the architecture shown in the recommended workflow diagram, but the safest implementation path is evolutionary. The current Render backend, Supabase schema/functions, and standalone frontend should remain in place while the product is reorganized conceptually into clearer domains.
+ClimaLogix can be built in the architecture shown in the recommended workflow diagram, but the safest implementation path is evolutionary. The current Render backend, Supabase schema/functions, and standalone frontend should remain in place while the product is reorganized conceptually into clearer domains.
 
 ## Investor-Grade Product Positioning
 
-EcoSortha ClimateShield is an authenticated SME operating system for climate-sensitive commerce. It combines product verification, microclimate-aware dispatch, AI decision support, and AI cost governance.
+ClimaLogix ClimateShield is an authenticated SME operating system for climate-sensitive commerce. It combines product verification, microclimate-aware dispatch, AI decision support, and AI cost governance.
 
 This is strong enough as a foundation for a large company vision because it has:
 
@@ -182,7 +182,7 @@ supabase/
   functions/                     # Edge functions
 
 Frontend and UI/
-  ecosortha_dashboard.jsx        # Main UI shell
+  climalogix_dashboard.jsx        # Main UI shell
   api-integration.js             # API client
   components/                    # Reusable UI modules
 ```

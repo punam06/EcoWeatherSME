@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — QA INGESTION ROUTE
+ * CLIMALOGIX AI — QA INGESTION ROUTE
  * File: src/api/routes/qa.route.ts
  *
  *   POST /api/qa/submit   — accept a QA report from iot / inspector / manufacturer

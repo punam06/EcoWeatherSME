@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- ECOSORTHA AI — MIGRATION 008: Order lifecycle audit log
+-- CLIMALOGIX AI — MIGRATION 008: Order lifecycle audit log
 -- File: supabase/migrations/008_order_lifecycle_logs.sql
 -- ═══════════════════════════════════════════════════════════════
 

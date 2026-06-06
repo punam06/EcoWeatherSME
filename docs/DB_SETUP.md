@@ -29,7 +29,7 @@ npm run db:seed:all
 ```
 
 Demo login:
-- Email: `admin.demo@ecosortha.local`
+- Email: `admin.demo@climalogix.local`
 - Password: `DemoPass123!`
 
 ## Quick auth verification
@@ -52,7 +52,7 @@ Login (stores refresh cookie, returns access token):
 ```bash
 curl -i -c /tmp/eco.cookies -X POST http://localhost:5001/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin.demo@ecosortha.local","password":"DemoPass123!"}'
+  -d '{"email":"admin.demo@climalogix.local","password":"DemoPass123!"}'
 ```
 
 Refresh token rotation:

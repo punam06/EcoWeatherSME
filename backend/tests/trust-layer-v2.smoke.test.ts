@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — TRUST LAYER v2 SMOKE TEST
+ * CLIMALOGIX AI — TRUST LAYER v2 SMOKE TEST
  * File: scripts/smoke-trust-layer-v2.ts
  *
  * Runs the Express app in-process on an ephemeral port and

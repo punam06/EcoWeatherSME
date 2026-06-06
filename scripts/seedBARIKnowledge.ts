@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — SEED BARI KNOWLEDGE
+ * CLIMALOGIX AI — SEED BARI KNOWLEDGE
  * File: scripts/seedBARIKnowledge.ts
  *
  * Seed script to push the standard BARI compliance context blocks

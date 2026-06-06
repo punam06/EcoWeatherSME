@@ -1,5 +1,5 @@
 /**
- * ECOSORTHA AI — ORDER DISPATCH & RECEIPT ROUTES
+ * CLIMALOGIX AI — ORDER DISPATCH & RECEIPT ROUTES
  * File: src/api/routes/order.route.ts
  */
 

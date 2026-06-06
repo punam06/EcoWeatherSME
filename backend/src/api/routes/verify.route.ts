@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — PUBLIC VERIFY ROUTE
+ * CLIMALOGIX AI — PUBLIC VERIFY ROUTE
  * File: src/api/routes/verify.route.ts
  *
  *   GET /api/verify/:batch_id

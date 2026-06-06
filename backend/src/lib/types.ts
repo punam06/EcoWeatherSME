@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — SHARED LIBRARY TYPES (BACKEND)
+ * CLIMALOGIX AI — SHARED LIBRARY TYPES (BACKEND)
  * File: src/lib/types.ts
  *
  * Core domain types. The legacy types below are preserved for

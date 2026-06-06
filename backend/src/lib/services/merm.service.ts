@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — MERM SERVICE
+ * CLIMALOGIX AI — MERM SERVICE
  * File: src/lib/services/merm.service.ts
  *
  * Microclimate Exposure Risk Model (MERM) for Dhaka delivery zones.

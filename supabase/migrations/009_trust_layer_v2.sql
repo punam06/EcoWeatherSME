@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- ECOSORTHA AI — TRUST LAYER v2 MIGRATION
+-- CLIMALOGIX AI — TRUST LAYER v2 MIGRATION
 -- File: supabase/migrations/009_trust_layer_v2.sql
 --
 -- Adds the tables required by the category-aware Trust Layer v2:

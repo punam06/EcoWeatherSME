@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — VOICE CHECKOUT ROUTE
+ * CLIMALOGIX AI — VOICE CHECKOUT ROUTE
  * File: src/api/routes/checkout.route.ts
  *
  * POST /api/checkout/voice

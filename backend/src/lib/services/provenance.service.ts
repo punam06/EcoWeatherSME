@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — PROVENANCE HASH CHAIN
+ * CLIMALOGIX AI — PROVENANCE HASH CHAIN
  * File: src/lib/services/provenance.service.ts
  *
  * Append-only SHA-256 hash chain for batch lifecycle events.

@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — WEATHER SERVICE
+ * CLIMALOGIX AI — WEATHER SERVICE
  * File: src/lib/services/weather.service.ts
  *
  * Integrates with OpenWeatherMap Free API to retrieve real-time regional

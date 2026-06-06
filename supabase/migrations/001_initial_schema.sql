@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- ECOSORTHA AI — MIGRATION 001: Initial Schema
+-- CLIMALOGIX AI — MIGRATION 001: Initial Schema
 -- File: supabase/migrations/001_initial_schema.sql
 -- ═══════════════════════════════════════════════════════════════
 

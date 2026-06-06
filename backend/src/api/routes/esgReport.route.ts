@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — PUBLIC ESG REPORT ROUTE
+ * CLIMALOGIX AI — PUBLIC ESG REPORT ROUTE
  * File: src/api/routes/esgReport.route.ts
  *
  *   GET /api/esg/report            — current month's aggregate

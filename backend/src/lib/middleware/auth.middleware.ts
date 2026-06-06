@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — JWT AUTHENTICATION MIDDLEWARE
+ * CLIMALOGIX AI — JWT AUTHENTICATION MIDDLEWARE
  * File: src/lib/middleware/auth.middleware.ts
  *
  * Verifies Bearer JWT tokens. On success, attaches decoded payload

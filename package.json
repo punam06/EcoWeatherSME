@@ -1,7 +1,7 @@
 {
   "name": "eco-weather-sme-backend",
   "version": "1.0.0",
-  "description": "EcoSortha AI (ClimateShield) Microclimate and ESG Backend Logic",
+  "description": "ClimaLogix AI (ClimateShield) Microclimate and ESG Backend Logic",
   "main": "index.js",
   "scripts": {
     "build": "tsc",

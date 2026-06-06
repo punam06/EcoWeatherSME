@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — ORDER EXECUTION SERVICE
+ * CLIMALOGIX AI — ORDER EXECUTION SERVICE
  * File: src/lib/services/orderExecution.service.ts
  *
  * Implements transaction execution: initiate, confirm, cancel,

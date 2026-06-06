@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — LANGUAGE NORMALIZATION UTILITY
+ * CLIMALOGIX AI — LANGUAGE NORMALIZATION UTILITY
  * File: src/lib/utils/languageNormalizer.ts
  *
  * Handles mixed Bangla-English inputs, phonetic translations,

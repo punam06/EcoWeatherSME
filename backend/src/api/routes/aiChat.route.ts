@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — AI CHAT LIFECYCLE & VOICE RECOMMEND ROUTES
+ * CLIMALOGIX AI — AI CHAT LIFECYCLE & VOICE RECOMMEND ROUTES
  * File: src/api/routes/aiChat.route.ts
  *
  * Implements AI session management, speech recommendation,

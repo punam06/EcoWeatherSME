@@ -1,5 +1,5 @@
 /**
- * ECOSORTHA AI — ORDER LIFECYCLE AUDIT LOGGING
+ * CLIMALOGIX AI — ORDER LIFECYCLE AUDIT LOGGING
  * File: src/lib/services/orderLifecycleLog.service.ts
  */
 

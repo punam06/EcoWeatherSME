@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — SUPABASE CLIENT
+ * CLIMALOGIX AI — SUPABASE CLIENT
  * File: src/lib/supabase.ts
  *
  * Singleton Supabase client using service role key for server-side

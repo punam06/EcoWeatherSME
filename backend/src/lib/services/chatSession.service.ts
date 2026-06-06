@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — CHAT SESSION SERVICE (HYBRID)
+ * CLIMALOGIX AI — CHAT SESSION SERVICE (HYBRID)
  * File: src/lib/services/chatSession.service.ts
  *
  * Hybrid session store: in-memory Map for hot-path access +

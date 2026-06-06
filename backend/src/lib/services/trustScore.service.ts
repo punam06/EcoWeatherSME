@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * ECOSORTHA AI — CATEGORY-AWARE TRUST SCORE ENGINE
+ * CLIMALOGIX AI — CATEGORY-AWARE TRUST SCORE ENGINE
  * File: src/lib/services/trustScore.service.ts
  *
  * Deterministic 0–100 scoring. The ideal ranges, ratio, days and

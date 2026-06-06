@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- ECOSORTHA AI — MIGRATION: Add base_price to batches Table
+-- CLIMALOGIX AI — MIGRATION: Add base_price to batches Table
 -- File: supabase/migrations/20260602194600_add_base_price_to_batches.sql
 -- ═══════════════════════════════════════════════════════════════
 

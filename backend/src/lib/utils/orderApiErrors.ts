@@ -1,5 +1,5 @@
 /**
- * ECOSORTHA AI — ORDER API ERROR MAPPING
+ * CLIMALOGIX AI — ORDER API ERROR MAPPING
  * File: src/lib/utils/orderApiErrors.ts
  */
 

@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- ECOSORTHA AI — MIGRATION 007: Platform orders table
+-- CLIMALOGIX AI — MIGRATION 007: Platform orders table
 -- File: supabase/migrations/007_create_orders.sql
 --
 -- Matches Supabase inserts in:

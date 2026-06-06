@@ -4,7 +4,7 @@ WHERE batch_id IN (
   SELECT b.id
   FROM batches b
   JOIN users u ON u.id = b.processor_id
-  WHERE u.email = 'processor.demo@ecosortha.local'
+  WHERE u.email = 'processor.demo@climalogix.local'
 );
 -- Demo IoT readings linked to demo batches by batch_number
 INSERT INTO iot_readings (batch_id, ph, ec, temperature, em1_ratio, fermentation_days)
