@@ -12,6 +12,21 @@
     <script>
       // Global Error Diagnostic Boundary
       window.onerror = function (message, source, lineno, colno, error) {
+        // Ignore opaque cross-origin "Script error." — these are benign noise
+        // from CDN scripts (Chart.js, Supabase, Babel, etc.) that the browser
+        // sanitises due to CORS. They carry no useful info and do NOT indicate
+        // an actual application failure.
+        if (
+          message === "Script error." &&
+          (!source || source === "") &&
+          lineno === 0 &&
+          colno === 0 &&
+          !error
+        ) {
+          console.warn("[ClimateShield] Suppressed opaque cross-origin Script error (benign).");
+          return true; // swallow it
+        }
+
         showErrorDiagnostic({
           type: "Runtime Error / Compilation Error",
           message: message,
@@ -99,13 +114,13 @@
     />
 
     <!-- Chart.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 
     <!-- API Integration Layer -->
     <script src="./api-integration.js"></script>
 
     <!-- Supabase -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script crossorigin src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <!-- React + Babel (browser) -->
     <script
@@ -116,7 +131,7 @@
       crossorigin
       src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"
     ></script>
-    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.5/babel.min.js"></script>
+    <script crossorigin src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.5/babel.min.js"></script>
 
     <style>
       *,
@@ -344,7 +359,7 @@
         }
       }
     </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   </head>
   <body>
     <div id="root"></div>
@@ -4687,10 +4702,6 @@ function CustomSmeView({ products, setProducts, customSmeName, setCustomSmeName 
   );
 }
 
-const isValidOrderUuid = (id) =>
-  typeof id === 'string' &&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
-
 function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerificationDispatchZone }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
@@ -6353,7 +6364,8 @@ function CLimaLogixApp() {
         )}
 
         {tab === 2 && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, animation: "fadeSlideIn 0.4s ease" }}>
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, animation: "fadeSlideIn 0.4s ease" }}>
             <div>
               <SectionLabel icon="✅" text="Batch Verification" />
               <Card>
@@ -6452,6 +6464,7 @@ function CLimaLogixApp() {
               <ClaimVerifier onSelectBatch={(id) => setVerificationBatchId(id)} />
             </Card>
           </div>
+          </>
         )}
 
         {tab === 3 && (
