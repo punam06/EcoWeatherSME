@@ -3446,11 +3446,11 @@ function RegisterBatch({ onCancel }) {
 
 const MOCK_PRODUCTS = [
   { id: 1, name: "Premium Bio-Slurry", category: "Agriculture", price: "৳ 450", unit: "L", seller: "Green Refineries Ltd.", dvs: 85, icon: "🌱", badge: "BARI Certified" },
-  { id: 2, name: "Thermal-Safe EM-1", category: "Agriculture", price: "৳ 320", unit: "Kg", seller: "Agro Eco SME", dvs: 78, icon: "🌾", badge: null },
+  { id: 2, name: "Thermal-Safe EM-1", category: "Agriculture", price: "৳ 320", unit: "Kg", seller: "Agro Eco SME", dvs: 72, icon: "🌾", badge: null },
   { id: 3, name: "Insulin (Lantus 10ml)", category: "Pharmaceuticals", price: "৳ 1,250", unit: "Vial", seller: "PharmaCare BD", dvs: 94, icon: "⚕️", badge: "Cold-Chain verified" },
   { id: 4, name: "Polio Vaccine (OPV)", category: "Pharmaceuticals", price: "৳ 4,800", unit: "Box", seller: "Health Line Inc.", dvs: 98, icon: "💉", badge: "Critical Priority" },
-  { id: 5, name: "Fresh Dairy Milk", category: "Food & Dairy", price: "৳ 90", unit: "L", seller: "Aarong Dairy", dvs: 82, icon: "🥛", badge: null },
-  { id: 6, name: "Premium Hilsha Fish", category: "Food & Seafood", price: "৳ 1,500", unit: "Kg", seller: "Padma Catch", dvs: 70, icon: "🐟", badge: null },
+  { id: 5, name: "Fresh Dairy Milk", category: "Food & Dairy", price: "৳ 90", unit: "L", seller: "Aarong Dairy", dvs: 68, icon: "🥛", badge: null },
+  { id: 6, name: "Premium Hilsha Fish", category: "Food & Seafood", price: "৳ 1,500", unit: "Kg", seller: "Padma Catch", dvs: 65, icon: "🐟", badge: null },
   { id: 7, name: "Carbon-Neutral Biochar", category: "Agriculture", price: "৳ 150", unit: "Kg", seller: "SME Co-op", dvs: 92, icon: "🌿", badge: null },
   { id: 8, name: "Temperature Reagents", category: "Chemicals", price: "৳ 3,500", unit: "Pack", seller: "ChemLab BD", dvs: 88, icon: "🧪", badge: "Hazard Risk" },
 ];
@@ -3941,40 +3941,70 @@ function MarketplaceView({ products = MOCK_PRODUCTS }) {
 
       {/* Product Grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 20, marginBottom: 80 }}>
-        {filteredProducts.map(p => (
-          <Card key={p.id} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}>
-            {p.badge && (
-              <div style={{ position: "absolute", top: 16, right: 16, background: p.badge.includes("Critical") ? ACCENT.redBg : ACCENT.blueBg, color: p.badge.includes("Critical") ? ACCENT.red : ACCENT.blue, padding: "4px 10px", borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", border: `1px solid ${p.badge.includes("Critical") ? ACCENT.redBorder : "var(--border-primary)"}` }}>
-                {p.badge.toUpperCase()}
-              </div>
-            )}
-            
-            <div style={{ fontSize: 36, marginBottom: 16 }}>{p.icon}</div>
-            
-            <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 4 }}>{p.category}</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4, lineHeight: 1.3 }}>{p.name}</div>
-            <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 16 }}>{p.seller}</div>
-            
-            <div style={{ marginTop: "auto" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border-primary)" }}>
-                <div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: ACCENT.green, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>{p.price}</div>
-                  <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 4 }}>per {p.unit}</div>
+        {filteredProducts.map(p => {
+          const rawPrice = Number((p.price || "").replace(/[৳\s,]/g, ""));
+          const isClearance = p.dvs < 75;
+          const discountedPrice = isClearance ? Math.round(rawPrice * 0.7) : rawPrice;
+          
+          return (
+            <Card key={p.id} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}>
+              {isClearance ? (
+                <div style={{
+                  position: "absolute",
+                  top: 16,
+                  right: 16,
+                  background: ACCENT.redBg,
+                  color: ACCENT.red,
+                  padding: "4px 10px",
+                  borderRadius: 4,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: "0.05em",
+                  border: `1px solid ${ACCENT.redBorder}`,
+                  animation: "pulseGlow 2s infinite"
+                }}>
+                  ⚡ DYNAMIC CLEARANCE
                 </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: p.dvs >= 90 ? ACCENT.green : p.dvs >= 75 ? ACCENT.blue : ACCENT.amber, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>{p.dvs}</div>
-                  <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 4, fontWeight: 600 }}>DVS SCORE</div>
+              ) : p.badge ? (
+                <div style={{ position: "absolute", top: 16, right: 16, background: p.badge.includes("Critical") ? ACCENT.redBg : ACCENT.blueBg, color: p.badge.includes("Critical") ? ACCENT.red : ACCENT.blue, padding: "4px 10px", borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", border: `1px solid ${p.badge.includes("Critical") ? ACCENT.redBorder : "var(--border-primary)"}` }}>
+                  {p.badge.toUpperCase()}
                 </div>
-              </div>
+              ) : null}
               
-              <button style={{ width: "100%", padding: "10px 0", background: "var(--bg-input)", border: "1px solid var(--border-primary)", borderRadius: 8, color: "var(--text-primary)", fontWeight: 600, cursor: "pointer", fontSize: 13, transition: "background 0.2s" }}
-                      onMouseEnter={e => e.currentTarget.style.background = ACCENT.greenBg}
-                      onMouseLeave={e => e.currentTarget.style.background = "var(--bg-input)"}>
-                Add to Cart
-              </button>
-            </div>
-          </Card>
-        ))}
+              <div style={{ fontSize: 36, marginBottom: 16 }}>{p.icon}</div>
+              
+              <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 4 }}>{p.category}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4, lineHeight: 1.3 }}>{p.name}</div>
+              <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 16 }}>{p.seller}</div>
+              
+              <div style={{ marginTop: "auto" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border-primary)" }}>
+                  <div>
+                    {isClearance ? (
+                      <div>
+                        <div style={{ fontSize: 12, textDecoration: "line-through", color: "var(--text-muted)", marginBottom: 2 }}>{p.price}</div>
+                        <div style={{ fontSize: 20, fontWeight: 700, color: ACCENT.red, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>৳ {discountedPrice.toLocaleString()}</div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 20, fontWeight: 700, color: ACCENT.green, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>{p.price}</div>
+                    )}
+                    <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 4 }}>per {p.unit}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: p.dvs >= 90 ? ACCENT.green : p.dvs >= 75 ? ACCENT.blue : ACCENT.amber, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>{p.dvs}</div>
+                    <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 4, fontWeight: 600 }}>DVS SCORE</div>
+                  </div>
+                </div>
+                
+                <button style={{ width: "100%", padding: "10px 0", background: isClearance ? ACCENT.redBg : "var(--bg-input)", border: `1px solid ${isClearance ? ACCENT.redBorder : "var(--border-primary)"}`, borderRadius: 8, color: isClearance ? ACCENT.red : "var(--text-primary)", fontWeight: 600, cursor: "pointer", fontSize: 13, transition: "background 0.2s" }}
+                        onMouseEnter={e => e.currentTarget.style.background = isClearance ? "rgba(239, 68, 68, 0.15)" : ACCENT.greenBg}
+                        onMouseLeave={e => e.currentTarget.style.background = isClearance ? ACCENT.redBg : "var(--bg-input)"}>
+                  Add to Cart
+                </button>
+              </div>
+            </Card>
+          );
+        })}
         {filteredProducts.length === 0 && (
           <div style={{ gridColumn: "1 / -1", padding: 60, textAlign: "center", color: "var(--text-secondary)" }}>
             <div style={{ fontSize: 40, marginBottom: 16 }}>🔍</div>
