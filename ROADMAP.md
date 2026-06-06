@@ -99,8 +99,8 @@ We have resolved all major query and connection crashes. The final week requires
 *   **[x] DB Column & Registry Discrepancies:** Resolved. `batches` table now contains `weight_kg`, `status`, `destination_zone`, and `packaging_type`.
 *   **[x] Missing Analytics Log Tables:** Resolved. Added `trust_score_logs`, `dvs_logs`, `rag_query_logs`, and `agent_interaction_logs` to [schema.sql](file:///Users/punam/Desktop/Internship%20or%20Courses/Competitions/Current/2026/participation/AI%20buildfest/schema.sql).
 *   **[x] BARI RAG Query Crash:** Resolved. Table redefined as `bari_knowledge_chunks` in [schema.sql](file:///Users/punam/Desktop/Internship%20or%20Courses/Competitions/Current/2026/participation/AI%20buildfest/schema.sql) matching the RAG search service logic.
-*   **[ ] Supabase RLS Policy check:** (Post-deployment) Add a policy ensuring processors can only query their own batch formulations.
-*   **[ ] Text Search Fallback Input:** (Day 3-4 UI) Implement a standard search input field in case browser speech microphone permissions are blocked.
+*   **[ ] Supabase RLS Policy check:** (Post-deployment) Add a policy ensuring processors can only query their own batch formulations. (Note: Run `CREATE POLICY "SME owner select own batches" ON batches FOR SELECT USING (auth.uid() = processor_id);` in Supabase SQL Editor).
+*   **[x] Text Search Fallback Input:** (Day 3-4 UI) Resolved. Keyboard text input is fully integrated as a standard fail-safe next to speech recognition microphone actions.
 
 ---
 
