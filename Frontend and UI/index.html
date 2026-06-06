@@ -6391,37 +6391,45 @@ function SystemDocsView({ productsList }) {
               
               <div>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>
-                  {"1. Microclimate Exposure Risk Model (MERM)"}
+                  {"1. Category-Aware Trust Score Normalization"}
                 </h3>
                 <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 12 }}>
-                  {"MERM dynamically maps localized microclimate shifts inside urban high-density sectors (Dhaka districts), incorporating base regional temperature data, wind speeds, building densities, and Urban Heat Island (UHI) offsets:"}
+                  {"Normalizes raw laboratory or sensor readings for pH, EC, temperature, microbial ratio, and fermentation days against category-specific target bounds. Decay is linear beyond acceptable ranges:"}
                 </p>
-                <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 12, border: "1px solid var(--border-primary)", color: ACCENT.green }}>
-                  {"T_adjusted = T_base + UHI_offset * (1 - vegetation_fraction) * building_density - wind_corridor_factor * (wind_speed / 10)"}
+                <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 12, border: "1px solid var(--border-primary)", color: ACCENT.green, lineHeight: 1.5 }}>
+                  {"Deviation = DistanceOutside(Value, TargetRange)"}
+                  <br />
+                  {"SubScore = Clamp(1.0 - Deviation, 0.0, 1.0)"}
+                  <br /><br />
+                  {"TrustScore = (SubScore_pH * W_pH + SubScore_EC * W_EC + SubScore_Temp * W_Temp + SubScore_Ratio * W_Ratio + SubScore_Days * W_Days) * 100"}
                 </div>
               </div>
 
               <div>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>
-                  {"2. Thermal Risk Factor (RF_thermal)"}
+                  {"2. Microclimate Exposure & Effective Temperature (calculateTST)"}
                 </h3>
                 <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 12 }}>
-                  {"Computes degradation speeds when temperatures climb above the organic safety boundary (25°C), capped cleanly between 0.0 and 1.0:"}
+                  {"Computes localized thermal accumulation by applying Urban Heat Island (UHI) offsets and solar hour coefficients based on solar intensity curves:"}
                 </p>
-                <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 12, border: "1px solid var(--border-primary)", color: ACCENT.green }}>
-                  {"RF_thermal = Max(0, Min(1, (T_adjusted - 25) / 15))"}
+                <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 12, border: "1px solid var(--border-primary)", color: ACCENT.green, lineHeight: 1.5 }}>
+                  {"SolarScale = (Hour24 / 23) * 12"}
+                  <br />
+                  {"SolarLoadFactor = 1.0 + (SolarCoefficient - 1.0) * Sin(PI * SolarScale / 12)"}
+                  <br />
+                  {"Temp_effective = (Temp_ambient + UHI_offset) * SolarLoadFactor"}
                 </div>
               </div>
 
               <div>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>
-                  {"3. BARI Delivery Viability Slotting (DVS)"}
+                  {"3. Thermal Stability Time (TST)"}
                 </h3>
                 <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 12 }}>
-                  {"Calculates the exact viability slotting percentage for the batch, applying UHI hazard multipliers to calibrate final dispatch advice:"}
+                  {"Calculates the exact duration in minutes before critical product degradation under simulated thermal transit conditions:"}
                 </p>
                 <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 12, border: "1px solid var(--border-primary)", color: ACCENT.green }}>
-                  {"DVS = Math.max(0, Math.min(100, Math.round(trustScore * (1 - RF_thermal * hazardMultiplier))))"}
+                  {"TST = Max(0, 480 - (Temp_effective - 30) * 18)"}
                 </div>
               </div>
 
