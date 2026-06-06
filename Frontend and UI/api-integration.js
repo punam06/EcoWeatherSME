@@ -156,6 +156,12 @@ const APIClient = {
   // Forecast
   getDemandForecast: () => APIClient.request('/demand-forecast'),
 
+  // AI Recommend
+  getAIRecommendations: (payload) => APIClient.request('/ai/recommend', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }),
+
   // Users
   getUsers: () => APIClient.request('/users'),
   createUser: (data) => APIClient.request('/users', { method: 'POST', body: JSON.stringify(data) }),

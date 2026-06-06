@@ -2978,6 +2978,17 @@ function BatchRegistry({ onNewBatch }) {
   const [selectedBatch, setSelected]  = useState(null);
   const [lastFetched, setLastFetched] = useState(null);
   const [, setTick]                   = useState(0);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationResult, setVerificationResult] = useState(null);
+  const [isGettingAiRec, setIsGettingAiRec] = useState(false);
+  const [aiRecommendation, setAiRecommendation] = useState(null);
+
+  useEffect(() => {
+    if (!selectedBatch) {
+      setVerificationResult(null);
+      setAiRecommendation(null);
+    }
+  }, [selectedBatch]);
 
   // Real-time dynamic timing ticker to update relative dates every 30 seconds
   useEffect(() => {
@@ -3266,6 +3277,125 @@ function BatchRegistry({ onNewBatch }) {
             {selectedBatch.status === "pending" && (
               <div style={{ background: ACCENT.amberBg, border: `1px solid ${ACCENT.amberBorder}`, borderRadius: 12, padding: 16, fontSize: 13, color: ACCENT.amber, fontWeight: 600 }}>
                 ⏳ Batch is awaiting manual verification by a certified processor before certification.
+              </div>
+            )}
+
+            {/* VERIFICATION ENGINE UI */}
+            {selectedBatch && (
+              <div style={{ background: "var(--bg-input)", borderRadius: 12, padding: 20 }}>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                  Verification Engine
+                </div>
+                {!verificationResult ? (
+                  <button
+                    onClick={async () => {
+                      setIsVerifying(true);
+                      try {
+                        const batchId = selectedBatch.id || selectedBatch.batch_number;
+                        const res = await window.APIClient.verifyClaim(batchId);
+                        setVerificationResult(res);
+                      } catch (err) {
+                        setVerificationResult({ success: false, error: err.message });
+                      } finally {
+                        setIsVerifying(false);
+                      }
+                    }}
+                    disabled={isVerifying}
+                    style={{
+                      width: "100%", padding: "12px", borderRadius: 8,
+                      border: `1px solid ${ACCENT.blueBorder}`, background: "rgba(59, 130, 246, 0.1)",
+                      color: ACCENT.blue, fontWeight: 600, cursor: isVerifying ? "wait" : "pointer",
+                      display: "flex", justifyContent: "center", alignItems: "center", gap: 8
+                    }}
+                  >
+                    {isVerifying ? "Verifying..." : "🔐 Verify Cryptographic Claim"}
+                  </button>
+                ) : (
+                  <div style={{
+                    padding: 12, borderRadius: 8, fontSize: 12, lineHeight: 1.5,
+                    background: verificationResult.success ? ACCENT.greenBg : ACCENT.redBg,
+                    border: `1px solid ${verificationResult.success ? ACCENT.greenBorder : ACCENT.redBorder}`,
+                    color: "var(--text-primary)"
+                  }}>
+                    {verificationResult.success ? (
+                      <>
+                        <strong style={{ color: ACCENT.green }}>✓ Claim Verified Authentic</strong><br/>
+                        <span style={{ color: "var(--text-secondary)" }}>Signature: Valid</span><br/>
+                        <span style={{ color: "var(--text-secondary)" }}>Registry Match: {verificationResult.data?.batch?.batch_number || "Confirmed"}</span>
+                        {verificationResult.data?.claims?.trust_score && (
+                           <><br/><span style={{ color: "var(--text-secondary)" }}>Cryptographic Trust Score: {verificationResult.data.claims.trust_score}</span></>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <strong style={{ color: ACCENT.red }}>❌ Verification Failed</strong><br/>
+                        <span style={{ color: "var(--text-secondary)" }}>{verificationResult.error || "Invalid or missing claim signature."}</span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* AI RECOMMENDATION UI */}
+            {selectedBatch && (
+              <div style={{ background: "var(--bg-input)", borderRadius: 12, padding: 20 }}>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>AI Smart Dispatch</span>
+                  <span style={{ color: ACCENT.amber, fontSize: 10 }}>Powered by Llama 3</span>
+                </div>
+                {!aiRecommendation ? (
+                  <button
+                    onClick={async () => {
+                      setIsGettingAiRec(true);
+                      try {
+                        const payload = {
+                           action: "request_dispatch",
+                           batch_id: selectedBatch.id || selectedBatch.batch_number,
+                           product: selectedBatch.product_name || selectedBatch.product,
+                           destination_zone: selectedBatch.destination_zone || selectedBatch.dest,
+                           trust_score: selectedBatch.trust_score,
+                           status: selectedBatch.status
+                        };
+                        const res = await window.APIClient.getAIRecommendations(payload);
+                        setAiRecommendation(res);
+                      } catch (err) {
+                        setAiRecommendation({ success: false, error: err.message });
+                      } finally {
+                        setIsGettingAiRec(false);
+                      }
+                    }}
+                    disabled={isGettingAiRec}
+                    style={{
+                      width: "100%", padding: "12px", borderRadius: 8,
+                      border: `1px solid ${ACCENT.amberBorder}`, background: "rgba(245, 158, 11, 0.1)",
+                      color: ACCENT.amber, fontWeight: 600, cursor: isGettingAiRec ? "wait" : "pointer",
+                      display: "flex", justifyContent: "center", alignItems: "center", gap: 8
+                    }}
+                  >
+                    {isGettingAiRec ? "Analyzing route & risk..." : "💡 Get AI Dispatch Recommendation"}
+                  </button>
+                ) : (
+                  <div style={{
+                    padding: 14, borderRadius: 8, fontSize: 13, lineHeight: 1.6,
+                    background: "rgba(245, 158, 11, 0.05)",
+                    border: `1px solid ${ACCENT.amberBorder}`,
+                    color: "var(--text-primary)"
+                  }}>
+                    {aiRecommendation.success ? (
+                      <>
+                        <div style={{ fontWeight: 700, color: ACCENT.amber, marginBottom: 8 }}>
+                          {aiRecommendation.data?.recommendation || "Proceed with caution"}
+                        </div>
+                        <div style={{ color: "var(--text-secondary)", fontSize: 12 }}>
+                          {aiRecommendation.data?.explanation || "AI suggests careful monitoring due to microclimate risks."}
+                        </div>
+                      </>
+                    ) : (
+                      <span style={{ color: ACCENT.red }}>❌ Failed to load AI recommendations.</span>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
