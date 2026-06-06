@@ -368,7 +368,7 @@
     <script type="text/babel" src="./components/LanguageSelector/LanguageSelector.jsx"></script>
     <script type="text/babel" src="./AuthPanel.jsx"></script>
     <script type="text/babel">
-    const { useState, useEffect, useRef, useCallback } = React;
+    const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
 const IS_STATIC_FILE_HTML = window.location.protocol === 'file:';
 // Backend API base URL. The production backend that the live dashboard talks
