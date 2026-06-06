@@ -1,4 +1,4 @@
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect, useRef, useMemo } = React;
 
 function AuthPanel({ onClose, onAuthSuccess }) {
   const [mode, setMode] = useState("login");
@@ -16,7 +16,7 @@ function AuthPanel({ onClose, onAuthSuccess }) {
   const canvasRef = useRef(null);
   const reqRef = useRef(null);
 
-  // Three.js Scene Setup
+  // Three.js Scene Setup (Unchanged)
   useEffect(() => {
     if (!canvasRef.current || !window.THREE) return;
     
@@ -112,7 +112,6 @@ function AuthPanel({ onClose, onAuthSuccess }) {
       if (document.hidden) return; // Pause when hidden
       
       const delta = now - lastFrame;
-      // cap at 60fps ~16.6ms
       if (delta < 16) return;
       lastFrame = now - (delta % 16);
       
@@ -121,7 +120,6 @@ function AuthPanel({ onClose, onAuthSuccess }) {
       const posAttr = geometry.attributes.position;
       for (let i = 0; i < particleCount; i++) {
         const y = posAttr.getY(i);
-        // Sine drift seeded by index
         posAttr.setY(i, y + Math.sin(time + i) * 0.001);
       }
       posAttr.needsUpdate = true;
@@ -181,7 +179,6 @@ function AuthPanel({ onClose, onAuthSuccess }) {
       const sb = window.supabaseClient;
       if (!sb) throw new Error("Supabase client not initialized");
 
-      // producer -> processor, consumer -> buyer, sme -> buyer
       const backendRole = uiRole === "producer" ? "processor" : "buyer";
 
       let result;
@@ -231,20 +228,20 @@ function AuthPanel({ onClose, onAuthSuccess }) {
   };
 
   const formStyles = {
-    inputGroup: { position: "relative", marginBottom: "16px" },
+    inputGroup: { position: "relative", marginBottom: "18px" },
     label: {
-      position: "absolute", left: "16px", top: "14px",
-      fontSize: "13px", color: "#9CA3AF", fontFamily: "Inter",
+      position: "absolute", left: "16px", top: "16px",
+      fontSize: "13px", color: "#4B5563", fontFamily: "Inter",
       pointerEvents: "none", transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)",
       background: "transparent", padding: "0 4px"
     },
     labelActive: {
       top: "-8px", left: "12px", fontSize: "11px", color: "#10B981",
-      background: "#0d131f", // match card slightly
+      background: "#0d131f",
     },
     input: {
-      width: "100%", padding: "12px 16px", background: "rgba(255,255,255,0.05)",
-      border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px",
+      width: "100%", padding: "14px 16px", background: "rgba(255,255,255,0.04)",
+      border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px",
       color: "#F9FAFB", fontFamily: "'JetBrains Mono', monospace", fontSize: "14px",
       outline: "none", transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)",
       boxSizing: "border-box"
@@ -253,6 +250,119 @@ function AuthPanel({ onClose, onAuthSuccess }) {
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "#0B0F19", overflow: "hidden" }}>
+      {/* Styles Injection */}
+      <style>{`
+        .auth-card {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          box-sizing: border-box;
+          opacity: 0;
+          pointer-events: none;
+          transform: translateY(-16px);
+          transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1), transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+          background: rgba(17, 24, 39, 0.75);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          border-radius: 20px;
+          border: 1px solid rgba(16, 185, 129, 0.18);
+          box-shadow: 0 0 0 1px rgba(0,0,0,0.3), 0 20px 60px rgba(0,0,0,0.55), 0 0 40px rgba(16,185,129,0.07), inset 0 1px 0 rgba(255,255,255,0.04);
+          padding: 48px 44px;
+        }
+        @media (max-width: 480px) {
+          .auth-card {
+            padding: 32px 24px;
+          }
+        }
+        .auth-card.card--visible {
+          position: relative;
+          opacity: 1;
+          pointer-events: all;
+          transform: translateY(0);
+          animation: slideInUp 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        @keyframes slideInUp {
+          from {
+            opacity: 0;
+            transform: translateY(16px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .auth-error-shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; border-color: #EF4444 !important; }
+        .auth-input-focus:focus {
+          border-color: rgba(16,185,129,0.55) !important;
+          box-shadow: 0 0 0 3px rgba(16,185,129,0.1) !important;
+          background: rgba(16,185,129,0.04) !important;
+        }
+        .segment-tabs {
+          display: flex;
+          gap: 6px;
+          margin-bottom: 28px;
+          background: rgba(255,255,255,0.04);
+          padding: 4px;
+          border-radius: 10px;
+        }
+        .segment-btn {
+          flex: 1;
+          padding: 8px 0;
+          border: none;
+          border-radius: 8px;
+          fontSize: 12px;
+          font-family: "Inter", sans-serif;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+          background: transparent;
+          color: #6B7280;
+        }
+        .segment-btn.active {
+          background: #10B981;
+          color: #0B0F19;
+          font-weight: 600;
+          box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+        }
+        .auth-btn {
+          width: 100%;
+          height: 52px;
+          border-radius: 10px;
+          border: none;
+          cursor: pointer;
+          background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+          color: #0B0F19;
+          font-family: "Inter", sans-serif;
+          font-size: 15px;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .auth-btn:hover:not(:disabled) {
+          filter: brightness(1.1);
+          box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
+          transform: translateY(-2px);
+        }
+        .auth-btn:active:not(:disabled) {
+          transform: translateY(0);
+          filter: brightness(0.95);
+        }
+        .auth-btn:disabled {
+          cursor: not-allowed;
+          opacity: 0.7;
+        }
+        @keyframes teleBlink {
+          0%, 100% { opacity: 0.2; }
+          50% { opacity: 0.5; }
+        }
+        .tele-blink {
+          animation: teleBlink 2s infinite;
+        }
+      `}</style>
+
       {/* 3D Canvas */}
       <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 0 }} />
 
@@ -268,10 +378,16 @@ function AuthPanel({ onClose, onAuthSuccess }) {
       }}></div>
 
       {/* Decorative Corners */}
-      <div style={{ position: "absolute", top: 20, left: 20, zIndex: 5, color: "#10B981", opacity: 0.3, fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>DHK_ZONE_04 | UHI: +3.2°C</div>
-      <div style={{ position: "absolute", top: 20, right: 20, zIndex: 5, color: "#10B981", opacity: 0.3, fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>BATCH_SYNC: LIVE</div>
-      <div style={{ position: "absolute", bottom: 20, left: 20, zIndex: 5, color: "#10B981", opacity: 0.3, fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>NODE: ACTIVE_SECURE</div>
-      <div style={{ position: "absolute", bottom: 20, right: 20, zIndex: 5, color: "#10B981", opacity: 0.3, fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>SYS_OPS: NOMINAL</div>
+      <div style={{ position: "absolute", top: 20, left: 20, zIndex: 5, color: "#10B981", opacity: 0.2, fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>DHK_ZONE_04 | UHI: +3.2°C</div>
+      <div style={{ position: "absolute", top: 20, right: 20, zIndex: 5, color: "#10B981", fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>
+        <span style={{ color: "#10B981", opacity: 0.2 }}>BATCH_SYNC: </span>
+        <span className="tele-blink" style={{ color: "#10B981", fontWeight: "bold" }}>LIVE</span>
+      </div>
+      <div style={{ position: "absolute", bottom: 20, left: 20, zIndex: 5, color: "#10B981", fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>
+        <span style={{ color: "#10B981", opacity: 0.2 }}>NODE: </span>
+        <span className="tele-blink" style={{ color: "#10B981", fontWeight: "bold" }}>ACTIVE_SECURE</span>
+      </div>
+      <div style={{ position: "absolute", bottom: 20, right: 20, zIndex: 5, color: "#10B981", opacity: 0.2, fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>SYS_OPS: NOMINAL</div>
 
       {/* Close button */}
       <button onClick={onClose} style={{
@@ -281,10 +397,10 @@ function AuthPanel({ onClose, onAuthSuccess }) {
         display: "flex", alignItems: "center", justifyContent: "center"
       }}>×</button>
 
-      {/* Slider Container */}
+      {/* Centered Overlay Container */}
       <div style={{
         position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-        width: "100%", maxWidth: 420, zIndex: 10, perspective: 1000
+        width: "calc(100% - 32px)", maxWidth: 460, zIndex: 10
       }}>
         {/* Success Toast */}
         {isSuccess && mode === "register" && (
@@ -298,203 +414,172 @@ function AuthPanel({ onClose, onAuthSuccess }) {
           </div>
         )}
 
-        {/* Both panels exist side-by-side inside a slider wrapper */}
-        <div style={{
-          display: "flex", width: "200%", transition: "transform 0.4s cubic-bezier(0.4,0,0.2,1)",
-          transform: mode === "login" ? "translateX(0)" : "translateX(-50%)"
-        }}>
-          {/* LOGIN PANEL */}
-          <div style={{ width: "50%", padding: "0 10px", boxSizing: "border-box" }}>
-            <div className={error && mode === "login" ? "auth-error-shake" : ""} style={{
-              background: "rgba(17, 24, 39, 0.75)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
-              borderRadius: "20px", border: "1px solid rgba(16, 185, 129, 0.15)",
-              boxShadow: "0 0 40px rgba(16, 185, 129, 0.08), 0 20px 60px rgba(0,0,0,0.5)",
-              padding: "40px", animation: "fadeSlideIn 0.5s cubic-bezier(0.4,0,0.2,1)"
-            }}>
-              <style>{`
-                .auth-error-shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; border-color: #EF4444 !important; }
-                .auth-input-focus:focus { border-color: rgba(16,185,129,0.6) !important; box-shadow: 0 0 0 3px rgba(16,185,129,0.1) !important; }
-              `}</style>
-              
-              <div style={{ textAlign: "center", marginBottom: "30px" }}>
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "pulseGlow 2s ease-in-out infinite" }}>
+        {/* LOGIN CARD */}
+        <div className={`auth-card ${mode === "login" ? "card--visible" : "card--hidden"}`}>
+          <div className={error && mode === "login" ? "auth-error-shake" : ""}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", marginBottom: "30px" }}>
+              <div style={{
+                width: "56px", height: "56px", background: "rgba(16, 185, 129, 0.1)",
+                borderRadius: "14px", border: "1px solid rgba(16, 185, 129, 0.2)",
+                display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px"
+              }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "pulseGlow 2s ease-in-out infinite" }}>
                   <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                   <path d="M12 12v10"/>
                 </svg>
-                <h1 style={{ fontFamily: "Inter", fontSize: "22px", color: "#F9FAFB", fontWeight: 700, margin: "16px 0 4px" }}>ClimaLogix AI</h1>
-                <p style={{ fontFamily: "Inter", fontSize: "13px", color: "#9CA3AF" }}>Climate-Resilient Commerce Platform</p>
+              </div>
+              <h1 style={{ fontFamily: "Inter", fontSize: "22px", color: "#F9FAFB", fontWeight: 700, margin: "0 0 6px" }}>ClimaLogix AI</h1>
+              <p style={{ fontFamily: "Inter", fontSize: "13px", color: "#9CA3AF" }}>Climate-Resilient Commerce Platform</p>
+            </div>
+
+            {/* Segmented Control for Roles */}
+            <div className="segment-tabs">
+              {["producer", "consumer", "sme owner"].map(r => (
+                <button key={r} type="button" className={`segment-btn ${uiRole === r ? "active" : ""}`} onClick={() => setUiRole(r)}>
+                  {r.charAt(0).toUpperCase() + r.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            <form onSubmit={handleSubmit}>
+              <div style={formStyles.inputGroup}>
+                <input required type="email" className="auth-input-focus" style={formStyles.input} placeholder=" " value={email} onChange={e=>setEmail(e.target.value)} />
+                <label style={{...formStyles.label, ...(email ? formStyles.labelActive : {})}}>Email Address</label>
               </div>
 
-              {/* Role Pills */}
-              <div style={{ display: "flex", gap: "8px", marginBottom: "24px", background: "rgba(255,255,255,0.03)", padding: "4px", borderRadius: "12px" }}>
-                {["producer", "consumer", "sme owner"].map(r => (
-                  <button key={r} type="button" onClick={() => setUiRole(r)} style={{
-                    flex: 1, padding: "8px 0", border: "none", borderRadius: "8px", fontSize: "12px", fontFamily: "Inter", cursor: "pointer",
-                    transition: "all 0.25s cubic-bezier(0.4,0,0.2,1)",
-                    background: uiRole === r ? "#10B981" : "transparent",
-                    color: uiRole === r ? "#0B0F19" : "#9CA3AF",
-                    fontWeight: uiRole === r ? 600 : 400
-                  }}>
-                    {r.charAt(0).toUpperCase() + r.slice(1)}
-                  </button>
-                ))}
-              </div>
-
-              <form onSubmit={handleSubmit}>
-                <div style={formStyles.inputGroup}>
-                  <input required type="email" className="auth-input-focus" style={formStyles.input} value={email} onChange={e=>setEmail(e.target.value)} onFocus={(e)=>e.target.parentElement.dataset.focus="1"} onBlur={(e)=>e.target.parentElement.dataset.focus="0"} />
-                  <label style={{...formStyles.label, ...(email || document.activeElement === email ? formStyles.labelActive : {})}}>Email Address</label>
-                </div>
-
-                <div style={formStyles.inputGroup}>
-                  <input required type={showPass ? "text" : "password"} className="auth-input-focus" style={{...formStyles.input, paddingRight: "40px"}} value={password} onChange={e=>setPassword(e.target.value)} onFocus={(e)=>e.target.parentElement.dataset.focus="1"} onBlur={(e)=>e.target.parentElement.dataset.focus="0"} />
-                  <label style={{...formStyles.label, ...(password || document.activeElement === password ? formStyles.labelActive : {})}}>Password</label>
-                  <button type="button" onClick={()=>setShowPass(!showPass)} style={{ position:"absolute", right:"12px", top:"12px", background:"transparent", border:"none", cursor:"pointer" }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                  </button>
-                  {/* Strength bar */}
-                  {password.length > 0 && (
-                    <div style={{ display: "flex", gap: "4px", marginTop: "8px", height: "4px" }}>
-                      {[1,2,3,4].map(s => (
-                        <div key={s} style={{
-                          flex: 1, borderRadius: "2px", transition: "all 0.3s",
-                          background: s <= entropy ? (entropy < 2 ? "#EF4444" : entropy < 4 ? "#F59E0B" : "#10B981") : "rgba(255,255,255,0.1)"
-                        }}/>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13px", color: "#9CA3AF", fontFamily: "Inter" }}>
-                    <div style={{ width: "16px", height: "16px", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.05)" }}>
-                      <input type="checkbox" style={{ opacity: 0, position: "absolute", cursor: "pointer" }} onChange={(e) => {
-                        e.target.parentElement.style.background = e.target.checked ? "#10B981" : "rgba(255,255,255,0.05)";
-                        e.target.nextSibling.style.opacity = e.target.checked ? 1 : 0;
+              <div style={formStyles.inputGroup}>
+                <input required type={showPass ? "text" : "password"} className="auth-input-focus" style={{...formStyles.input, paddingRight: "40px"}} placeholder=" " value={password} onChange={e=>setPassword(e.target.value)} />
+                <label style={{...formStyles.label, ...(password ? formStyles.labelActive : {})}}>Password</label>
+                <button type="button" onClick={()=>setShowPass(!showPass)} style={{ position:"absolute", right:"12px", top:"16px", background:"transparent", border:"none", cursor:"pointer" }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </button>
+                {/* Strength bar */}
+                {password.length > 0 && (
+                  <div style={{ display: "flex", gap: "4px", marginTop: "8px", height: "4px" }}>
+                    {[1,2,3,4].map(s => (
+                      <div key={s} style={{
+                        flex: 1, borderRadius: "2px", transition: "all 0.3s",
+                        background: s <= entropy ? (entropy < 2 ? "#EF4444" : entropy < 4 ? "#F59E0B" : "#10B981") : "rgba(255,255,255,0.1)"
                       }}/>
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0B0F19" strokeWidth="3" style={{ opacity: 0, transition: "opacity 0.2s" }}><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    </div>
-                    Remember me
-                  </label>
-                  <a href="#" style={{ color: "#10B981", fontSize: "13px", textDecoration: "none", fontFamily: "Inter" }} onMouseOver={e=>e.target.style.textDecoration="underline"} onMouseOut={e=>e.target.style.textDecoration="none"}>Forgot password?</a>
-                </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-                {error && mode === "login" && <div style={{ color: "#EF4444", fontSize: "13px", marginBottom: "16px", textAlign: "center", fontFamily: "Inter" }}>{error}</div>}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13px", color: "#9CA3AF", fontFamily: "Inter" }}>
+                  <div style={{ width: "16px", height: "16px", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.05)" }}>
+                    <input type="checkbox" style={{ opacity: 0, position: "absolute", cursor: "pointer" }} onChange={(e) => {
+                      e.target.parentElement.style.background = e.target.checked ? "#10B981" : "rgba(255,255,255,0.05)";
+                      e.target.nextSibling.style.opacity = e.target.checked ? 1 : 0;
+                    }}/>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0B0F19" strokeWidth="3" style={{ opacity: 0, transition: "opacity 0.2s" }}><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </div>
+                  Remember me
+                </label>
+                <a href="#" style={{ color: "#10B981", fontSize: "13px", textDecoration: "none", fontFamily: "Inter" }} onMouseOver={e=>e.target.style.textDecoration="underline"} onMouseOut={e=>e.target.style.textDecoration="none"}>Forgot password?</a>
+              </div>
 
-                <button type="submit" disabled={isLoading} style={{
-                  width: "100%", height: "48px", borderRadius: "10px", border: "none", cursor: isLoading ? "not-allowed" : "pointer",
-                  background: isSuccess ? "#10B981" : "linear-gradient(135deg, #10B981, #059669)",
-                  color: "#0B0F19", fontFamily: "Inter", fontSize: "15px", fontWeight: 600,
-                  transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)", display: "flex", alignItems: "center", justifyContent: "center",
-                  boxShadow: "0 4px 12px rgba(16, 185, 129, 0.2)"
-                }} onMouseOver={e => !isLoading && (e.target.style.transform = "translateY(-2px)", e.target.style.boxShadow = "0 8px 20px rgba(16, 185, 129, 0.4)")}
-                   onMouseOut={e => !isLoading && (e.target.style.transform = "translateY(0)", e.target.style.boxShadow = "0 4px 12px rgba(16, 185, 129, 0.2)")}>
-                  {isLoading ? (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
-                  ) : isSuccess ? (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  ) : "Sign In"}
+              {error && mode === "login" && <div style={{ color: "#EF4444", fontSize: "13px", marginBottom: "16px", textAlign: "center", fontFamily: "Inter" }}>{error}</div>}
+
+              <button type="submit" className="auth-btn" disabled={isLoading}>
+                {isLoading ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+                ) : isSuccess ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                ) : "Sign In"}
+              </button>
+
+              <div style={{ margin: "24px 0", display: "flex", alignItems: "center", textAlign: "center", color: "#4B5563" }}>
+                <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.1)" }}></div>
+                <span style={{ padding: "0 10px", fontSize: "12px", fontFamily: "Inter" }}>New to ClimaLogix?</span>
+                <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.1)" }}></div>
+              </div>
+
+              <div style={{ textAlign: "center" }}>
+                <button type="button" onClick={() => { setMode("register"); setError(""); }} style={{ background: "transparent", border: "none", color: "#10B981", fontSize: "14px", fontFamily: "Inter", cursor: "pointer" }} onMouseOver={e=>e.target.style.textDecoration="underline"} onMouseOut={e=>e.target.style.textDecoration="none"}>
+                  Create an account
                 </button>
-
-                <div style={{ margin: "24px 0", display: "flex", alignItems: "center", textAlign: "center", color: "#4B5563" }}>
-                  <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.1)" }}></div>
-                  <span style={{ padding: "0 10px", fontSize: "12px", fontFamily: "Inter" }}>New to ClimaLogix?</span>
-                  <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.1)" }}></div>
-                </div>
-
-                <div style={{ textAlign: "center" }}>
-                  <button type="button" onClick={() => { setMode("register"); setError(""); }} style={{ background: "transparent", border: "none", color: "#10B981", fontSize: "14px", fontFamily: "Inter", cursor: "pointer" }} onMouseOver={e=>e.target.style.textDecoration="underline"} onMouseOut={e=>e.target.style.textDecoration="none"}>
-                    Create an account
-                  </button>
-                </div>
-                
-                <div style={{ marginTop: "24px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", color: "#4B5563", fontSize: "11px", fontFamily: "Inter" }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0110 0v4"></path></svg>
-                  Secured with Argon2 + JWT · End-to-end encrypted
-                </div>
-              </form>
-            </div>
+              </div>
+              
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", color: "#4B5563", fontSize: "11px", fontFamily: "Inter", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: "20px", marginTop: "20px" }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0110 0v4"></path></svg>
+                Secured with Argon2 + JWT · End-to-end encrypted
+              </div>
+            </form>
           </div>
+        </div>
 
-          {/* REGISTER PANEL */}
-          <div style={{ width: "50%", padding: "0 10px", boxSizing: "border-box" }}>
-            <div className={error && mode === "register" ? "auth-error-shake" : ""} style={{
-              background: "rgba(17, 24, 39, 0.75)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
-              borderRadius: "20px", border: "1px solid rgba(16, 185, 129, 0.15)",
-              boxShadow: "0 0 40px rgba(16, 185, 129, 0.08), 0 20px 60px rgba(0,0,0,0.5)",
-              padding: "40px"
-            }}>
-              <div style={{ textAlign: "center", marginBottom: "20px" }}>
-                <h2 style={{ fontFamily: "Inter", fontSize: "20px", color: "#F9FAFB", fontWeight: 700, margin: 0 }}>Create Account</h2>
+        {/* REGISTER CARD */}
+        <div className={`auth-card ${mode === "register" ? "card--visible" : "card--hidden"}`}>
+          <div className={error && mode === "register" ? "auth-error-shake" : ""}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", marginBottom: "30px" }}>
+              <div style={{
+                width: "56px", height: "56px", background: "rgba(16, 185, 129, 0.1)",
+                borderRadius: "14px", border: "1px solid rgba(16, 185, 129, 0.2)",
+                display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px"
+              }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "pulseGlow 2s ease-in-out infinite" }}>
+                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                  <path d="M12 12v10"/>
+                </svg>
               </div>
-
-              {/* Role Pills */}
-              <div style={{ display: "flex", gap: "8px", marginBottom: "20px", background: "rgba(255,255,255,0.03)", padding: "4px", borderRadius: "12px" }}>
-                {["producer", "consumer", "sme owner"].map(r => (
-                  <button key={r} type="button" onClick={() => setUiRole(r)} style={{
-                    flex: 1, padding: "8px 0", border: "none", borderRadius: "8px", fontSize: "12px", fontFamily: "Inter", cursor: "pointer",
-                    transition: "all 0.25s cubic-bezier(0.4,0,0.2,1)",
-                    background: uiRole === r ? "#10B981" : "transparent",
-                    color: uiRole === r ? "#0B0F19" : "#9CA3AF",
-                    fontWeight: uiRole === r ? 600 : 400
-                  }}>
-                    {r.charAt(0).toUpperCase() + r.slice(1)}
-                  </button>
-                ))}
-              </div>
-
-              <form onSubmit={handleSubmit}>
-                <div style={formStyles.inputGroup}>
-                  <input required type="text" className="auth-input-focus" style={formStyles.input} value={name} onChange={e=>setName(e.target.value)} />
-                  <label style={{...formStyles.label, ...(name ? formStyles.labelActive : {})}}>Full Name</label>
-                </div>
-                <div style={formStyles.inputGroup}>
-                  <input required type="email" className="auth-input-focus" style={formStyles.input} value={email} onChange={e=>setEmail(e.target.value)} />
-                  <label style={{...formStyles.label, ...(email ? formStyles.labelActive : {})}}>Email Address</label>
-                </div>
-                <div style={formStyles.inputGroup}>
-                  <input required type="password" className="auth-input-focus" style={formStyles.input} value={password} onChange={e=>setPassword(e.target.value)} />
-                  <label style={{...formStyles.label, ...(password ? formStyles.labelActive : {})}}>Password</label>
-                  {/* Strength bar */}
-                  {password.length > 0 && (
-                    <div style={{ display: "flex", gap: "4px", marginTop: "8px", height: "4px" }}>
-                      {[1,2,3,4].map(s => (
-                        <div key={s} style={{
-                          flex: 1, borderRadius: "2px", transition: "all 0.3s",
-                          background: s <= entropy ? (entropy < 2 ? "#EF4444" : entropy < 4 ? "#F59E0B" : "#10B981") : "rgba(255,255,255,0.1)"
-                        }}/>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div style={formStyles.inputGroup}>
-                  <input required type="password" className="auth-input-focus" style={formStyles.input} value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} />
-                  <label style={{...formStyles.label, ...(confirmPassword ? formStyles.labelActive : {})}}>Confirm Password</label>
-                </div>
-
-                {error && mode === "register" && <div style={{ color: "#EF4444", fontSize: "13px", marginBottom: "16px", textAlign: "center", fontFamily: "Inter" }}>{error}</div>}
-
-                <button type="submit" disabled={isLoading} style={{
-                  width: "100%", height: "48px", borderRadius: "10px", border: "none", cursor: isLoading ? "not-allowed" : "pointer",
-                  background: isSuccess ? "#10B981" : "linear-gradient(135deg, #10B981, #059669)",
-                  color: "#0B0F19", fontFamily: "Inter", fontSize: "15px", fontWeight: 600,
-                  transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)", display: "flex", alignItems: "center", justifyContent: "center",
-                  boxShadow: "0 4px 12px rgba(16, 185, 129, 0.2)"
-                }} onMouseOver={e => !isLoading && (e.target.style.transform = "translateY(-2px)", e.target.style.boxShadow = "0 8px 20px rgba(16, 185, 129, 0.4)")}
-                   onMouseOut={e => !isLoading && (e.target.style.transform = "translateY(0)", e.target.style.boxShadow = "0 4px 12px rgba(16, 185, 129, 0.2)")}>
-                  {isLoading ? (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
-                  ) : "Create Account"}
-                </button>
-
-                <div style={{ textAlign: "center", marginTop: "24px" }}>
-                  <span style={{ color: "#9CA3AF", fontSize: "13px", fontFamily: "Inter" }}>Already have an account? </span>
-                  <button type="button" onClick={() => { setMode("login"); setError(""); }} style={{ background: "transparent", border: "none", color: "#10B981", fontSize: "13px", fontFamily: "Inter", cursor: "pointer" }} onMouseOver={e=>e.target.style.textDecoration="underline"} onMouseOut={e=>e.target.style.textDecoration="none"}>
-                    Sign in
-                  </button>
-                </div>
-              </form>
+              <h2 style={{ fontFamily: "Inter", fontSize: "20px", color: "#F9FAFB", fontWeight: 700, margin: 0 }}>Create Account</h2>
             </div>
+
+            {/* Segmented Control for Roles */}
+            <div className="segment-tabs">
+              {["producer", "consumer", "sme owner"].map(r => (
+                <button key={r} type="button" className={`segment-btn ${uiRole === r ? "active" : ""}`} onClick={() => setUiRole(r)}>
+                  {r.charAt(0).toUpperCase() + r.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            <form onSubmit={handleSubmit}>
+              <div style={formStyles.inputGroup}>
+                <input required type="text" className="auth-input-focus" style={formStyles.input} placeholder=" " value={name} onChange={e=>setName(e.target.value)} />
+                <label style={{...formStyles.label, ...(name ? formStyles.labelActive : {})}}>Full Name</label>
+              </div>
+              <div style={formStyles.inputGroup}>
+                <input required type="email" className="auth-input-focus" style={formStyles.input} placeholder=" " value={email} onChange={e=>setEmail(e.target.value)} />
+                <label style={{...formStyles.label, ...(email ? formStyles.labelActive : {})}}>Email Address</label>
+              </div>
+              <div style={formStyles.inputGroup}>
+                <input required type="password" className="auth-input-focus" style={formStyles.input} placeholder=" " value={password} onChange={e=>setPassword(e.target.value)} />
+                <label style={{...formStyles.label, ...(password ? formStyles.labelActive : {})}}>Password</label>
+                {/* Strength bar */}
+                {password.length > 0 && (
+                  <div style={{ display: "flex", gap: "4px", marginTop: "8px", height: "4px" }}>
+                    {[1,2,3,4].map(s => (
+                      <div key={s} style={{
+                        flex: 1, borderRadius: "2px", transition: "all 0.3s",
+                        background: s <= entropy ? (entropy < 2 ? "#EF4444" : entropy < 4 ? "#F59E0B" : "#10B981") : "rgba(255,255,255,0.1)"
+                      }}/>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div style={formStyles.inputGroup}>
+                <input required type="password" className="auth-input-focus" style={formStyles.input} placeholder=" " value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} />
+                <label style={{...formStyles.label, ...(confirmPassword ? formStyles.labelActive : {})}}>Confirm Password</label>
+              </div>
+
+              {error && mode === "register" && <div style={{ color: "#EF4444", fontSize: "13px", marginBottom: "16px", textAlign: "center", fontFamily: "Inter" }}>{error}</div>}
+
+              <button type="submit" className="auth-btn" disabled={isLoading}>
+                {isLoading ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+                ) : "Create Account"}
+              </button>
+
+              <div style={{ textAlign: "center", marginTop: "24px" }}>
+                <span style={{ color: "#9CA3AF", fontSize: "13px", fontFamily: "Inter" }}>Already have an account? </span>
+                <button type="button" onClick={() => { setMode("login"); setError(""); }} style={{ background: "transparent", border: "none", color: "#10B981", fontSize: "13px", fontFamily: "Inter", cursor: "pointer" }} onMouseOver={e=>e.target.style.textDecoration="underline"} onMouseOut={e=>e.target.style.textDecoration="none"}>
+                  Sign in
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       </div>
