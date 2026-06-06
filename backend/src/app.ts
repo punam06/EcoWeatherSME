@@ -59,6 +59,13 @@ import biRouter from './api/routes/bi.route';
 import { startSessionPruningInterval } from './lib/services/chatSession.service';
 import { authenticateJWT, optionalJWT } from './middleware/authenticateJWT';
 
+// ── New Feature Module Imports (Tasks 1-8) ────────────────────────────────────
+import notificationsRouter from './api/routes/notifications.route';
+import aiCostReportRouter from './api/routes/aiCostReport.route';
+import routeOptimizeRouter from './api/routes/routeOptimize.route';
+import { aiCostShield } from './middleware/aiCostShield';
+import { strictAiRateLimiter } from './lib/middleware/rateLimiter';
+
 // ── Supabase Guard ────────────────────────────────────────────────────────────
 import { isSupabaseConfigured } from './lib/supabase';
 
@@ -172,6 +179,16 @@ app.get('/api/health', (_req: Request, res: Response) => {
   });
 });
 
+app.get('/api/config', (_req: Request, res: Response) => {
+  res.status(200).json({
+    success: true,
+    data: {
+      supabaseUrl: process.env.SUPABASE_URL,
+      supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
+    },
+  });
+});
+
 app.get('/api/test-db', async (_req: Request, res: Response) => {
   if (!isSupabaseConfigured()) {
     res.status(503).json({
@@ -221,15 +238,17 @@ app.get('/api/test-db', async (_req: Request, res: Response) => {
 // app.use('/api/auth', authRouter);
 app.use('/api/batch/trust-score', trustScoreRouter);
 app.use('/api/climate/dvs', climateDVSRouter);
-app.use('/api/ai/recommend', aiRecommendRouter);
+
+// AI routes — wrapped with cost shield + strict per-minute rate limit (Task 2)
+app.use('/api/ai/recommend', strictAiRateLimiter, aiCostShield(50), aiRecommendRouter);
 app.post('/api/orders/voice', authenticateJWT, (req, res, next) => {
   req.url = '/orders/voice';
   agentRouter(req, res, next);
 });
 app.use('/api/orders', orderRouter);
 
-app.use('/api/agent', agentRouter);
-app.use('/api/ai/chat', aiChatRouter);
+app.use('/api/agent', strictAiRateLimiter, aiCostShield(50), agentRouter);
+app.use('/api/ai/chat', strictAiRateLimiter, aiCostShield(50), aiChatRouter);
 app.use('/api/batches', batchRouter);
 app.use('/api/esg', esgRouter);
 app.use('/api/esg/report', esgReportRouter);
@@ -239,6 +258,16 @@ app.use('/api/language', languageRouter);
 app.use('/api/checkout', checkoutRouter);
 app.use('/api/spot-pricing', spotPricingRouter);
 app.use('/api/bi', biRouter);
+
+// ── New Feature Module Routes ────────────────────────────────────────────────
+// Task 1: Real-Time Notifications
+app.use('/api/notifications', notificationsRouter);
+
+// Task 2: AI Cost Report
+app.use('/api/ai/cost-report', aiCostReportRouter);
+
+// Task 3: Route Optimizer
+app.use('/api/route', routeOptimizeRouter);
 
 // ── In-memory weather cache (5 min TTL) ─────────────────────────────────
 const weatherCache = new Map<string, { data: { temp: number; rh: number; description: string; city: string }; ts: number }>();
@@ -823,6 +852,10 @@ if (require.main === module) {
     console.log(`🤖  AI Recommend (RAG):    POST /api/ai/recommend`);
     console.log(`📦  Order dispatch:        POST /api/orders/:id/dispatch`);
     console.log(`📦  Order receipt:         POST /api/orders/:id/receipt`);
+    console.log(`🔔  Notifications:         GET  /api/notifications`);
+    console.log(`💰  AI Cost Report:        GET  /api/ai/cost-report`);
+    console.log(`🗺️   Route Optimizer:       POST /api/route/optimize`);
+    console.log(`🚛  Order Tracking:        GET  /api/orders/:id/tracking`);
     console.log(`\n🗄️   Supabase:             ${isSupabaseConfigured() ? '✅ Connected' : '⚠️  Not configured'}`);
     console.log(`🔑  Groq AI:               ${process.env.GROQ_API_KEY ? '✅ Key set' : '⚠️  GROQ_API_KEY missing'}`);
     console.log('\n');

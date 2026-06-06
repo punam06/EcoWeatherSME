@@ -121,6 +121,10 @@
 
     <!-- Supabase -->
     <script crossorigin src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./supabaseClient.js"></script>
+
+    <!-- Three.js (for Login 3D background) -->
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <!-- React + Babel (browser) -->
     <script
@@ -134,6 +138,10 @@
     <script crossorigin src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.5/babel.min.js"></script>
 
     <style>
+      select option {
+        background: #111827 !important;
+        color: #f1f5f9 !important;
+      }
       *,
       *::before,
       *::after {
@@ -245,6 +253,14 @@
         50% {
           opacity: 1;
         }
+      }
+      @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+        20%, 40%, 60%, 80% { transform: translateX(4px); }
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
       }
 
       /* ── Buttons Reset ── */
@@ -7161,6 +7177,42 @@ const TABS = [
 ];
 
 function CLimaLogixApp() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    if (!window.supabaseClient) {
+      // Fallback developer session if Supabase is not running/configured
+      setCurrentUser({ email: "developer@climalogix.internal", user_metadata: { name: "Developer", role: "processor" } });
+      setAuthLoading(false);
+      return;
+    }
+    window.supabaseClient.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setCurrentUser(session.user);
+        window.SUPABASE_SESSION_TOKEN = session.access_token;
+      }
+      setAuthLoading(false);
+    }).catch(() => {
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = window.supabaseClient.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        setCurrentUser(session.user);
+        window.SUPABASE_SESSION_TOKEN = session.access_token;
+      } else {
+        setCurrentUser(null);
+        window.SUPABASE_SESSION_TOKEN = null;
+      }
+      setAuthLoading(false);
+    });
+
+    return () => {
+      if (subscription) subscription.unsubscribe();
+    };
+  }, []);
+
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [trustScore, setTrustScore] = useState(84);
@@ -7242,6 +7294,30 @@ function CLimaLogixApp() {
       } catch (_) {}
     }
   }, [activeTabs.length]);
+
+  if (authLoading) {
+    return (
+      <div style={{
+        background: "#0B0F19",
+        color: "#10B981",
+        height: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: "14px",
+        gap: "16px"
+      }}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+        <span>LOADING SECURE NODE...</span>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return <AuthPanel onAuthSuccess={(user) => setCurrentUser(user)} />;
+  }
 
   return (
     <div style={{
@@ -7401,6 +7477,44 @@ function CLimaLogixApp() {
                 </button>
               );
             })}
+          </div>
+
+          {/* Drawer Footer / Sign Out */}
+          <div style={{
+            padding: "16px",
+            borderTop: "1px solid var(--border-primary)",
+            background: "rgba(0,0,0,0.1)"
+          }}>
+            <button
+              onClick={async () => {
+                if (window.supabaseClient) {
+                  await window.supabaseClient.auth.signOut();
+                } else {
+                  setCurrentUser(null);
+                }
+                setIsDrawerOpen(false);
+              }}
+              style={{
+                width: "100%",
+                padding: "10px 16px",
+                border: "none",
+                background: "rgba(239, 68, 68, 0.1)",
+                color: "#EF4444",
+                borderRadius: "8px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                fontSize: "13px",
+                fontWeight: 600,
+                transition: "all 0.2s"
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(239, 68, 68, 0.2)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)"; }}
+            >
+              <span>🚪</span>
+              <span>Sign Out</span>
+            </button>
           </div>
         </div>
       </div>
@@ -7690,8 +7804,35 @@ function CLimaLogixApp() {
 
 window.CLimaLogixApp = CLimaLogixApp;
 
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<CLimaLogixApp />);
+const initializeAndMount = async () => {
+  try {
+    const IS_STATIC_FILE_HTML = window.location.protocol === 'file:';
+    const API_BASE = (IS_STATIC_FILE_HTML || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? 'http://localhost:5001'
+      : 'https://backsme.onrender.com';
+      
+    const configRes = await fetch(`${API_BASE}/api/config`).then(r => r.json());
+    if (configRes && configRes.success && configRes.data) {
+      window.SUPABASE_URL = configRes.data.supabaseUrl;
+      window.SUPABASE_ANON_KEY = configRes.data.supabaseAnonKey;
+      
+      // Initialize Supabase Client dynamically
+      if (window.supabase && !window.supabaseClient) {
+        window.supabaseClient = window.supabase.createClient(
+          window.SUPABASE_URL,
+          window.SUPABASE_ANON_KEY
+        );
+      }
+    }
+  } catch (err) {
+    console.error("Failed to load dynamic Supabase config from backend:", err);
+  } finally {
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<CLimaLogixApp />);
+  }
+};
+
+initializeAndMount();
   </script>
   </body>
 </html>

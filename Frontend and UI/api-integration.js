@@ -34,6 +34,7 @@ const APIClient = {
       const response = await fetch(url, {
         headers: {
           'Content-Type': 'application/json',
+          ...(window.SUPABASE_SESSION_TOKEN ? { 'Authorization': `Bearer ${window.SUPABASE_SESSION_TOKEN}` } : {}),
           ...options.headers,
         },
         ...options,

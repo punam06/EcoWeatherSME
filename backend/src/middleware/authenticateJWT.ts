@@ -41,16 +41,20 @@ export async function optionalJWT(req: Request, res: Response, next: NextFunctio
   next();
 }
 
-export function requireRole(role: string) {
+export function requireRole(...roles: string[]) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (process.env.NODE_ENV === 'development') {
       return next();
     }
 
     const user = (req as any).user;
-    const userRole = user?.user_metadata?.role;
-    if (userRole !== role) {
-      return res.status(403).json({ error: `Access denied. Required role: ${role}` });
+    const userRole: string | undefined =
+      user?.app_metadata?.role ?? user?.user_metadata?.role ?? undefined;
+
+    if (!userRole || !roles.includes(userRole)) {
+      return res.status(403).json({
+        error: `Access denied. Required role(s): ${roles.join(', ')}. Your role: ${userRole ?? 'none'}.`,
+      });
     }
     next();
   };

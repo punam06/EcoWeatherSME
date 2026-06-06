@@ -10,6 +10,7 @@
 
 import { getSupabaseClient, isSupabaseConfigured } from '../supabase';
 import { groq, GROQ_MODEL } from '../groq';
+import { normalizeBanglishQuery } from '../data/agronomy_glossary';
 
 // ─── BARI Knowledge Chunks (Local Fallback) ────────────────────────────────────
 
@@ -97,7 +98,9 @@ export interface RAGResult {
 // ─── Keyword Local Matching ──────────────────────────────────────────────────
 
 function retrieveTopChunks(query: string, topN = 2): { content: string; category: string }[] {
-  const queryLower = query.toLowerCase();
+  // Normalize Banglish queries before keyword matching
+  const normalized = normalizeBanglishQuery(query);
+  const queryLower = normalized.toLowerCase();
 
   const scored = BARI_KNOWLEDGE_CHUNKS.map((chunk) => {
     const matches = chunk.keywords.filter((kw) => queryLower.includes(kw)).length;
@@ -114,22 +117,25 @@ function retrieveTopChunks(query: string, topN = 2): { content: string; category
 // ─── Supabase Text Search Similarity Retriever ───────────────────────────────
 
 async function retrieveRelevantChunksFromDB(query: string, topN = 2): Promise<{ content: string; category: string }[]> {
+  // Apply Banglish normalization before DB search
+  const normalizedQuery = normalizeBanglishQuery(query);
+
   if (!isSupabaseConfigured()) {
-    return retrieveTopChunks(query, topN);
+    return retrieveTopChunks(normalizedQuery, topN);
   }
 
   try {
     const supabase = getSupabaseClient();
     
-    // Fallback to text search on bari_knowledge_chunks
+    // Use the normalized query for DB text search
     const { data, error } = await supabase
       .from('bari_knowledge_chunks')
       .select('content, category')
-      .textSearch('content', query)
+      .textSearch('content', normalizedQuery)
       .limit(topN);
 
     if (error || !data || data.length === 0) {
-      return retrieveTopChunks(query, topN);
+      return retrieveTopChunks(normalizedQuery, topN);
     }
 
     return data.map((row: any) => ({
@@ -137,7 +143,7 @@ async function retrieveRelevantChunksFromDB(query: string, topN = 2): Promise<{ 
       category: row.category,
     }));
   } catch (err) {
-    return retrieveTopChunks(query, topN);
+    return retrieveTopChunks(normalizedQuery, topN);
   }
 }
 
