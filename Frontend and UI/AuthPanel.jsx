@@ -1,25 +1,190 @@
-const { useState } = React;
+const { useState, useEffect, useRef } = React;
 
 function AuthPanel({ onClose, onAuthSuccess }) {
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
-  const [role, setRole] = useState("buyer");
+  const [uiRole, setUiRole] = useState("producer"); 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPass, setShowPass] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [successMsg, setSuccessMsg] = useState("");
+  
+  const canvasRef = useRef(null);
+  const reqRef = useRef(null);
+
+  // Three.js Scene Setup
+  useEffect(() => {
+    if (!canvasRef.current || !window.THREE) return;
+    
+    const THREE = window.THREE;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.z = 10;
+    
+    const renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current, alpha: true, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    
+    // Particles
+    const particleCount = 1200;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    
+    const colorGreen = new THREE.Color("#10B981");
+    const colorBlue = new THREE.Color("#3B82F6");
+    
+    for (let i = 0; i < particleCount; i++) {
+      const u = Math.random();
+      const v = Math.random();
+      const theta = 2 * Math.PI * u;
+      const phi = Math.acos(2 * v - 1);
+      const r = 8 * Math.cbrt(Math.random());
+      
+      positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      positions[i * 3 + 2] = r * Math.cos(phi);
+      
+      const c = Math.random() < 0.15 ? colorBlue : colorGreen;
+      colors[i * 3] = c.r;
+      colors[i * 3 + 1] = c.g;
+      colors[i * 3 + 2] = c.b;
+    }
+    
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    
+    const material = new THREE.PointsMaterial({
+      size: 0.05,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.4
+    });
+    
+    const particles = new THREE.Points(geometry, material);
+    scene.add(particles);
+    
+    // Atmospheric Ring
+    const ringGeo = new THREE.TorusGeometry(3, 0.015, 16, 100);
+    const ringMat = new THREE.LineBasicMaterial({ color: 0x10B981, transparent: true, opacity: 0.25 });
+    const edges = new THREE.EdgesGeometry(ringGeo);
+    const ring = new THREE.LineSegments(edges, ringMat);
+    ring.rotation.x = Math.PI / 2.5;
+    scene.add(ring);
+    
+    // Lights
+    const greenLight = new THREE.PointLight(0x10B981, 0.4);
+    greenLight.position.set(5, 5, 5);
+    scene.add(greenLight);
+    
+    const blueLight = new THREE.PointLight(0x3B82F6, 0.2);
+    blueLight.position.set(-5, -3, 2);
+    scene.add(blueLight);
+    
+    scene.add(new THREE.AmbientLight(0xffffff, 0.1));
+    
+    // Mouse Parallax
+    let mouseX = 0;
+    let mouseY = 0;
+    const onMouseMove = (e) => {
+      mouseX = (e.clientX - window.innerWidth / 2);
+      mouseY = (e.clientY - window.innerHeight / 2);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    
+    // Resize
+    const onResize = () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    };
+    window.addEventListener('resize', onResize);
+    
+    // Animation Loop
+    let time = 0;
+    let lastFrame = performance.now();
+    const animate = (now) => {
+      reqRef.current = requestAnimationFrame(animate);
+      if (document.hidden) return; // Pause when hidden
+      
+      const delta = now - lastFrame;
+      // cap at 60fps ~16.6ms
+      if (delta < 16) return;
+      lastFrame = now - (delta % 16);
+      
+      time += 0.01;
+      
+      const posAttr = geometry.attributes.position;
+      for (let i = 0; i < particleCount; i++) {
+        const y = posAttr.getY(i);
+        // Sine drift seeded by index
+        posAttr.setY(i, y + Math.sin(time + i) * 0.001);
+      }
+      posAttr.needsUpdate = true;
+      
+      ring.rotation.z += 0.001;
+      
+      const targetX = (mouseY / window.innerHeight) * 0.3;
+      const targetY = (mouseX / window.innerWidth) * 0.3;
+      particles.rotation.x += (targetX - particles.rotation.x) * 0.05;
+      particles.rotation.y += (targetY - particles.rotation.y) * 0.05;
+      
+      renderer.render(scene, camera);
+    };
+    reqRef.current = requestAnimationFrame(animate);
+    
+    return () => {
+      cancelAnimationFrame(reqRef.current);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('resize', onResize);
+      renderer.dispose();
+      geometry.dispose();
+      material.dispose();
+      ringGeo.dispose();
+      ringMat.dispose();
+      edges.dispose();
+    };
+  }, []);
+
+  const entropy = useMemo(() => {
+    let strength = 0;
+    if (password.length >= 8) strength++;
+    if (/[A-Z]/.test(password)) strength++;
+    if (/[0-9]/.test(password)) strength++;
+    if (/[^A-Za-z0-9]/.test(password)) strength++;
+    return strength;
+  }, [password]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
-    
+    setIsSuccess(false);
+
+    if (!window.navigator.onLine) {
+      setError("Connection error — check your network");
+      setIsLoading(false);
+      return;
+    }
+
+    if (mode === "register" && password !== confirmPassword) {
+      setError("Passwords do not match");
+      setIsLoading(false);
+      return;
+    }
+
     try {
+      const sb = window.supabaseClient;
+      if (!sb) throw new Error("Supabase client not initialized");
+
+      // producer -> processor, consumer -> buyer, sme -> buyer
+      const backendRole = uiRole === "producer" ? "processor" : "buyer";
+
       let result;
-      // Use global supabase client initialized in index.html
-      const sb = window.supabaseClient; 
-      
       if (mode === "login") {
         result = await sb.auth.signInWithPassword({ email, password });
       } else {
@@ -27,98 +192,314 @@ function AuthPanel({ onClose, onAuthSuccess }) {
           email,
           password,
           options: {
-            data: { name, role }
+            data: { name, role: backendRole }
           }
         });
       }
-      
+
       if (result.error) {
-        setError(result.error.message || "Authentication failed");
-        return;
+        throw new Error(result.error.message || "Authentication failed");
       }
-      
-      if (onAuthSuccess && result.data.session) {
-        onAuthSuccess(result.data.user, result.data.session.access_token);
-      } else if (onAuthSuccess && result.data.user) {
-        onAuthSuccess(result.data.user, null); // Signed up but maybe needs email confirmation
+
+      if (mode === "register") {
+        setIsSuccess(true);
+        setSuccessMsg("Account created — please sign in");
+        setTimeout(() => {
+          setMode("login");
+          setIsSuccess(false);
+          setPassword("");
+          setConfirmPassword("");
+        }, 2000);
+      } else {
+        setIsSuccess(true);
+        setTimeout(() => {
+          if (onAuthSuccess) {
+            if (result.data.session) {
+              onAuthSuccess(result.data.user, result.data.session.access_token);
+            } else if (result.data.user) {
+              onAuthSuccess(result.data.user, null);
+            }
+          }
+          if (onClose) onClose();
+        }, 800);
       }
-      
-      onClose();
     } catch (err) {
-      setError("Connection failed. Please try again.");
+      setError(err.message || "Connection failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
+  const formStyles = {
+    inputGroup: { position: "relative", marginBottom: "16px" },
+    label: {
+      position: "absolute", left: "16px", top: "14px",
+      fontSize: "13px", color: "#9CA3AF", fontFamily: "Inter",
+      pointerEvents: "none", transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)",
+      background: "transparent", padding: "0 4px"
+    },
+    labelActive: {
+      top: "-8px", left: "12px", fontSize: "11px", color: "#10B981",
+      background: "#0d131f", // match card slightly
+    },
+    input: {
+      width: "100%", padding: "12px 16px", background: "rgba(255,255,255,0.05)",
+      border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px",
+      color: "#F9FAFB", fontFamily: "'JetBrains Mono', monospace", fontSize: "14px",
+      outline: "none", transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)",
+      boxSizing: "border-box"
+    }
+  };
+
   return (
-    <div style={{ position:"fixed",inset:0,zIndex:99999,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.75)",backdropFilter:"blur(10px)" }}>
-      <style>{`
-        @keyframes authSlideUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
-        .auth-modal { animation: authSlideUp 0.3s cubic-bezier(0.4,0,0.2,1); }
-        .auth-input:focus { border-color: #2d6a4f !important; box-shadow: 0 0 0 2px rgba(45,106,79,0.2) !important; }
-      `}</style>
-      <div className="auth-modal" style={{ width:"100%",maxWidth:440,background:"var(--bg-secondary)",borderRadius:20,border:"1px solid var(--border-primary)",boxShadow:"0 24px 64px rgba(0,0,0,0.5)",overflow:"hidden" }}>
-        <div style={{ padding:"20px 24px 16px",borderBottom:"1px solid var(--border-primary)",background:"var(--bg-header)",display:"flex",alignItems:"center",justifyContent:"space-between" }}>
-          <div>
-            <div style={{ fontWeight:800,fontSize:17,color:"var(--text-primary)",letterSpacing:"-0.01em" }}>
-              {mode==="login"?"Welcome Back 🌱":"Create Account 🌱"}
-            </div>
-            <div style={{ fontSize:11.5,color:"var(--text-muted)",marginTop:2 }}>ClimaLogix AI — ClimateShield Platform</div>
+    <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "#0B0F19", overflow: "hidden" }}>
+      {/* 3D Canvas */}
+      <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 0 }} />
+
+      {/* Overlays */}
+      <div style={{
+        position: "absolute", inset: 0, zIndex: 5, pointerEvents: "none",
+        background: "repeating-linear-gradient(rgba(16, 185, 129, 0.03) 0, rgba(16, 185, 129, 0.03) 1px, transparent 1px, transparent 4px)",
+        backgroundSize: "100% 4px"
+      }}></div>
+      <div style={{
+        position: "absolute", inset: 0, zIndex: 5, pointerEvents: "none",
+        background: "radial-gradient(circle at center, transparent 30%, rgba(0,0,0,0.6) 100%)"
+      }}></div>
+
+      {/* Decorative Corners */}
+      <div style={{ position: "absolute", top: 20, left: 20, zIndex: 5, color: "#10B981", opacity: 0.3, fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>DHK_ZONE_04 | UHI: +3.2°C</div>
+      <div style={{ position: "absolute", top: 20, right: 20, zIndex: 5, color: "#10B981", opacity: 0.3, fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>BATCH_SYNC: LIVE</div>
+      <div style={{ position: "absolute", bottom: 20, left: 20, zIndex: 5, color: "#10B981", opacity: 0.3, fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>NODE: ACTIVE_SECURE</div>
+      <div style={{ position: "absolute", bottom: 20, right: 20, zIndex: 5, color: "#10B981", opacity: 0.3, fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>SYS_OPS: NOMINAL</div>
+
+      {/* Close button */}
+      <button onClick={onClose} style={{
+        position: "absolute", top: 20, right: 20, zIndex: 20,
+        background: "rgba(255,255,255,0.1)", border: "none", borderRadius: "50%",
+        width: 32, height: 32, color: "#fff", cursor: "pointer", fontSize: "18px",
+        display: "flex", alignItems: "center", justifyContent: "center"
+      }}>×</button>
+
+      {/* Slider Container */}
+      <div style={{
+        position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+        width: "100%", maxWidth: 420, zIndex: 10, perspective: 1000
+      }}>
+        {/* Success Toast */}
+        {isSuccess && mode === "register" && (
+          <div style={{
+            position: "absolute", top: -50, left: 0, right: 0, textAlign: "center",
+            background: "rgba(16, 185, 129, 0.2)", border: "1px solid rgba(16, 185, 129, 0.4)",
+            color: "#10B981", padding: "10px", borderRadius: "8px", fontSize: "13px",
+            animation: "fadeSlideIn 0.3s cubic-bezier(0.4,0,0.2,1)", zIndex: 30
+          }}>
+            {successMsg}
           </div>
-          <button onClick={onClose} style={{ background:"transparent",border:"none",color:"var(--text-muted)",fontSize:22,cursor:"pointer",lineHeight:1,padding:"0 4px" }}>×</button>
+        )}
+
+        {/* Both panels exist side-by-side inside a slider wrapper */}
+        <div style={{
+          display: "flex", width: "200%", transition: "transform 0.4s cubic-bezier(0.4,0,0.2,1)",
+          transform: mode === "login" ? "translateX(0)" : "translateX(-50%)"
+        }}>
+          {/* LOGIN PANEL */}
+          <div style={{ width: "50%", padding: "0 10px", boxSizing: "border-box" }}>
+            <div className={error && mode === "login" ? "auth-error-shake" : ""} style={{
+              background: "rgba(17, 24, 39, 0.75)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+              borderRadius: "20px", border: "1px solid rgba(16, 185, 129, 0.15)",
+              boxShadow: "0 0 40px rgba(16, 185, 129, 0.08), 0 20px 60px rgba(0,0,0,0.5)",
+              padding: "40px", animation: "fadeSlideIn 0.5s cubic-bezier(0.4,0,0.2,1)"
+            }}>
+              <style>{`
+                .auth-error-shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; border-color: #EF4444 !important; }
+                .auth-input-focus:focus { border-color: rgba(16,185,129,0.6) !important; box-shadow: 0 0 0 3px rgba(16,185,129,0.1) !important; }
+              `}</style>
+              
+              <div style={{ textAlign: "center", marginBottom: "30px" }}>
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "pulseGlow 2s ease-in-out infinite" }}>
+                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                  <path d="M12 12v10"/>
+                </svg>
+                <h1 style={{ fontFamily: "Inter", fontSize: "22px", color: "#F9FAFB", fontWeight: 700, margin: "16px 0 4px" }}>ClimaLogix AI</h1>
+                <p style={{ fontFamily: "Inter", fontSize: "13px", color: "#9CA3AF" }}>Climate-Resilient Commerce Platform</p>
+              </div>
+
+              {/* Role Pills */}
+              <div style={{ display: "flex", gap: "8px", marginBottom: "24px", background: "rgba(255,255,255,0.03)", padding: "4px", borderRadius: "12px" }}>
+                {["producer", "consumer", "sme owner"].map(r => (
+                  <button key={r} type="button" onClick={() => setUiRole(r)} style={{
+                    flex: 1, padding: "8px 0", border: "none", borderRadius: "8px", fontSize: "12px", fontFamily: "Inter", cursor: "pointer",
+                    transition: "all 0.25s cubic-bezier(0.4,0,0.2,1)",
+                    background: uiRole === r ? "#10B981" : "transparent",
+                    color: uiRole === r ? "#0B0F19" : "#9CA3AF",
+                    fontWeight: uiRole === r ? 600 : 400
+                  }}>
+                    {r.charAt(0).toUpperCase() + r.slice(1)}
+                  </button>
+                ))}
+              </div>
+
+              <form onSubmit={handleSubmit}>
+                <div style={formStyles.inputGroup}>
+                  <input required type="email" className="auth-input-focus" style={formStyles.input} value={email} onChange={e=>setEmail(e.target.value)} onFocus={(e)=>e.target.parentElement.dataset.focus="1"} onBlur={(e)=>e.target.parentElement.dataset.focus="0"} />
+                  <label style={{...formStyles.label, ...(email || document.activeElement === email ? formStyles.labelActive : {})}}>Email Address</label>
+                </div>
+
+                <div style={formStyles.inputGroup}>
+                  <input required type={showPass ? "text" : "password"} className="auth-input-focus" style={{...formStyles.input, paddingRight: "40px"}} value={password} onChange={e=>setPassword(e.target.value)} onFocus={(e)=>e.target.parentElement.dataset.focus="1"} onBlur={(e)=>e.target.parentElement.dataset.focus="0"} />
+                  <label style={{...formStyles.label, ...(password || document.activeElement === password ? formStyles.labelActive : {})}}>Password</label>
+                  <button type="button" onClick={()=>setShowPass(!showPass)} style={{ position:"absolute", right:"12px", top:"12px", background:"transparent", border:"none", cursor:"pointer" }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                  </button>
+                  {/* Strength bar */}
+                  {password.length > 0 && (
+                    <div style={{ display: "flex", gap: "4px", marginTop: "8px", height: "4px" }}>
+                      {[1,2,3,4].map(s => (
+                        <div key={s} style={{
+                          flex: 1, borderRadius: "2px", transition: "all 0.3s",
+                          background: s <= entropy ? (entropy < 2 ? "#EF4444" : entropy < 4 ? "#F59E0B" : "#10B981") : "rgba(255,255,255,0.1)"
+                        }}/>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13px", color: "#9CA3AF", fontFamily: "Inter" }}>
+                    <div style={{ width: "16px", height: "16px", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.05)" }}>
+                      <input type="checkbox" style={{ opacity: 0, position: "absolute", cursor: "pointer" }} onChange={(e) => {
+                        e.target.parentElement.style.background = e.target.checked ? "#10B981" : "rgba(255,255,255,0.05)";
+                        e.target.nextSibling.style.opacity = e.target.checked ? 1 : 0;
+                      }}/>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0B0F19" strokeWidth="3" style={{ opacity: 0, transition: "opacity 0.2s" }}><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    </div>
+                    Remember me
+                  </label>
+                  <a href="#" style={{ color: "#10B981", fontSize: "13px", textDecoration: "none", fontFamily: "Inter" }} onMouseOver={e=>e.target.style.textDecoration="underline"} onMouseOut={e=>e.target.style.textDecoration="none"}>Forgot password?</a>
+                </div>
+
+                {error && mode === "login" && <div style={{ color: "#EF4444", fontSize: "13px", marginBottom: "16px", textAlign: "center", fontFamily: "Inter" }}>{error}</div>}
+
+                <button type="submit" disabled={isLoading} style={{
+                  width: "100%", height: "48px", borderRadius: "10px", border: "none", cursor: isLoading ? "not-allowed" : "pointer",
+                  background: isSuccess ? "#10B981" : "linear-gradient(135deg, #10B981, #059669)",
+                  color: "#0B0F19", fontFamily: "Inter", fontSize: "15px", fontWeight: 600,
+                  transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)", display: "flex", alignItems: "center", justifyContent: "center",
+                  boxShadow: "0 4px 12px rgba(16, 185, 129, 0.2)"
+                }} onMouseOver={e => !isLoading && (e.target.style.transform = "translateY(-2px)", e.target.style.boxShadow = "0 8px 20px rgba(16, 185, 129, 0.4)")}
+                   onMouseOut={e => !isLoading && (e.target.style.transform = "translateY(0)", e.target.style.boxShadow = "0 4px 12px rgba(16, 185, 129, 0.2)")}>
+                  {isLoading ? (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+                  ) : isSuccess ? (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  ) : "Sign In"}
+                </button>
+
+                <div style={{ margin: "24px 0", display: "flex", alignItems: "center", textAlign: "center", color: "#4B5563" }}>
+                  <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.1)" }}></div>
+                  <span style={{ padding: "0 10px", fontSize: "12px", fontFamily: "Inter" }}>New to ClimaLogix?</span>
+                  <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.1)" }}></div>
+                </div>
+
+                <div style={{ textAlign: "center" }}>
+                  <button type="button" onClick={() => { setMode("register"); setError(""); }} style={{ background: "transparent", border: "none", color: "#10B981", fontSize: "14px", fontFamily: "Inter", cursor: "pointer" }} onMouseOver={e=>e.target.style.textDecoration="underline"} onMouseOut={e=>e.target.style.textDecoration="none"}>
+                    Create an account
+                  </button>
+                </div>
+                
+                <div style={{ marginTop: "24px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", color: "#4B5563", fontSize: "11px", fontFamily: "Inter" }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0110 0v4"></path></svg>
+                  Secured with Argon2 + JWT · End-to-end encrypted
+                </div>
+              </form>
+            </div>
+          </div>
+
+          {/* REGISTER PANEL */}
+          <div style={{ width: "50%", padding: "0 10px", boxSizing: "border-box" }}>
+            <div className={error && mode === "register" ? "auth-error-shake" : ""} style={{
+              background: "rgba(17, 24, 39, 0.75)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+              borderRadius: "20px", border: "1px solid rgba(16, 185, 129, 0.15)",
+              boxShadow: "0 0 40px rgba(16, 185, 129, 0.08), 0 20px 60px rgba(0,0,0,0.5)",
+              padding: "40px"
+            }}>
+              <div style={{ textAlign: "center", marginBottom: "20px" }}>
+                <h2 style={{ fontFamily: "Inter", fontSize: "20px", color: "#F9FAFB", fontWeight: 700, margin: 0 }}>Create Account</h2>
+              </div>
+
+              {/* Role Pills */}
+              <div style={{ display: "flex", gap: "8px", marginBottom: "20px", background: "rgba(255,255,255,0.03)", padding: "4px", borderRadius: "12px" }}>
+                {["producer", "consumer", "sme owner"].map(r => (
+                  <button key={r} type="button" onClick={() => setUiRole(r)} style={{
+                    flex: 1, padding: "8px 0", border: "none", borderRadius: "8px", fontSize: "12px", fontFamily: "Inter", cursor: "pointer",
+                    transition: "all 0.25s cubic-bezier(0.4,0,0.2,1)",
+                    background: uiRole === r ? "#10B981" : "transparent",
+                    color: uiRole === r ? "#0B0F19" : "#9CA3AF",
+                    fontWeight: uiRole === r ? 600 : 400
+                  }}>
+                    {r.charAt(0).toUpperCase() + r.slice(1)}
+                  </button>
+                ))}
+              </div>
+
+              <form onSubmit={handleSubmit}>
+                <div style={formStyles.inputGroup}>
+                  <input required type="text" className="auth-input-focus" style={formStyles.input} value={name} onChange={e=>setName(e.target.value)} />
+                  <label style={{...formStyles.label, ...(name ? formStyles.labelActive : {})}}>Full Name</label>
+                </div>
+                <div style={formStyles.inputGroup}>
+                  <input required type="email" className="auth-input-focus" style={formStyles.input} value={email} onChange={e=>setEmail(e.target.value)} />
+                  <label style={{...formStyles.label, ...(email ? formStyles.labelActive : {})}}>Email Address</label>
+                </div>
+                <div style={formStyles.inputGroup}>
+                  <input required type="password" className="auth-input-focus" style={formStyles.input} value={password} onChange={e=>setPassword(e.target.value)} />
+                  <label style={{...formStyles.label, ...(password ? formStyles.labelActive : {})}}>Password</label>
+                  {/* Strength bar */}
+                  {password.length > 0 && (
+                    <div style={{ display: "flex", gap: "4px", marginTop: "8px", height: "4px" }}>
+                      {[1,2,3,4].map(s => (
+                        <div key={s} style={{
+                          flex: 1, borderRadius: "2px", transition: "all 0.3s",
+                          background: s <= entropy ? (entropy < 2 ? "#EF4444" : entropy < 4 ? "#F59E0B" : "#10B981") : "rgba(255,255,255,0.1)"
+                        }}/>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div style={formStyles.inputGroup}>
+                  <input required type="password" className="auth-input-focus" style={formStyles.input} value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} />
+                  <label style={{...formStyles.label, ...(confirmPassword ? formStyles.labelActive : {})}}>Confirm Password</label>
+                </div>
+
+                {error && mode === "register" && <div style={{ color: "#EF4444", fontSize: "13px", marginBottom: "16px", textAlign: "center", fontFamily: "Inter" }}>{error}</div>}
+
+                <button type="submit" disabled={isLoading} style={{
+                  width: "100%", height: "48px", borderRadius: "10px", border: "none", cursor: isLoading ? "not-allowed" : "pointer",
+                  background: isSuccess ? "#10B981" : "linear-gradient(135deg, #10B981, #059669)",
+                  color: "#0B0F19", fontFamily: "Inter", fontSize: "15px", fontWeight: 600,
+                  transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)", display: "flex", alignItems: "center", justifyContent: "center",
+                  boxShadow: "0 4px 12px rgba(16, 185, 129, 0.2)"
+                }} onMouseOver={e => !isLoading && (e.target.style.transform = "translateY(-2px)", e.target.style.boxShadow = "0 8px 20px rgba(16, 185, 129, 0.4)")}
+                   onMouseOut={e => !isLoading && (e.target.style.transform = "translateY(0)", e.target.style.boxShadow = "0 4px 12px rgba(16, 185, 129, 0.2)")}>
+                  {isLoading ? (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+                  ) : "Create Account"}
+                </button>
+
+                <div style={{ textAlign: "center", marginTop: "24px" }}>
+                  <span style={{ color: "#9CA3AF", fontSize: "13px", fontFamily: "Inter" }}>Already have an account? </span>
+                  <button type="button" onClick={() => { setMode("login"); setError(""); }} style={{ background: "transparent", border: "none", color: "#10B981", fontSize: "13px", fontFamily: "Inter", cursor: "pointer" }} onMouseOver={e=>e.target.style.textDecoration="underline"} onMouseOut={e=>e.target.style.textDecoration="none"}>
+                    Sign in
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         </div>
-
-        <div style={{ display:"flex",borderBottom:"1px solid var(--border-primary)" }}>
-          {["login","register"].map(m=>(
-            <button key={m} onClick={()=>{setMode(m);setError("");}} style={{ flex:1,padding:"13px",background:"transparent",border:"none",borderBottom:mode===m?"2px solid #2d6a4f":"2px solid transparent",color:mode===m?"#2d6a4f":"var(--text-muted)",fontWeight:mode===m?700:500,fontSize:13,cursor:"pointer",transition:"all 0.2s",textTransform:"capitalize" }}>
-              {m==="login"?"Sign In":"Sign Up"}
-            </button>
-          ))}
-        </div>
-
-        <form onSubmit={handleSubmit} style={{ padding:"24px" }}>
-          {error && (
-            <div style={{ padding:"10px 14px",borderRadius:8,background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.3)",color:"#EF4444",fontSize:12.5,marginBottom:16 }}>
-              ⚠️ {error}
-            </div>
-          )}
-
-          {mode==="register" && (
-            <div style={{ marginBottom:14 }}>
-              <label style={{ display:"block",fontSize:11.5,fontWeight:600,color:"var(--text-secondary)",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em" }}>Full Name</label>
-              <input className="auth-input" type="text" value={name} onChange={e=>setName(e.target.value)} required placeholder="Your full name" style={{ width:"100%",padding:"10px 13px",borderRadius:9,border:"1px solid var(--border-primary)",background:"var(--bg-input)",color:"var(--text-primary)",fontSize:13,outline:"none",boxSizing:"border-box",transition:"border-color 0.2s, box-shadow 0.2s" }} />
-            </div>
-          )}
-
-          <div style={{ marginBottom:14 }}>
-            <label style={{ display:"block",fontSize:11.5,fontWeight:600,color:"var(--text-secondary)",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em" }}>Email Address</label>
-            <input className="auth-input" type="email" value={email} onChange={e=>setEmail(e.target.value)} required placeholder="your@email.com" style={{ width:"100%",padding:"10px 13px",borderRadius:9,border:"1px solid var(--border-primary)",background:"var(--bg-input)",color:"var(--text-primary)",fontSize:13,outline:"none",boxSizing:"border-box",transition:"border-color 0.2s, box-shadow 0.2s" }} />
-          </div>
-
-          <div style={{ marginBottom:14 }}>
-            <label style={{ display:"block",fontSize:11.5,fontWeight:600,color:"var(--text-secondary)",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em" }}>Password</label>
-            <div style={{ position:"relative" }}>
-              <input className="auth-input" type={showPass?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} required placeholder={mode==="register"?"Min. 8 characters":"Your password"} style={{ width:"100%",padding:"10px 40px 10px 13px",borderRadius:9,border:"1px solid var(--border-primary)",background:"var(--bg-input)",color:"var(--text-primary)",fontSize:13,outline:"none",boxSizing:"border-box",transition:"border-color 0.2s, box-shadow 0.2s" }} />
-              <button type="button" onClick={()=>setShowPass(s=>!s)} style={{ position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",color:"var(--text-muted)",cursor:"pointer",fontSize:14 }}>{showPass?"Hide":"Show"}</button>
-            </div>
-          </div>
-          
-          {mode==="register" && (
-            <div style={{ marginBottom:14 }}>
-              <label style={{ display:"block",fontSize:11.5,fontWeight:600,color:"var(--text-secondary)",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em" }}>Role</label>
-              <select className="auth-input" value={role} onChange={e=>setRole(e.target.value)} style={{ width:"100%",padding:"10px 13px",borderRadius:9,border:"1px solid var(--border-primary)",background:"var(--bg-input)",color:"var(--text-primary)",fontSize:13,outline:"none",boxSizing:"border-box",transition:"border-color 0.2s, box-shadow 0.2s" }}>
-                <option value="buyer">Consumer (Buyer)</option>
-                <option value="processor">Producer (SME Processor)</option>
-              </select>
-            </div>
-          )}
-
-          <button type="submit" disabled={isLoading} style={{ width:"100%",padding:"12px",background:"#2d6a4f",color:"#fff",border:"none",borderRadius:9,fontWeight:600,fontSize:14,cursor:isLoading?"not-allowed":"pointer",opacity:isLoading?0.7:1,marginTop:10,transition:"background 0.2s" }}>
-            {isLoading ? "Processing..." : mode === "login" ? "Sign In" : "Create Account"}
-          </button>
-        </form>
       </div>
     </div>
   );
 }
+
+window.AuthPanel = AuthPanel;
