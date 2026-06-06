@@ -1716,6 +1716,14 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
       setBaseTemp(fallback.temp);
       setWindSpeed(fallback.wind);
       setWeatherSource("estimated");
+      console.info(
+        "%c[weather]%c Using local Dhaka diurnal estimate — " +
+        "live OpenWeather call did not return data. " +
+        "If this persists, redeploy the backend at https://dashboard.render.com " +
+        "or set OPENWEATHER_API_KEY in the Render environment.",
+        "background:#f59e0b;color:#000;padding:2px 6px;border-radius:4px;font-weight:700",
+        "color:#f59e0b"
+      );
     }
     setIsFetchingWeather(false);
   };
