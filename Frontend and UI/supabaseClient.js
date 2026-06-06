@@ -6,7 +6,7 @@ if (typeof window !== 'undefined' && window.supabase && !window.supabaseClient) 
   );
 }
 
-export const getSupabaseClient = () => {
+window.getSupabaseClient = () => {
   if (typeof window !== 'undefined' && window.supabaseClient) {
     return window.supabaseClient;
   }
