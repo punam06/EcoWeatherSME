@@ -1433,6 +1433,7 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
   const [routeDuration, setRouteDuration] = useState(90);
   const [zoneSearch, setZoneSearch] = useState("");
   const [isFetchingWeather, setIsFetchingWeather] = useState(false);
+  const [weatherSource, setWeatherSource] = useState("estimated"); // "live" | "estimated" | "fetching"
   const [isFetchingMetrics, setIsFetchingMetrics] = useState(false);
   const [dvs, setDvs] = useState(0);
   const [tst, setTst] = useState(0);
@@ -1458,6 +1459,15 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
   useEffect(() => {
     fetchLiveWeather(zone);
   }, [zone]);
+
+  // Also fetch once on mount so the page never shows the hardcoded 31/8 default
+  useEffect(() => {
+    fetchLiveWeather(zone);
+    // Refresh every 10 minutes so the values stay current while the tab is open
+    const interval = setInterval(() => fetchLiveWeather(zone), 10 * 60 * 1000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Reset scores and prepare for a recalculation when inputs change
   useEffect(() => {
@@ -1656,9 +1666,34 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
     recognition.start();
   };
 
+  // Local fallback weather model: Dhaka diurnal temperature curve with zone-specific adjustments.
+  // Used when the backend /api/weather endpoint is unavailable (e.g. stale Render build or missing key).
+  const deriveLocalFallbackWeather = (zoneName) => {
+    const now = new Date();
+    const h = now.getHours() + now.getMinutes() / 60;
+    // Peak 13:00 → 34.5°C, low 5:00 → 26°C; smooth cosine interpolation between
+    const closer = Math.min(Math.abs(h - 13), Math.abs(h - 5));
+    const peak = 34.5;
+    const trough = 26;
+    const temp = trough + (peak - trough) * (1 - Math.cos((closer / 8) * Math.PI)) / 2;
+    // Wind: 6 km/h base, ±4 sinusoidal
+    const wind = Math.max(3, Math.round(6 + 4 * Math.sin(((h - 9) / 24) * 2 * Math.PI)));
+    // Zone-specific adjustments (urban heat island variations across Dhaka)
+    const zoneAdjustments = {
+      "Old Dhaka": 1.8, "Motijheel": 1.5, "Dhanmondi": 1.2, "Ramna": 1.4,
+      "Tejgaon": 1.6, "Gulshan": 0.9, "Banani": 0.7, "Uttara": 0.3,
+      "Mirpur": 0.6, "Mohammadpur": 0.8, "Savar": -0.4, "Keraniganj": -0.2,
+      "Gazipur": 0.0, "Narayanganj": 0.5, "Tongi": 0.2,
+    };
+    const adjustment = zoneAdjustments[zoneName] ?? 0;
+    return { temp: Math.round((temp + adjustment) * 10) / 10, wind };
+  };
+
   const fetchLiveWeather = async (locationQuery = null) => {
     setIsFetchingWeather(true);
+    setWeatherSource("fetching");
     const targetLocation = typeof locationQuery === "string" ? locationQuery : (zoneSearch || zone || "Dhaka");
+    let usedLive = false;
     try {
       const geoRes = await window.APIClient.geocode(targetLocation);
       if (geoRes.success && geoRes.data) {
@@ -1667,10 +1702,20 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
         if (weatherRes.success && weatherRes.data) {
           setBaseTemp(Math.round(weatherRes.data.temperature * 10) / 10);
           setWindSpeed(Math.round(weatherRes.data.windspeed_kmh));
+          setWeatherSource("live");
+          usedLive = true;
         }
       }
     } catch (e) {
       console.error("Failed to fetch live weather via backend", e);
+    }
+    if (!usedLive) {
+      // Backend unavailable (404 stale build, missing key, etc.) — fall back to a local Dhaka model
+      // so the UI never displays the static 31°C / 8 km/h defaults indefinitely.
+      const fallback = deriveLocalFallbackWeather(zone);
+      setBaseTemp(fallback.temp);
+      setWindSpeed(fallback.wind);
+      setWeatherSource("estimated");
     }
     setIsFetchingWeather(false);
   };
@@ -1687,8 +1732,20 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
         {/* LEFT: Controls */}
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <div style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 500 }}>Weather Conditions</div>
-            <button 
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 500 }}>Weather Conditions</div>
+              <span
+                title={weatherSource === "live" ? "Live data from OpenWeather via backend" : weatherSource === "fetching" ? "Fetching live data..." : "Estimated from local Dhaka diurnal model (backend unavailable)"}
+                style={{
+                  fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+                  padding: "2px 8px", borderRadius: 999,
+                  background: weatherSource === "live" ? "#10b981" : weatherSource === "fetching" ? "#6b7280" : "#f59e0b",
+                  color: "#fff", display: "inline-flex", alignItems: "center", gap: 4,
+                }}>
+                {weatherSource === "live" ? "● LIVE" : weatherSource === "fetching" ? "⏳ FETCHING" : "◐ ESTIMATED"}
+              </span>
+            </div>
+            <button
               onClick={fetchLiveWeather}
               disabled={isFetchingWeather}
               style={{

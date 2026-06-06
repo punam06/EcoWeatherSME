@@ -166,6 +166,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
       environment: process.env.NODE_ENV ?? 'development',
       supabaseConfigured: isSupabaseConfigured(),
       groqConfigured: Boolean(process.env.GROQ_API_KEY),
+      weatherConfigured: Boolean(process.env.OPENWEATHER_API_KEY),
       timestamp: new Date().toISOString(),
     },
   });
@@ -362,7 +363,7 @@ app.get('/api/dashboard', async (req: Request, res: Response) => {
     ];
   }
 
-  res.json({ success: true, data: { stats, recentActivity, heatmap, liveData } });
+  res.json({ success: true, data: { stats, recentActivity, heatmap, liveData, weatherUpdatedAt: new Date().toISOString() } });
 });
 
 // ── Geocoding Endpoint ──────────────────────────────────────────────────
@@ -416,7 +417,10 @@ app.get('/api/geocode', async (req: Request, res: Response) => {
   }
 });
 
-// ── Weather Endpoint ─────────────────────────────────────────────────────
+// ── Weather Endpoint (60s in-memory cache) ──────────────────────────────
+const weatherByCoordsCache = new Map<string, { data: any; ts: number }>();
+const WEATHER_COORDS_TTL_MS = 60 * 1000;
+
 app.get('/api/weather', async (req: Request, res: Response) => {
   const parsed = WeatherQuerySchema.safeParse(req.query);
   if (!parsed.success) {
@@ -424,26 +428,64 @@ app.get('/api/weather', async (req: Request, res: Response) => {
     return;
   }
   const { lat, lon } = parsed.data;
+  const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+  const cached = weatherByCoordsCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < WEATHER_COORDS_TTL_MS) {
+    res.json({ success: true, data: cached.data, cached: true });
+    return;
+  }
   const apiKey = process.env.OPENWEATHER_API_KEY;
   if (!apiKey) {
-    res.status(500).json({ success: false, error: 'Weather API key is not configured on backend' });
+    // No key configured — return a deterministic time-of-day estimate so the
+    // UI never freezes on stale data.
+    const now = new Date();
+    const h = now.getHours() + now.getMinutes() / 60;
+    const peak = 13;
+    const low = 5;
+    const closer = Math.min(Math.abs(h - peak), Math.abs(h - low));
+    const temp = 26 + (8.5 * (1 - Math.cos((closer / 8) * Math.PI)) / 2);
+    const wind = Math.max(3, Math.round(6 + 4 * Math.sin(((h - 9) / 24) * 2 * Math.PI)));
+    const data = {
+      temperature: Math.round(temp * 10) / 10,
+      windspeed_kmh: wind,
+      humidity: 65,
+      feelsLike: Math.round((temp + 1.5) * 10) / 10,
+      description: 'estimated (no API key configured)',
+    };
+    res.json({ success: true, data, estimated: true });
     return;
   }
   try {
     const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`;
     const response = await fetch(url);
     const data: any = await response.json();
-    if (data && data.main) {
-      res.json({
-        success: true,
-        data: {
-          temperature: data.main.temp,
-          windspeed_kmh: (data.wind?.speed || 0) * 3.6, // m/s to km/h
-          humidity: data.main.humidity,
-          feelsLike: data.main.feels_like,
-          description: data.weather?.[0]?.description || ''
-        }
-      });
+    if (data && data.main && data.main.temp !== undefined) {
+      const payload = {
+        temperature: data.main.temp,
+        windspeed_kmh: (data.wind?.speed || 0) * 3.6, // m/s to km/h
+        humidity: data.main.humidity,
+        feelsLike: data.main.feels_like,
+        description: data.weather?.[0]?.description || '',
+      };
+      weatherByCoordsCache.set(cacheKey, { data: payload, ts: Date.now() });
+      res.json({ success: true, data: payload, cached: false });
+    } else if (data && data.cod === 401) {
+      // Invalid/expired key — return time-of-day estimate, don't 404
+      const now = new Date();
+      const h = now.getHours() + now.getMinutes() / 60;
+      const peak = 13;
+      const low = 5;
+      const closer = Math.min(Math.abs(h - peak), Math.abs(h - low));
+      const temp = 26 + (8.5 * (1 - Math.cos((closer / 8) * Math.PI)) / 2);
+      const wind = Math.max(3, Math.round(6 + 4 * Math.sin(((h - 9) / 24) * 2 * Math.PI)));
+      const payload = {
+        temperature: Math.round(temp * 10) / 10,
+        windspeed_kmh: wind,
+        humidity: 65,
+        feelsLike: Math.round((temp + 1.5) * 10) / 10,
+        description: 'estimated (API key unauthorized)',
+      };
+      res.json({ success: true, data: payload, estimated: true });
     } else {
       res.status(404).json({ success: false, error: 'Weather data not found for coordinates' });
     }

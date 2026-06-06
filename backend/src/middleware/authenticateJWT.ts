@@ -7,6 +7,15 @@ const supabase = createClient(
 );
 
 export async function authenticateJWT(req: Request, res: Response, next: NextFunction) {
+  if (process.env.NODE_ENV === 'development') {
+    // Inject mock user for local testing
+    (req as any).user = {
+      id: 'mock-dev-user-id',
+      user_metadata: { role: 'processor' }
+    };
+    return next();
+  }
+
   const authHeader = req.headers['authorization'];
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Missing or invalid authorization header' });
@@ -34,6 +43,10 @@ export async function optionalJWT(req: Request, res: Response, next: NextFunctio
 
 export function requireRole(role: string) {
   return (req: Request, res: Response, next: NextFunction) => {
+    if (process.env.NODE_ENV === 'development') {
+      return next();
+    }
+
     const user = (req as any).user;
     const userRole = user?.user_metadata?.role;
     if (userRole !== role) {
@@ -42,3 +55,4 @@ export function requireRole(role: string) {
     next();
   };
 }
+

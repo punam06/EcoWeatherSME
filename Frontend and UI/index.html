@@ -1803,6 +1803,7 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
   const [routeDuration, setRouteDuration] = useState(90);
   const [zoneSearch, setZoneSearch] = useState("");
   const [isFetchingWeather, setIsFetchingWeather] = useState(false);
+  const [weatherSource, setWeatherSource] = useState("estimated"); // "live" | "estimated"
   const [isFetchingMetrics, setIsFetchingMetrics] = useState(false);
   const [dvs, setDvs] = useState(0);
   const [tst, setTst] = useState(0);
@@ -1828,6 +1829,15 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
   useEffect(() => {
     fetchLiveWeather(zone);
   }, [zone]);
+
+  // Also fetch once on mount so the page never shows the hardcoded 31/8 default
+  useEffect(() => {
+    fetchLiveWeather(zone);
+    // Refresh every 10 minutes so the values stay current while the tab is open
+    const interval = setInterval(() => fetchLiveWeather(zone), 10 * 60 * 1000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Reset scores and prepare for a recalculation when inputs change
   useEffect(() => {
@@ -2026,22 +2036,77 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
     recognition.start();
   };
 
+  // Time-of-day derived weather fallback for Dhaka (used when backend is stale
+  // or the OpenWeather call fails). Peak at ~13:00 (33–35°C), cool at night
+  // (25–27°C), wind in the 5–14 km/h range. Values are *deterministic* per
+  // current minute so they actually change as time passes.
+  const deriveLocalFallbackWeather = (zoneName) => {
+    const now = new Date();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+    // Diurnal temperature curve: peak at 13:00, low at 05:00
+    const peakHour = 13;
+    const lowHour = 5;
+    const peak = 34.5; // Dhaka typical peak °C
+    const low = 26.0;
+    const hourDist = Math.abs(hour + minute / 60 - peakHour);
+    const lowDist = Math.abs(hour + minute / 60 - lowHour);
+    const closer = Math.min(hourDist, lowDist);
+    // cosine-shaped curve mapped to [low, peak]
+    const t = closer / 8; // 0 at peak/low, 1 at midpoint
+    const tempRange = peak - low;
+    const baseDhaka = closer === hourDist
+      ? peak - tempRange * (1 - Math.cos(t * Math.PI)) / 2
+      : low + tempRange * (1 - Math.cos(t * Math.PI)) / 2;
+    // Zone adjustments
+    const zoneAdj = { "Old Dhaka": 1.8, "Mirpur": 0.6, "Savar": -0.4, "Gulshan": -0.8, "Dhanmondi": 0.2 };
+    const adj = zoneAdj[zoneName] || 0;
+    const temp = baseDhaka + adj;
+    // Wind: stronger in afternoon, varies with zone (UHI corridors = turbulent)
+    const windBase = 6 + 4 * Math.sin(((hour - 9) / 24) * 2 * Math.PI);
+    const windZoneAdj = { "Old Dhaka": 3, "Mirpur": 1, "Gulshan": -2, "Savar": 0, "Dhanmondi": -1 };
+    const wind = Math.max(2, Math.round(windBase + (windZoneAdj[zoneName] || 0)));
+    return { temp: Math.round(temp * 10) / 10, wind };
+  };
+
   const fetchLiveWeather = async (locationQuery = null) => {
     setIsFetchingWeather(true);
     const targetLocation = typeof locationQuery === "string" ? locationQuery : (zoneSearch || zone || "Dhaka");
+    const targetZone = (typeof locationQuery === "string" && UHI_ZONES[locationQuery]) ? locationQuery : zone;
+    let usedFallback = false;
+    let usedSource = "live";
     try {
       const geoRes = await window.APIClient.geocode(targetLocation);
-      if (geoRes.success && geoRes.data) {
+      if (geoRes && geoRes.success && geoRes.data) {
         const { lat, lon } = geoRes.data;
         const weatherRes = await window.APIClient.getWeather(lat, lon);
-        if (weatherRes.success && weatherRes.data) {
+        if (weatherRes && weatherRes.success && weatherRes.data) {
           setBaseTemp(Math.round(weatherRes.data.temperature * 10) / 10);
           setWindSpeed(Math.round(weatherRes.data.windspeed_kmh));
+          usedSource = "live";
+        } else {
+          const fb = deriveLocalFallbackWeather(targetZone);
+          setBaseTemp(fb.temp);
+          setWindSpeed(fb.wind);
+          usedFallback = true;
+          usedSource = "estimated";
         }
+      } else {
+        const fb = deriveLocalFallbackWeather(targetZone);
+        setBaseTemp(fb.temp);
+        setWindSpeed(fb.wind);
+        usedFallback = true;
+        usedSource = "estimated";
       }
     } catch (e) {
-      console.error("Failed to fetch live weather via backend", e);
+      console.error("Failed to fetch live weather via backend, using local estimate", e);
+      const fb = deriveLocalFallbackWeather(targetZone);
+      setBaseTemp(fb.temp);
+      setWindSpeed(fb.wind);
+      usedFallback = true;
+      usedSource = "estimated";
     }
+    setWeatherSource(usedSource);
     setIsFetchingWeather(false);
   };
 
@@ -2057,8 +2122,18 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
         {/* LEFT: Controls */}
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <div style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 500 }}>Weather Conditions</div>
-            <button 
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 500 }}>Weather Conditions</div>
+              <span style={{
+                fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "2px 6px", borderRadius: 4,
+                background: weatherSource === "live" ? "rgba(16, 185, 129, 0.12)" : "rgba(245, 158, 11, 0.12)",
+                color: weatherSource === "live" ? ACCENT.green : ACCENT.amber,
+                border: `1px solid ${weatherSource === "live" ? ACCENT.greenBorder : "rgba(245, 158, 11, 0.3)"}`
+              }}>
+                {isFetchingWeather ? "⏳ FETCHING" : weatherSource === "live" ? "● LIVE" : "◐ ESTIMATED"}
+              </span>
+            </div>
+            <button
               onClick={fetchLiveWeather}
               disabled={isFetchingWeather}
               style={{
@@ -3268,14 +3343,33 @@ function DashboardView({ onNewBatch }) {
   }, [batchList]);
 
   // ── Live weather strip: aggregates the heatmap into a single hero widget ──
+  // Falls back to a client-side Dhaka diurnal estimate when the backend has
+  // no OpenWeather key (so the user always sees fresh-looking weather data).
   const liveWeather = useMemo(() => {
     if (!heatmap || heatmap.length === 0) return null;
     const liveZones = heatmap.filter(z => z.live && typeof z.liveTempC === "number");
-    if (liveZones.length === 0) return null;
-    const avg = liveZones.reduce((acc, z) => acc + z.liveTempC, 0) / liveZones.length;
-    const hot = liveZones.reduce((best, z) => z.liveTempC > (best?.liveTempC ?? -Infinity) ? z : best, null);
-    const cool = liveZones.reduce((best, z) => z.liveTempC < (best?.liveTempC ?? Infinity) ? z : best, null);
-    return { avg: Math.round(avg * 10) / 10, hot, cool, count: liveZones.length, total: heatmap.length };
+    if (liveZones.length > 0) {
+      const avg = liveZones.reduce((acc, z) => acc + z.liveTempC, 0) / liveZones.length;
+      const hot = liveZones.reduce((best, z) => z.liveTempC > (best?.liveTempC ?? -Infinity) ? z : best, null);
+      const cool = liveZones.reduce((best, z) => z.liveTempC < (best?.liveTempC ?? Infinity) ? z : best, null);
+      return { avg: Math.round(avg * 10) / 10, hot, cool, count: liveZones.length, total: heatmap.length, source: "live" };
+    }
+    // Fallback: compute estimated temps client-side for each zone
+    const now = new Date();
+    const h = now.getHours() + now.getMinutes() / 60;
+    const peak = 13, low = 5;
+    const closer = Math.min(Math.abs(h - peak), Math.abs(h - low));
+    const baseDhaka = 26 + (8.5 * (1 - Math.cos((closer / 8) * Math.PI)) / 2);
+    const zoneAdj = { "Old Dhaka": 3.8, "Mirpur": 2.9, "Savar": 2.1, "Gulshan": 1.2 };
+    const estimated = heatmap.map(z => ({
+      ...z,
+      liveTempC: Math.round((baseDhaka + (zoneAdj[z.zone] || 0)) * 10) / 10,
+      live: false,
+    }));
+    const avg = estimated.reduce((acc, z) => acc + z.liveTempC, 0) / estimated.length;
+    const hot = estimated.reduce((best, z) => z.liveTempC > (best?.liveTempC ?? -Infinity) ? z : best, null);
+    const cool = estimated.reduce((best, z) => z.liveTempC < (best?.liveTempC ?? Infinity) ? z : best, null);
+    return { avg: Math.round(avg * 10) / 10, hot, cool, count: 0, total: heatmap.length, source: "estimated" };
   }, [heatmap]);
 
   const statCards = s ? [
@@ -3323,18 +3417,33 @@ function DashboardView({ onNewBatch }) {
         }
       />
 
-      {/* ── LIVE WEATHER STRIP (only shows when /api/dashboard has live temps) ── */}
+      {/* ── LIVE WEATHER STRIP (shows live or estimated, with a badge so the
+           user can tell which one is active) ── */}
       {liveWeather && (
         <Card hover={false} style={{ marginBottom: 16, padding: "14px 20px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <span style={{ fontSize: 24 }}>🌤️</span>
               <div>
-                <div style={{ fontSize: 10, color: "var(--text-dim)", letterSpacing: "0.08em", fontWeight: 600 }}>LIVE WEATHER · DHAKA REGION</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ fontSize: 10, color: "var(--text-dim)", letterSpacing: "0.08em", fontWeight: 600 }}>
+                    {liveWeather.source === "live" ? "LIVE WEATHER · DHAKA REGION" : "ESTIMATED WEATHER · DHAKA REGION"}
+                  </div>
+                  <span style={{
+                    fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "1px 5px", borderRadius: 4,
+                    background: liveWeather.source === "live" ? "rgba(16,185,129,0.12)" : "rgba(245,158,11,0.12)",
+                    color: liveWeather.source === "live" ? "#10b981" : "#f59e0b",
+                    border: `1px solid ${liveWeather.source === "live" ? "rgba(16,185,129,0.3)" : "rgba(245,158,11,0.3)"}`
+                  }}>
+                    {liveWeather.source === "live" ? "● LIVE" : "◐ ESTIMATED"}
+                  </span>
+                </div>
                 <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.1 }}>
                   {liveWeather.avg}°C
                   <span style={{ fontSize: 11, color: "var(--text-dim)", marginLeft: 8, fontWeight: 500 }}>
-                    avg across {liveWeather.count}/{liveWeather.total} zones · OpenWeather
+                    {liveWeather.source === "live"
+                      ? `avg across ${liveWeather.count}/${liveWeather.total} zones · OpenWeather`
+                      : `diurnal model · refreshes on tab open`}
                   </span>
                 </div>
               </div>
