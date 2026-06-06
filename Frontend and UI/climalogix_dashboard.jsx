@@ -147,19 +147,6 @@ const UHI_ZONES = {
 /* ═══════════════════════════════════════════════════════════════
    CALCULATION ENGINES
    ═══════════════════════════════════════════════════════════════ */
-function calcTrustScore({ pH, EC, temp, ratio, days }) {
-  let score = 100;
-  const pHOpt = 4.0, ECOpt = 3.5, tempOpt = 28;
-  score -= Math.abs(pH - pHOpt) * 8;
-  score -= Math.abs(EC - ECOpt) * 6;
-  score -= Math.abs(temp - tempOpt) * 1.2;
-  const ratioMap = { "1:1:10": -5, "1:1:20": 0, "1:1:30": -3, "1:1:40": -8 };
-  score += ratioMap[ratio] ?? 0;
-  if (days < 7) score -= (7 - days) * 4;
-  else if (days > 14) score -= (days - 14) * 2;
-  return Math.max(0, Math.min(100, Math.round(score)));
-}
-
 function getSolarFactor(hour) {
   if (hour >= 11 && hour < 15) return 1.0;
   if ((hour >= 8 && hour < 11) || (hour >= 15 && hour < 18)) return 0.6;
@@ -183,11 +170,6 @@ function calcThermalRisk(adjustedTemp) {
   if (adjustedTemp > 35) return { value: 1.0, label: "Critical", color: ACCENT.red };
   if (adjustedTemp > 32) return { value: 0.5, label: "Moderate", color: ACCENT.amber };
   return { value: 0.1, label: "Low", color: ACCENT.green };
-}
-
-function calcDVS(trustScore, adjustedTemp) {
-  const trf = adjustedTemp > 38 ? 1.0 : adjustedTemp > 35 ? 0.5 : 0.1;
-  return Math.max(0, Math.min(100, Math.round(trustScore * (1 - trf * 0.42))));
 }
 
 function calcTST(trustScore, zone, packaging, hour) {
@@ -480,53 +462,6 @@ const STANDARDS_CONFIG = {
   }
 };
 
-function calcTrustScoreV2({ category, pH, EC, temp, ratio, days }) {
-  const std = STANDARDS_CONFIG[category || 'organic'] || STANDARDS_CONFIG.organic;
-  let score = 100;
-  
-  if (std.phRange) {
-    const [pMin, pMax] = std.phRange;
-    const phVal = pH !== undefined ? pH : 7.0;
-    if (phVal < pMin) {
-      const penalty = Math.min(25, (pMin - phVal) * std.weights.ph);
-      score -= penalty;
-    } else if (phVal > pMax) {
-      const penalty = Math.min(25, (phVal - pMax) * (std.weights.ph * 0.7));
-      score -= penalty;
-    }
-  }
-  if (std.ecRange) {
-    const [eMin, eMax] = std.ecRange;
-    if (EC < eMin) {
-      const penalty = Math.min(20, (eMin - EC) * std.weights.ec);
-      score -= penalty;
-    } else if (EC > eMax) {
-      const penalty = Math.min(20, (EC - eMax) * (std.weights.ec * 0.6));
-      score -= penalty;
-    }
-  }
-  const [tMin, tMax] = std.tempRange;
-  if (temp < tMin) {
-    const penalty = Math.min(15, (tMin - temp) * std.weights.temp);
-    score -= penalty;
-  } else if (temp > tMax) {
-    const penalty = Math.min(20, (temp - tMax) * (std.weights.temp * 1.1));
-    score -= penalty;
-  }
-  if (std.requiredRatio && ratio !== std.requiredRatio) {
-    const penalty = std.weights.ratio;
-    score -= penalty;
-  }
-  if (days < std.minFermentationDays) {
-    const penalty = (std.minFermentationDays - days) * std.weights.days;
-    score -= penalty;
-  } else if (days > std.maxFermentationDays) {
-    const penalty = (days - std.maxFermentationDays) * (std.weights.days * 0.5);
-    score -= penalty;
-  }
-  return Math.max(0, Math.min(100, Math.round(score)));
-}
-
 function BatchVerificationForm({ onResult, onResultDetail, prefilledBatchId, prefilledDispatchZone, setPrefilledBatchId, setPrefilledDispatchZone }) {
   const [category, setCategory] = useState("organic");
   const [qaSource, setQaSource] = useState("iot");
@@ -643,17 +578,17 @@ function BatchVerificationForm({ onResult, onResultDetail, prefilledBatchId, pre
         setBatchNum("");
       } catch (error) {
         console.error("Failed to fetch trust score:", error);
-        // Fallback to local calculation on error
-        const fallbackScore = calcTrustScoreV2({ category, pH: conf.ph ? pH : 7.0, EC, temp, ratio, days });
+        // Display offline fallback error
+        const fallbackScore = 0;
         setTs(fallbackScore);
         const fallbackResult = {
           score: fallbackScore,
-          grade: fallbackScore >= 90 ? 'A+' : fallbackScore >= 80 ? 'A' : fallbackScore >= 70 ? 'B' : fallbackScore >= 60 ? 'C' : 'F',
-          isViable: fallbackScore >= 60,
+          grade: 'F',
+          isViable: false,
           category: category,
           breakdown: null,
-          reference: 'local-fallback',
-          notes: ['Using offline fallback — backend unreachable'],
+          reference: 'API-Offline',
+          notes: ['Backend unreachable — cannot compute score'],
         };
         setTsResult(fallbackResult);
         onResult(fallbackScore);
@@ -2073,6 +2008,7 @@ function DemandChart() {
    ═══════════════════════════════════════════════════════════════ */
 function ESGCard({ trustScore, dvs }) {
   const [esgData, setEsgData] = useState(null);
+  const [esgReport, setEsgReport] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -2080,8 +2016,14 @@ function ESGCard({ trustScore, dvs }) {
     const fetchEsgData = async () => {
       try {
         setIsLoading(true);
-        const data = await window.APIClient.getESGMetrics(trustScore, dvs);
+        const [data, reportRes] = await Promise.all([
+           window.APIClient.getESGMetrics(trustScore, dvs),
+           window.APIClient.getESGReport()
+        ]);
         setEsgData(data);
+        if (reportRes && reportRes.success && reportRes.data) {
+           setEsgReport(reportRes.data.ledger || reportRes.data || []);
+        }
         setError(null);
       } catch (err) {
         setError('Failed to load ESG metrics. Please try again later.');
@@ -2128,7 +2070,7 @@ function ESGCard({ trustScore, dvs }) {
     waste_reduced_kg: wasteReduced,
   } = esgData;
 
-  const mockLedger = [
+  const ledgerData = esgReport.length > 0 ? esgReport : [
     { id: "BCH-8492", date: "2026-05-28", zone: "Mirpur", env: "4.2 kg CO₂", soc: "Direct SME B2B Premium Paid", gov: "Manually Signed (BARI)", hash: "0x8f7a...3e" },
     { id: "BCH-8411", date: "2026-05-27", zone: "Jatrabari", env: "3.8 kg CO₂", soc: "Direct SME B2B Premium Paid", gov: "Manually Signed (BARI)", hash: "0x4b2c...7d" },
     { id: "BCH-8380", date: "2026-05-26", zone: "Uttara", env: "4.9 kg CO₂", soc: "Direct SME B2B Premium Paid", gov: "Manually Signed (BARI)", hash: "0x9a1e...9b" },
@@ -2318,7 +2260,7 @@ function ESGCard({ trustScore, dvs }) {
               </tr>
             </thead>
             <tbody>
-              {mockLedger.map(row => (
+              {ledgerData.map(row => (
                 <tr key={row.id} style={{ borderBottom: "1px dashed var(--border-primary)" }}>
                   <td style={{ padding: "10px 4px", fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: ACCENT.green }}>{row.id}</td>
                   <td style={{ padding: "10px 4px", color: "var(--text-secondary)" }}>{row.date}</td>
