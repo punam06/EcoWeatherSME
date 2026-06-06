@@ -7474,6 +7474,44 @@ function CLimaLogixApp() {
               );
             })}
           </div>
+
+          {/* Drawer Footer / Sign Out */}
+          <div style={{
+            padding: "16px",
+            borderTop: "1px solid var(--border-primary)",
+            background: "rgba(0,0,0,0.1)"
+          }}>
+            <button
+              onClick={async () => {
+                if (window.supabaseClient) {
+                  await window.supabaseClient.auth.signOut();
+                } else {
+                  setCurrentUser(null);
+                }
+                setIsDrawerOpen(false);
+              }}
+              style={{
+                width: "100%",
+                padding: "10px 16px",
+                border: "none",
+                background: "rgba(239, 68, 68, 0.1)",
+                color: "#EF4444",
+                borderRadius: "8px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                fontSize: "13px",
+                fontWeight: 600,
+                transition: "all 0.2s"
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(239, 68, 68, 0.2)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)"; }}
+            >
+              <span>🚪</span>
+              <span>Sign Out</span>
+            </button>
+          </div>
         </div>
       </div>
 
