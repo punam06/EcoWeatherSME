@@ -82,23 +82,57 @@ const APIClient = {
     body: JSON.stringify(data),
   }),
 
+  // QA Ingestion
+  submitQAReport: (data) => APIClient.request('/qa/submit', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  getQAReports: (batchId) => APIClient.request(`/qa/${encodeURIComponent(batchId)}`),
+  getQACategories: () => APIClient.request('/qa/categories'),
+
   // Trust score
   calculateTrustScore: (params) => APIClient.request('/calculate-trust-score', {
     method: 'POST',
     body: JSON.stringify(params),
   }),
 
-  // Direct trust score (new route, returns {score, grade, breakdown, ...})
-  getTrustScore: (params) => APIClient.request('/batch/trust-score', {
-    method: 'POST',
-    body: JSON.stringify(params),
-  }),
+  // Direct trust score (new route, returns {success, data: {score, grade, breakdown, ...}})
+  getTrustScore: (params) =>
+    APIClient.request('/batch/trust-score', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    }),
 
   // Direct DVS (new route)
-  getDVS: (params) => APIClient.request('/climate/dvs', {
-    method: 'POST',
-    body: JSON.stringify(params),
-  }),
+  getDVS: (params) =>
+    APIClient.request('/climate/dvs', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    }),
+
+  // ── Legacy clever-responder helpers (used by current index.html) ──
+  // Legacy trust-score uses action='trust-score' and accepts {pH, EC, temp, ratio, days}
+  calculateTrustScoreLegacy: (params) => {
+    const { ec, ...rest } = params;
+    return APIClient.request('/clever-responder', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'trust-score',
+        EC: ec,
+        ...rest,
+      }),
+    });
+  },
+
+  // Legacy microclimate metrics uses action='microclimate-metrics'
+  getMicroclimateMetricsLegacy: (params) =>
+    APIClient.request('/clever-responder', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'microclimate-metrics',
+        ...params,
+      }),
+    }),
 
   // Claim verification (new route)
   verifyClaim: (batchId) => APIClient.request(`/verify/${encodeURIComponent(batchId)}`),

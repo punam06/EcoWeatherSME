@@ -13,7 +13,15 @@ function LanguageSelector() {
       
       const unsubscribe = window.EcoLang.onLanguageChange((newLang) => {
         setCurrentLang(newLang);
-        showToast(`Language updated to ${window.EcoLang.getSupportedLanguages()[newLang] || newLang}`);
+        // Resolve a display label safely. Some backend dictionaries accidentally
+        // store entries like "languageen" (a literal key name) — guard against
+        // those so the toast never shows the untranslated "languageen" string.
+        const dict = window.EcoLang.getSupportedLanguages() || {};
+        let label = dict[newLang];
+        if (typeof label !== 'string' || label.toLowerCase().startsWith('language')) {
+          label = (newLang || 'en').toUpperCase();
+        }
+        showToast(`Language updated to ${label}`);
       });
       return unsubscribe;
     }

@@ -117,7 +117,7 @@ function runTests() {
       em1_ratio: '1:1:20',
       fermentation_days: 9
     });
-    console.log(`Ideal Readings Trust Score: ${idealScore} (Expected: 100)`);
+    console.log(`Ideal Readings Trust Score: ${idealScore.score} (Expected: 100)`);
 
     // Faulty readings: pH=3.0 (loss of 15), fermentation_days=5 (loss of 20)
     // Expected score: 100 - 15 - 20 = 65
@@ -128,9 +128,9 @@ function runTests() {
       em1_ratio: '1:1:20',
       fermentation_days: 5
     });
-    console.log(`Faulty Readings Trust Score: ${faultyScore} (Expected: 65)`);
+    console.log(`Faulty Readings Trust Score: ${faultyScore.score} (Expected: 65)`);
 
-    if (idealScore === 100 && faultyScore === 65) {
+    if (idealScore.score === 100 && faultyScore.score === 65) {
       console.log('✅ TEST 4 PASSED: Trust Score penalties matching BARI specification!\n');
     } else {
       console.error('❌ TEST 4 FAILED: Trust Score mismatch!\n');

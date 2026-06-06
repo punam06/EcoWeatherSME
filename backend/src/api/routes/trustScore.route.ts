@@ -10,8 +10,8 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
-import { TrustScoreRequestSchema } from '../schemas';
-import { calculateTrustScoreLegacy } from '../../lib/services/trustScore.service';
+import { TrustScoreV2RequestSchema } from '../schemas';
+import { calculateTrustScore } from '../../lib/services/trustScore.service';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
 
 const router = Router();
@@ -19,13 +19,14 @@ const router = Router();
 /**
  * POST /api/batch/trust-score
  *
- * Body: { pH, ec, temperatureCelsius, em1Ratio, fermentationDays }
+ * Body: { category, pH, ec, temperatureCelsius, em1Ratio, fermentationDays }
  * Response: { success: true, data: TrustScoreResult }
  */
 router.post('/', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     // ── 1. Validate & Normalize request body ───────────────────────────
     const body = { ...req.body };
+    if (body.category === undefined) body.category = 'organic';
     if (body.pH === undefined && body.ph !== undefined) body.pH = parseFloat(body.ph);
     if (body.ec === undefined && body.EC !== undefined) body.ec = parseFloat(body.EC);
     if (body.temperatureCelsius === undefined && body.temperature !== undefined) body.temperatureCelsius = parseFloat(body.temperature);
@@ -39,7 +40,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction): Promis
     }
     if (body.fermentationDays === undefined && body.fermentation_days !== undefined) body.fermentationDays = parseInt(body.fermentation_days, 10);
 
-    const parsed = TrustScoreRequestSchema.safeParse(body);
+    const parsed = TrustScoreV2RequestSchema.safeParse(body);
 
     if (!parsed.success) {
       res.status(400).json({
@@ -50,17 +51,8 @@ router.post('/', async (req: Request, res: Response, next: NextFunction): Promis
       return;
     }
 
-    const { pH, ec, temperatureCelsius, em1Ratio, fermentationDays } = parsed.data;
-
-    // ── 2. Calculate trust score (category-aware v2 engine,
-    //         routed through the legacy shim for backward compat) ─
-    const result = calculateTrustScoreLegacy({
-      pH,
-      ec,
-      temperatureCelsius,
-      em1Ratio,
-      fermentationDays,
-    });
+    // ── 2. Calculate trust score (category-aware v2 engine) ─
+    const result = calculateTrustScore(parsed.data);
 
     // ── 3. Async log to Supabase (fire and forget) ─────────
     if (isSupabaseConfigured()) {
@@ -68,11 +60,11 @@ router.post('/', async (req: Request, res: Response, next: NextFunction): Promis
       supabase
         .from('trust_score_logs')
         .insert({
-          ph: pH,
-          ec,
-          temperature: temperatureCelsius,
-          em1_ratio: em1Ratio,
-          fermentation_days: fermentationDays,
+          ph: parsed.data.pH,
+          ec: parsed.data.ec,
+          temperature: parsed.data.temperatureCelsius,
+          em1_ratio: parsed.data.em1Ratio,
+          fermentation_days: parsed.data.fermentationDays,
           score: result.score,
           grade: result.grade,
           is_viable: result.isViable,

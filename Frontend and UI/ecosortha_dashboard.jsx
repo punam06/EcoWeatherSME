@@ -379,9 +379,162 @@ function ThemeToggle({ theme, onToggle }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   TAB 1: BATCH VERIFICATION (IoT Intake)
+   TAB 1: BATCH VERIFICATION (Operator Intake)
    ═══════════════════════════════════════════════════════════════ */
-function IoTForm({ onResult, onResultDetail, prefilledBatchId, prefilledDispatchZone, setPrefilledBatchId, setPrefilledDispatchZone }) {
+async function sha256(message) {
+  const msgBuffer = new TextEncoder().encode(message);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex;
+}
+
+function canonicalize(value) {
+  if (value === null || typeof value === 'undefined') return 'null';
+  if (typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return '[' + value.map(canonicalize).join(',') + ']';
+  const keys = Object.keys(value).sort();
+  return '{' + keys.map((k) => JSON.stringify(k) + ':' + canonicalize(value[k])).join(',') + '}';
+}
+
+const STANDARDS_CONFIG = {
+  organic: {
+    displayName: 'Organic Biofertilizer (BARI EM-1)',
+    phRange: [3.5, 7.5],
+    ecRange: [2.5, 5.0],
+    tempRange: [25, 35],
+    requiredRatio: '1:1:20',
+    minFermentationDays: 7,
+    maxFermentationDays: 14,
+    requiresBSTI: false,
+    weights: { ph: 30, ec: 6, temp: 1.2, ratio: 5, days: 10 },
+    ph: { min: 3.0, max: 7.0, step: 0.1, label: "pH Level", unit: "", optimal: "3.5–7.5", default: 4.1 },
+    ec: { min: 1.0, max: 6.0, step: 0.1, label: "Conductivity (EC)", unit: " mS/cm", optimal: "2.5–5.0 mS/cm", default: 3.4 },
+    temp: { min: 20, max: 45, step: 0.5, label: "Storage Temperature", unit: "°C", optimal: "25–32°C", default: 28 },
+    days: { min: 3, max: 21, step: 1, label: "Processing Days", unit: " days", optimal: "7–14 days", default: 9 },
+    hasRatio: true
+  },
+  retail: {
+    displayName: 'Retail FMCG / Packaged Goods',
+    phRange: null,
+    ecRange: [0, 10],
+    tempRange: [10, 32],
+    requiredRatio: null,
+    minFermentationDays: 0,
+    maxFermentationDays: 365,
+    requiresBSTI: false,
+    weights: { ph: 0, ec: 4, temp: 2.0, ratio: 0, days: 0.5 },
+    ph: null,
+    ec: { min: 0, max: 10, step: 0.5, label: "Packaging Moisture-Integrity Index", unit: "", optimal: "0–10", default: 5.0 },
+    temp: { min: 5, max: 40, step: 1, label: "Cold-chain Storage Temperature", unit: "°C", optimal: "10–32°C", default: 20 },
+    days: { min: 0, max: 365, step: 5, label: "Maturation / Processing Days", unit: " days", optimal: "0–365 days", default: 30 },
+    hasRatio: false
+  },
+  pharma: {
+    displayName: 'Pharmaceuticals (DGDA regulated)',
+    phRange: [4.5, 7.5],
+    ecRange: [0, 5],
+    tempRange: [2, 8],
+    requiredRatio: null,
+    minFermentationDays: 0,
+    maxFermentationDays: 180,
+    requiresBSTI: true,
+    weights: { ph: 6, ec: 6, temp: 4.0, ratio: 0, days: 0.2 },
+    ph: { min: 3.0, max: 10.0, step: 0.1, label: "pH Level (Oral Liquids/Syrups)", unit: "", optimal: "4.5–7.5", default: 6.0 },
+    ec: { min: 0, max: 10, step: 0.1, label: "Dissolved Solids / Impurity Index", unit: "", optimal: "0–5", default: 2.0 },
+    temp: { min: -5, max: 25, step: 0.5, label: "Cold-chain Storage Temperature", unit: "°C", optimal: "2–8°C", default: 4.0 },
+    days: { min: 0, max: 365, step: 5, label: "Maturation / Processing Days", unit: " days", optimal: "0–180 days", default: 90 },
+    hasRatio: false
+  },
+  dairy: {
+    displayName: 'Dairy / Pasteurized Milk',
+    phRange: [6.5, 6.8],
+    ecRange: [0, 10],
+    tempRange: [2, 6],
+    requiredRatio: null,
+    minFermentationDays: 0,
+    maxFermentationDays: 7,
+    requiresBSTI: true,
+    weights: { ph: 10, ec: 8, temp: 3.5, ratio: 0, days: 1.5 },
+    ph: { min: 5.0, max: 9.0, step: 0.1, label: "Fresh Milk pH Level", unit: "", optimal: "6.5–6.8", default: 6.6 },
+    ec: { min: 0, max: 15, step: 0.5, label: "Bacterial Load CFU Index", unit: "", optimal: "0–10", default: 5.0 },
+    temp: { min: -2, max: 15, step: 0.5, label: "Cold-chain Temperature", unit: "°C", optimal: "2–6°C", default: 4.0 },
+    days: { min: 0, max: 30, step: 1, label: "Maturation / Processing Days", unit: " days", optimal: "0–7 days", default: 3 },
+    hasRatio: false
+  },
+  manufacturing: {
+    displayName: 'Manufacturing / Industrial Chemicals',
+    phRange: null,
+    ecRange: [0, 100],
+    tempRange: [15, 30],
+    requiredRatio: null,
+    minFermentationDays: 0,
+    maxFermentationDays: 365,
+    requiresBSTI: false,
+    weights: { ph: 0, ec: 0.2, temp: 1.5, ratio: 0, days: 0.1 },
+    ph: null,
+    ec: { min: 0, max: 150, step: 1, label: "Contamination Index (ppm)", unit: "", optimal: "0–100", default: 50.0 },
+    temp: { min: 0, max: 50, step: 1, label: "Storage Temperature", unit: "°C", optimal: "15–30°C", default: 22.0 },
+    days: { min: 0, max: 365, step: 5, label: "Processing Duration", unit: " days", optimal: "0–365 days", default: 60 },
+    hasRatio: false
+  }
+};
+
+function calcTrustScoreV2({ category, pH, EC, temp, ratio, days }) {
+  const std = STANDARDS_CONFIG[category || 'organic'] || STANDARDS_CONFIG.organic;
+  let score = 100;
+  
+  if (std.phRange) {
+    const [pMin, pMax] = std.phRange;
+    const phVal = pH !== undefined ? pH : 7.0;
+    if (phVal < pMin) {
+      const penalty = Math.min(25, (pMin - phVal) * std.weights.ph);
+      score -= penalty;
+    } else if (phVal > pMax) {
+      const penalty = Math.min(25, (phVal - pMax) * (std.weights.ph * 0.7));
+      score -= penalty;
+    }
+  }
+  if (std.ecRange) {
+    const [eMin, eMax] = std.ecRange;
+    if (EC < eMin) {
+      const penalty = Math.min(20, (eMin - EC) * std.weights.ec);
+      score -= penalty;
+    } else if (EC > eMax) {
+      const penalty = Math.min(20, (EC - eMax) * (std.weights.ec * 0.6));
+      score -= penalty;
+    }
+  }
+  const [tMin, tMax] = std.tempRange;
+  if (temp < tMin) {
+    const penalty = Math.min(15, (tMin - temp) * std.weights.temp);
+    score -= penalty;
+  } else if (temp > tMax) {
+    const penalty = Math.min(20, (temp - tMax) * (std.weights.temp * 1.1));
+    score -= penalty;
+  }
+  if (std.requiredRatio && ratio !== std.requiredRatio) {
+    const penalty = std.weights.ratio;
+    score -= penalty;
+  }
+  if (days < std.minFermentationDays) {
+    const penalty = (std.minFermentationDays - days) * std.weights.days;
+    score -= penalty;
+  } else if (days > std.maxFermentationDays) {
+    const penalty = (days - std.maxFermentationDays) * (std.weights.days * 0.5);
+    score -= penalty;
+  }
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function BatchVerificationForm({ onResult, onResultDetail, prefilledBatchId, prefilledDispatchZone, setPrefilledBatchId, setPrefilledDispatchZone }) {
+  const [category, setCategory] = useState("organic");
+  const [qaSource, setQaSource] = useState("iot");
+  const [bstiCredential, setBstiCredential] = useState("");
+  const [inspectorNotes, setInspectorNotes] = useState("");
+  const [signedBy, setSignedBy] = useState("");
+  const [formError, setFormError] = useState("");
+
   const [pH, setPH] = useState(4.1);
   const [EC, setEC] = useState(3.4);
   const [temp, setTemp] = useState(28);
@@ -397,15 +550,29 @@ function IoTForm({ onResult, onResultDetail, prefilledBatchId, prefilledDispatch
   const [selectedBatchId, setSelectedBatchId] = useState("");
   const [dispatchZone, setDispatchZone] = useState("");
   const [registeredBatches, setRegisteredBatches] = useState([]);
-  // Full deterministic trust score envelope (score, grade, isViable, category, breakdown, reference, notes)
   const [tsResult, setTsResult] = useState(null);
+
+  const conf = STANDARDS_CONFIG[category] || STANDARDS_CONFIG.organic;
+
+  const handleCategoryChange = (newCat) => {
+    setCategory(newCat);
+    const targetConf = STANDARDS_CONFIG[newCat];
+    if (targetConf) {
+      if (targetConf.ph) setPH(targetConf.ph.default);
+      else setPH(7.0); // Safe fallback to pass Zod validation
+      setEC(targetConf.ec.default);
+      setTemp(targetConf.temp.default);
+      setDays(targetConf.days.default);
+      if (targetConf.hasRatio) setRatio("1:1:20");
+      else setRatio("none");
+    }
+  };
 
   // Fetch registered batches to populate the Batch Selection Dropdown
   useEffect(() => {
     const loadBatches = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL_HTML}/api/batches`);
-        const result = await response.json();
+        const result = await window.APIClient.getBatches();
         if (result.success && Array.isArray(result.data)) {
           setRegisteredBatches(result.data);
         } else {
@@ -448,31 +615,20 @@ function IoTForm({ onResult, onResultDetail, prefilledBatchId, prefilledDispatch
     const fetchTrustScore = async () => {
       setIsLoading(true);
       try {
-        // Map frontend form values → canonical backend field names.
-        // ratio is a string like "1:1:20"; backend expects em1Ratio as decimal.
-        let em1Ratio = 0.001; // default 1:1000
-        if (ratio === "1:1:10") em1Ratio = 0.002;       // 1:500
-        else if (ratio === "1:1:20") em1Ratio = 0.002;  // 1:500
-        else if (ratio === "1:1:30") em1Ratio = 0.001;  // 1:1000
-        else if (ratio === "1:1:40") em1Ratio = 0.0005; // 1:2000
+        let em1Ratio = 0.001;
+        if (ratio === "1:1:10") em1Ratio = 0.002;
+        else if (ratio === "1:1:20") em1Ratio = 0.002;
+        else if (ratio === "1:1:30") em1Ratio = 0.001;
+        else if (ratio === "1:1:40") em1Ratio = 0.0005;
 
-        const response = await fetch(
-          `${API_BASE_URL_HTML}/api/batch/trust-score`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              pH,
-              ec: EC,
-              temperatureCelsius: temp,
-              em1Ratio,
-              fermentationDays: days,
-            }),
-          }
-        );
-        const json = await response.json();
+        const json = await window.APIClient.getTrustScore({
+          category,
+          pH: conf.ph ? pH : 7.0,
+          ec: EC,
+          temperatureCelsius: temp,
+          em1Ratio,
+          fermentationDays: days,
+        });
         if (json.success && json.data) {
           const result = json.data;
           setTsResult(result);
@@ -488,13 +644,13 @@ function IoTForm({ onResult, onResultDetail, prefilledBatchId, prefilledDispatch
       } catch (error) {
         console.error("Failed to fetch trust score:", error);
         // Fallback to local calculation on error
-        const fallbackScore = calcTrustScore({ pH, EC, temp, ratio, days });
+        const fallbackScore = calcTrustScoreV2({ category, pH: conf.ph ? pH : 7.0, EC, temp, ratio, days });
         setTs(fallbackScore);
         const fallbackResult = {
           score: fallbackScore,
-          grade: fallbackScore >= 85 ? 'A' : fallbackScore >= 70 ? 'B' : fallbackScore >= 55 ? 'C' : 'F',
+          grade: fallbackScore >= 90 ? 'A+' : fallbackScore >= 80 ? 'A' : fallbackScore >= 70 ? 'B' : fallbackScore >= 60 ? 'C' : 'F',
           isViable: fallbackScore >= 60,
-          category: 'unknown',
+          category: category,
           breakdown: null,
           reference: 'local-fallback',
           notes: ['Using offline fallback — backend unreachable'],
@@ -511,7 +667,7 @@ function IoTForm({ onResult, onResultDetail, prefilledBatchId, prefilledDispatch
     };
     
     fetchTrustScore();
-  }, [pH, EC, temp, ratio, days, onResult]);
+  }, [category, pH, EC, temp, ratio, days, onResult]);
 
   return (
     <div>
@@ -553,51 +709,204 @@ function IoTForm({ onResult, onResultDetail, prefilledBatchId, prefilledDispatch
           )}
         </div>
 
-        <div>
-          <SliderRow label="pH Level" min={3.0} max={7.0} step={0.1} value={pH} onChange={setPH} color={ACCENT.green} />
-          <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: 3.8–4.2</div>
-        </div>
-        <div>
-          <SliderRow label="Conductivity (EC)" min={1.0} max={6.0} step={0.1} value={EC} onChange={setEC} unit=" mS/cm" color={ACCENT.green} />
-          <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: 3.1–3.9 mS/cm</div>
-        </div>
-        <div>
-          <SliderRow label="Storage Temperature" min={20} max={45} step={0.5} value={temp} onChange={setTemp} unit="°C" color={temp > 35 ? ACCENT.red : ACCENT.amber} />
-          <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: 25–32°C</div>
-        </div>
-        <div>
-          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>Treatment Ratio</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-            {["1:1:10", "1:1:20", "1:1:30", "1:1:40"].map(v => (
-              <button key={v} onClick={() => setRatio(v)}
-                style={{
-                  padding: "7px 4px", borderRadius: 8,
-                  border: `1px solid ${ratio === v ? ACCENT.green : "var(--border-primary)"}`,
-                  background: ratio === v ? ACCENT.greenBg : "var(--bg-input)",
-                  color: ratio === v ? ACCENT.green : "var(--text-muted)",
-                  fontSize: 11, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace",
-                  fontWeight: ratio === v ? 600 : 400,
-                  transition: "all 0.25s ease",
-                }}>
-                {v}
-              </button>
-            ))}
+        {/* CATEGORY & QA SOURCE SELECTION */}
+        <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div>
+            <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>Product Category</label>
+            <select 
+              value={category} 
+              onChange={e => handleCategoryChange(e.target.value)}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+            >
+              <option value="organic">Organic Biofertilizer (BARI EM-1)</option>
+              <option value="retail">Retail FMCG / Packaged Goods</option>
+              <option value="pharma">Pharmaceuticals (DGDA)</option>
+              <option value="dairy">Dairy / Pasteurized Milk</option>
+              <option value="manufacturing">Industrial Manufacturing</option>
+            </select>
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>QA Source</label>
+            <select 
+              value={qaSource} 
+              onChange={e => {
+                setQaSource(e.target.value);
+                if (e.target.value !== 'inspector') {
+                  setBstiCredential('');
+                  setInspectorNotes('');
+                }
+              }}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+            >
+              <option value="iot">📡 IoT Sensors</option>
+              <option value="inspector">👮 Certified Inspector</option>
+              <option value="manufacturer">🏭 Manufacturer Declaration</option>
+            </select>
           </div>
         </div>
-        <div style={{ gridColumn: "1 / -1" }}>
-          <SliderRow label="Processing Days" min={3} max={21} step={1} value={days} onChange={setDays} unit=" days" color={ACCENT.green} />
-          <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: 7–14 days</div>
+
+        {conf.ph ? (
+          <div>
+            <SliderRow label={conf.ph.label} min={conf.ph.min} max={conf.ph.max} step={conf.ph.step} value={pH} onChange={setPH} color={ACCENT.green} />
+            <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: {conf.ph.optimal}</div>
+          </div>
+        ) : null}
+        <div>
+          <SliderRow label={conf.ec.label} min={conf.ec.min} max={conf.ec.max} step={conf.ec.step} value={EC} onChange={setEC} unit={conf.ec.unit} color={ACCENT.green} />
+          <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: {conf.ec.optimal}</div>
+        </div>
+        <div>
+          <SliderRow label={conf.temp.label} min={conf.temp.min} max={conf.temp.max} step={conf.temp.step} value={temp} onChange={setTemp} unit={conf.temp.unit} color={temp > conf.tempRange[1] ? ACCENT.red : ACCENT.amber} />
+          <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: {conf.temp.optimal}</div>
+        </div>
+        
+        {conf.hasRatio ? (
+          <div>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>Treatment Ratio</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+              {["1:1:10", "1:1:20", "1:1:30", "1:1:40"].map(v => (
+                <button key={v} onClick={() => setRatio(v)}
+                  style={{
+                    padding: "7px 4px", borderRadius: 8,
+                    border: `1px solid ${ratio === v ? ACCENT.green : "var(--border-primary)"}`,
+                    background: ratio === v ? ACCENT.greenBg : "var(--bg-input)",
+                    color: ratio === v ? ACCENT.green : "var(--text-muted)",
+                    fontSize: 11, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace",
+                    fontWeight: ratio === v ? 600 : 400,
+                    transition: "all 0.25s ease",
+                  }}>
+                  {v}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div style={{ gridColumn: conf.ph ? "1 / -1" : "auto" }}>
+          <SliderRow label={conf.days.label} min={conf.days.min} max={conf.days.max} step={conf.days.step} value={days} onChange={setDays} unit={conf.days.unit} color={ACCENT.green} />
+          <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: {conf.days.optimal}</div>
+        </div>
+
+        {/* Dynamic Multi-Source Inputs */}
+        <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, borderTop: "1px solid var(--border-primary)", paddingTop: 14, marginTop: 6 }}>
+          {(qaSource === 'inspector' || conf.requiresBSTI) && (
+            <div>
+              <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>
+                BSTI Credential ID {conf.requiresBSTI && <span style={{ color: ACCENT.red }}>*</span>}
+              </label>
+              <input 
+                type="text" 
+                placeholder="e.g. BSTI-1234" 
+                value={bstiCredential}
+                onChange={e => setBstiCredential(e.target.value)}
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none", fontFamily: "'JetBrains Mono', monospace" }}
+              />
+              <div style={{ fontSize: 9, color: "var(--text-dim)", marginTop: 4 }}>Format: BSTI-XXXX (minimum 4 digits)</div>
+            </div>
+          )}
+
+          {(qaSource === 'inspector' || qaSource === 'manufacturer') && (
+            <div style={{ gridColumn: qaSource === 'inspector' && !conf.requiresBSTI ? "1 / -1" : "auto" }}>
+              <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>Signed By</label>
+              <input 
+                type="text" 
+                placeholder="e.g. Dr. Zaman, Quality Manager" 
+                value={signedBy}
+                onChange={e => setSignedBy(e.target.value)}
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+              />
+            </div>
+          )}
+
+          {qaSource === 'inspector' && (
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>
+                Inspector Notes <span style={{ color: ACCENT.red }}>*</span>
+              </label>
+              <textarea 
+                placeholder="Record physical inspection remarks, packaging compliance and seals..." 
+                value={inspectorNotes}
+                onChange={e => setInspectorNotes(e.target.value)}
+                rows={2}
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none", resize: "none" }}
+              />
+            </div>
+          )}
         </div>
       </div>
+
+      {formError && (
+        <div style={{ marginBottom: 12, padding: 10, borderRadius: 8, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: ACCENT.red, fontSize: 12 }}>
+          ❌ {formError}
+        </div>
+      )}
+
       <button 
         onClick={async () => { 
+          setFormError("");
+          if (!selectedBatchId) {
+            setFormError("Please select a registered batch ID.");
+            return;
+          }
+          if (conf.requiresBSTI || (qaSource === 'inspector' && (category === 'pharma' || category === 'dairy' || category === 'manufacturing'))) {
+            if (!bstiCredential) {
+              setFormError("BSTI Credential ID is required for inspector reports in this category.");
+              return;
+            }
+            if (!/^BSTI-\d{4,}$/.test(bstiCredential)) {
+              setFormError("BSTI Credential must match format 'BSTI-XXXX' (at least 4 digits).");
+              return;
+            }
+          }
+          if (qaSource === 'inspector' && !inspectorNotes) {
+            setFormError("Inspector notes are required for inspector reports.");
+            return;
+          }
+
           if (ts >= 60) {
             setIsCertifying(true);
             try {
+              let em1Ratio = 0.001;
+              if (ratio === "1:1:10") em1Ratio = 0.002;
+              else if (ratio === "1:1:20") em1Ratio = 0.002;
+              else if (ratio === "1:1:30") em1Ratio = 0.001;
+              else if (ratio === "1:1:40") em1Ratio = 0.0005;
+
+              const metrics = {
+                pH: conf.ph ? parseFloat(pH) : 7.0,
+                ec: parseFloat(EC),
+                temp: parseFloat(temp),
+                em1Ratio,
+                fermentationDays: parseInt(days, 10),
+              };
+
+              // Sign metrics
+              const canonical = canonicalize(metrics);
+              const signature = await sha256(canonical);
+
+              // 1. Submit QA Ingestion report
+              const qaPayload = {
+                batch_id: selectedBatchId,
+                source: qaSource,
+                category: category,
+                metrics: metrics,
+                bstiCredential: bstiCredential || undefined,
+                inspectorNotes: inspectorNotes || undefined,
+                signed_by: signedBy || undefined,
+                signature: signature
+              };
+
+              const qaRes = await window.APIClient.submitQAReport(qaPayload);
+              if (!qaRes.success) {
+                throw new Error(qaRes.error || "QA report submission failed.");
+              }
+
+              // 2. Certify Batch (QR)
               const res = await window.APIClient.certifyBatch({ 
-                batchId: selectedBatchId || `BCH-${Date.now().toString().slice(-6)}`,
+                batchId: selectedBatchId,
                 trustScore: ts
               });
+
               if (res.success) {
                 setQrCodeImg(res.data.qrCodeDataUrl);
                 setBatchNum(res.data.batchId);
@@ -614,9 +923,12 @@ function IoTForm({ onResult, onResultDetail, prefilledBatchId, prefilledDispatch
                   window.__SEED_BATCHES__ = window.__SEED_BATCHES__.map(updateLocalBatch);
                 }
                 setRegisteredBatches(prev => prev.map(updateLocalBatch));
+              } else {
+                throw new Error(res.error || "Batch certification failed.");
               }
             } catch (err) {
-              console.error("Batch certification failed:", err);
+              console.error("Verification and certification failed:", err);
+              setFormError(err.message || "An error occurred during submission.");
             } finally {
               setIsCertifying(false);
             }
@@ -657,10 +969,13 @@ function IoTForm({ onResult, onResultDetail, prefilledBatchId, prefilledDispatch
             </div>
             <div style={{ fontSize: 10, color: "var(--text-secondary)", lineHeight: 1.9 }}>
               <div><span style={{ color: ACCENT.green }}>Batch #:</span> {batchNum}</div>
+              <div><span style={{ color: ACCENT.green }}>Category:</span> {STANDARDS_CONFIG[category].displayName}</div>
+              <div><span style={{ color: ACCENT.green }}>Source:</span> {qaSource === 'iot' ? 'IoT Sensors' : qaSource === 'inspector' ? 'Certified Inspector' : 'Manufacturer Declaration'}</div>
+              {bstiCredential && <div><span style={{ color: ACCENT.green }}>BSTI ID:</span> {bstiCredential}</div>}
+              {signedBy && <div><span style={{ color: ACCENT.green }}>Signed By:</span> {signedBy}</div>}
               <div><span style={{ color: ACCENT.green }}>Trust Score:</span> {ts}/100</div>
-              <div><span style={{ color: ACCENT.green }}>pH / EC / Temp:</span> {pH} / {EC} / {temp}°C</div>
-              <div><span style={{ color: ACCENT.green }}>Ratio / Days:</span> {ratio} / {days}</div>
-              <div><span style={{ color: ACCENT.green }}>Processor:</span> #07 (anonymized)</div>
+              <div><span style={{ color: ACCENT.green }}>Parameters:</span> pH: {conf.ph ? pH : "N/A"} / EC: {EC} / Temp: {temp}°C</div>
+              <div><span style={{ color: ACCENT.green }}>Ratio / Days:</span> {conf.hasRatio ? ratio : "N/A"} / {days}</div>
             </div>
           </div>
           <button
@@ -672,12 +987,10 @@ function IoTForm({ onResult, onResultDetail, prefilledBatchId, prefilledDispatch
                 format: 'a4'
               });
               
-              // Add a border
               doc.setDrawColor(46, 125, 50);
               doc.setLineWidth(1.5);
               doc.rect(5, 5, 200, 287);
               
-              // Header
               doc.setFont("helvetica", "bold");
               doc.setFontSize(22);
               doc.setTextColor(46, 125, 50);
@@ -691,7 +1004,6 @@ function IoTForm({ onResult, onResultDetail, prefilledBatchId, prefilledDispatch
               doc.setLineWidth(0.5);
               doc.line(20, 48, 190, 48);
               
-              // Content
               doc.setFont("helvetica", "normal");
               doc.setFontSize(12);
               doc.setTextColor(51, 65, 85);
@@ -706,43 +1018,71 @@ function IoTForm({ onResult, onResultDetail, prefilledBatchId, prefilledDispatch
               doc.setFont("helvetica", "normal");
               doc.text(batchNum, 75, y);
               
-              y += 12;
+              y += 10;
+              doc.setFont("helvetica", "bold");
+              doc.text("Category:", 30, y);
+              doc.setFont("helvetica", "normal");
+              doc.text(STANDARDS_CONFIG[category].displayName, 75, y);
+
+              y += 10;
+              doc.setFont("helvetica", "bold");
+              doc.text("QA Source:", 30, y);
+              doc.setFont("helvetica", "normal");
+              doc.text(qaSource === 'iot' ? 'IoT Sensors' : qaSource === 'inspector' ? 'Certified Inspector' : 'Manufacturer Declaration', 75, y);
+
+              if (bstiCredential) {
+                y += 10;
+                doc.setFont("helvetica", "bold");
+                doc.text("BSTI ID:", 30, y);
+                doc.setFont("helvetica", "normal");
+                doc.text(bstiCredential, 75, y);
+              }
+
+              if (signedBy) {
+                y += 10;
+                doc.setFont("helvetica", "bold");
+                doc.text("Signed By:", 30, y);
+                doc.setFont("helvetica", "normal");
+                doc.text(signedBy, 75, y);
+              }
+
+              y += 10;
               doc.setFont("helvetica", "bold");
               doc.text("Product Name:", 30, y);
               doc.setFont("helvetica", "normal");
               doc.text(pName, 75, y);
 
-              y += 12;
+              y += 10;
               doc.setFont("helvetica", "bold");
               doc.text("Dispatch Zone:", 30, y);
               doc.setFont("helvetica", "normal");
               doc.text(pZone, 75, y);
 
-              y += 12;
+              y += 10;
               doc.setFont("helvetica", "bold");
               doc.text("BARI Trust Score:", 30, y);
               doc.setFont("helvetica", "normal");
               doc.text(`${ts} / 100`, 75, y);
               
-              y += 12;
+              y += 10;
               doc.setFont("helvetica", "bold");
               doc.text("Parameters:", 30, y);
               doc.setFont("helvetica", "normal");
-              doc.text(`pH: ${pH}  |  EC: ${EC} mS/cm  |  Temp: ${temp} C`, 75, y);
+              doc.text(`pH: ${conf.ph ? pH : 'N/A'}  |  EC: ${EC}  |  Temp: ${temp} C`, 75, y);
               
-              y += 12;
+              y += 10;
               doc.setFont("helvetica", "bold");
               doc.text("Treatment Ratio:", 30, y);
               doc.setFont("helvetica", "normal");
-              doc.text(ratio, 75, y);
+              doc.text(conf.hasRatio ? ratio : 'N/A', 75, y);
               
-              y += 12;
+              y += 10;
               doc.setFont("helvetica", "bold");
               doc.text("Fermentation Days:", 30, y);
               doc.setFont("helvetica", "normal");
               doc.text(`${days} Days`, 75, y);
               
-              y += 12;
+              y += 10;
               doc.setFont("helvetica", "bold");
               doc.text("Verification Status:", 30, y);
               doc.setFont("helvetica", "normal");
@@ -750,16 +1090,15 @@ function IoTForm({ onResult, onResultDetail, prefilledBatchId, prefilledDispatch
               doc.text("VERIFIED COMPLIANT", 75, y);
               doc.setTextColor(51, 65, 85);
               
-              // Add the QR code image if it exists
               if (qrCodeImg) {
                 try {
-                  doc.addImage(qrCodeImg, 'PNG', 75, y + 15, 60, 60);
+                  doc.addImage(qrCodeImg, 'PNG', 75, y + 12, 50, 50);
                 } catch (e) {
                   console.error("Failed to add QR image to PDF:", e);
                 }
               }
               
-              y += 90;
+              y += 75;
               doc.setDrawColor(200, 200, 200);
               doc.line(20, y, 190, y);
               
@@ -876,20 +1215,144 @@ function ClaimVerifier({ onSelectBatch }) {
       </div>
 
       {status === "ok" && result && (
-        <div style={{ padding: 14, borderRadius: 8, background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.35)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <span style={{ fontSize: 16 }}>✅</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: ACCENT.green, letterSpacing: "0.05em" }}>CLAIM VERIFIED · GENUINE</span>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ padding: 14, borderRadius: 8, background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.35)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <span style={{ fontSize: 16 }}>✅</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: ACCENT.green, letterSpacing: "0.05em" }}>CLAIM VERIFIED · GENUINE</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 12px", fontSize: 11, color: "var(--text-secondary)" }}>
+              <span style={{ color: "var(--text-dim)" }}>Batch ID</span>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-primary)" }}>{result.batchId || result.batch_id || "—"}</span>
+              {result.trust && result.trust.score != null && (<><span style={{ color: "var(--text-dim)" }}>Trust Score</span><span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{result.trust.score}</span></>)}
+              {result.trust && result.trust.grade && (<><span style={{ color: "var(--text-dim)" }}>Grade</span><span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{result.trust.grade}</span></>)}
+              {result.certifiedAt && (<><span style={{ color: "var(--text-dim)" }}>Certified At</span><span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{result.certifiedAt}</span></>)}
+              {result.signature && (<><span style={{ color: "var(--text-dim)" }}>Signature</span><span style={{ fontFamily: "'JetBrains Mono', monospace", wordBreak: "break-all" }}>{String(result.signature).slice(0, 40)}…</span></>)}
+              {result.zone && (<><span style={{ color: "var(--text-dim)" }}>Zone</span><span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{result.zone}</span></>)}
+            </div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 12px", fontSize: 11, color: "var(--text-secondary)" }}>
-            <span style={{ color: "var(--text-dim)" }}>Batch ID</span>
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-primary)" }}>{result.batchId || result.batch_id || "—"}</span>
-            {result.trustScore != null && (<><span style={{ color: "var(--text-dim)" }}>Trust Score</span><span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{result.trustScore}</span></>)}
-            {result.grade && (<><span style={{ color: "var(--text-dim)" }}>Grade</span><span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{result.grade}</span></>)}
-            {result.certifiedAt && (<><span style={{ color: "var(--text-dim)" }}>Certified At</span><span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{result.certifiedAt}</span></>)}
-            {result.signature && (<><span style={{ color: "var(--text-dim)" }}>Signature</span><span style={{ fontFamily: "'JetBrains Mono', monospace", wordBreak: "break-all" }}>{String(result.signature).slice(0, 40)}…</span></>)}
-            {result.zone && (<><span style={{ color: "var(--text-dim)" }}>Zone</span><span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{result.zone}</span></>)}
-          </div>
+
+          {result.chain && (
+            <div style={{ marginTop: 6 }}>
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "8px 12px",
+                borderRadius: 8,
+                background: result.chain.verified ? "rgba(16,185,129,0.06)" : "rgba(239,68,68,0.06)",
+                border: `1px solid ${result.chain.verified ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
+                color: result.chain.verified ? ACCENT.green : ACCENT.red,
+                fontSize: 11,
+                fontWeight: 700,
+                marginBottom: 12
+              }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {result.chain.verified ? "🔒 PROVENANCE SECURED" : "🚨 INTEGRITY BREACHED (TAMPERED)"}
+                </span>
+                <span style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", opacity: 0.7 }}>SHA-256 HASH CHAIN</span>
+              </div>
+              
+              <div style={{ display: "flex", flexDirection: "column", gap: 14, position: "relative", paddingLeft: 18 }}>
+                {/* Visual Line */}
+                <div style={{
+                  position: "absolute",
+                  left: 6,
+                  top: 8,
+                  bottom: 8,
+                  width: 2,
+                  borderLeft: `2px dashed ${result.chain.verified ? "rgba(16, 185, 129, 0.3)" : "rgba(239, 68, 68, 0.3)"}`
+                }}></div>
+                
+                {result.chain.events && result.chain.events.map((e, idx) => {
+                  const eventType = e.event_type || e.type || "qa";
+                  const actor = e.actor || "system";
+                  const eventData = e.event_data || e.data || {};
+                  const prevHash = e.prev_hash || "0000000000000000000000000000000000000000000000000000000000000000";
+                  const currentHash = e.current_hash || "";
+                  const timestamp = e.timestamp || e.signed_at || new Date().toISOString();
+                  
+                  let icon = "📋";
+                  let title = "QA REPORT INGESTED";
+                  if (eventType === "genesis") { icon = "🌱"; title = "GENESIS EVENT"; }
+                  else if (eventType === "dispatch" || eventType === "dispatched") { icon = "🚚"; title = "DISPATCHED"; }
+                  else if (eventType === "delivery" || eventType === "delivered" || eventType === "receipt") { icon = "📦"; title = "DELIVERED"; }
+                  
+                  return (
+                    <div key={idx} style={{ position: "relative" }}>
+                      {/* Circle Dot */}
+                      <div style={{
+                        position: "absolute",
+                        left: -16,
+                        top: 5,
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        background: result.chain.verified ? ACCENT.green : ACCENT.red,
+                        border: "2px solid var(--bg-secondary)",
+                      }}></div>
+                      
+                      <div style={{ background: "var(--bg-input)", padding: 10, borderRadius: 8, border: "1px solid var(--border-primary)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 6 }}>
+                            <span>{icon}</span> {title}
+                          </span>
+                          <span style={{ fontSize: 9, color: "var(--text-dim)", fontFamily: "'JetBrains Mono', monospace" }}>
+                            {new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        
+                        <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 6 }}>
+                          <div><span style={{ color: "var(--text-dim)" }}>Actor:</span> {actor}</div>
+                          {eventType === "qa" && (
+                            <>
+                              <div><span style={{ color: "var(--text-dim)" }}>Category:</span> {eventData.category || "Organic"}</div>
+                              {eventData.metrics_summary && (
+                                <div><span style={{ color: "var(--text-dim)" }}>Metrics:</span> pH {eventData.metrics_summary.pH} | EC {eventData.metrics_summary.EC} | Temp {eventData.metrics_summary.temp}°C</div>
+                              )}
+                              {eventData.metrics && (
+                                <div><span style={{ color: "var(--text-dim)" }}>Metrics:</span> pH {eventData.metrics.pH || "N/A"} | EC {eventData.metrics.ec} | Temp {eventData.metrics.temp}°C</div>
+                              )}
+                            </>
+                          )}
+                          {eventType === "genesis" && (
+                            <div><span style={{ color: "var(--text-dim)" }}>Detail:</span> {eventData.note || "Batch created in system"}</div>
+                          )}
+                          {(eventType === "dispatch" || eventType === "dispatched") && (
+                            <>
+                              <div><span style={{ color: "var(--text-dim)" }}>From:</span> {eventData.from || "Processing Plant"}</div>
+                              <div><span style={{ color: "var(--text-dim)" }}>To:</span> {eventData.to || "Mirpur Warehouse"}</div>
+                              {eventData.driver && <div><span style={{ color: "var(--text-dim)" }}>Driver:</span> {eventData.driver}</div>}
+                            </>
+                          )}
+                          {(eventType === "delivery" || eventType === "delivered" || eventType === "receipt") && (
+                            <>
+                              <div><span style={{ color: "var(--text-dim)" }}>Received By:</span> {eventData.received_by || eventData.receiver || "Warehouse Manager"}</div>
+                              <div><span style={{ color: "var(--text-dim)" }}>Condition:</span> {eventData.condition || "good"}</div>
+                            </>
+                          )}
+                        </div>
+                        
+                        <div style={{
+                          fontSize: 8,
+                          fontFamily: "'JetBrains Mono', monospace",
+                          background: "var(--bg-primary)",
+                          padding: "4px 6px",
+                          borderRadius: 4,
+                          color: "var(--text-dim)",
+                          wordBreak: "break-all",
+                          lineHeight: 1.3
+                        }}>
+                          <div><span style={{ color: ACCENT.blue }}>PREV:</span> {prevHash.slice(0, 32)}...</div>
+                          <div><span style={{ color: ACCENT.green }}>HASH:</span> {currentHash.slice(0, 32)}...</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1008,26 +1471,15 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
     setIsFetchingMetrics(true);
     setHasCalculated(true);
     try {
-      const response = await fetch(
-        `${API_BASE_URL_HTML}/api/clever-responder`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            action: "microclimate-metrics",
-            trustScore,
-            zone,
-            packaging,
-            hour,
-            baseTemp,
-            windSpeed,
-            routeDuration,
-          }),
-        }
-      );
-      const data = await response.json();
+      const data = await window.APIClient.getMicroclimateMetricsLegacy({
+        trustScore,
+        zone,
+        packaging,
+        hour,
+        baseTemp,
+        windSpeed,
+        routeDuration,
+      });
       const targetDvs = data.dvs || 0;
       const targetTst = data.tst || 0;
       const targetTS = data.trustScore || trustScore;
@@ -1612,9 +2064,9 @@ function ESGCard({ trustScore, dvs }) {
   } = esgData;
 
   const mockLedger = [
-    { id: "BCH-8492", date: "2026-05-28", zone: "Mirpur", env: "4.2 kg CO₂", soc: "Direct SME B2B Premium Paid", gov: "IoT Signed (BARI)", hash: "0x8f7a...3e" },
-    { id: "BCH-8411", date: "2026-05-27", zone: "Jatrabari", env: "3.8 kg CO₂", soc: "Direct SME B2B Premium Paid", gov: "IoT Signed (BARI)", hash: "0x4b2c...7d" },
-    { id: "BCH-8380", date: "2026-05-26", zone: "Uttara", env: "4.9 kg CO₂", soc: "Direct SME B2B Premium Paid", gov: "IoT Signed (BARI)", hash: "0x9a1e...9b" },
+    { id: "BCH-8492", date: "2026-05-28", zone: "Mirpur", env: "4.2 kg CO₂", soc: "Direct SME B2B Premium Paid", gov: "Manually Signed (BARI)", hash: "0x8f7a...3e" },
+    { id: "BCH-8411", date: "2026-05-27", zone: "Jatrabari", env: "3.8 kg CO₂", soc: "Direct SME B2B Premium Paid", gov: "Manually Signed (BARI)", hash: "0x4b2c...7d" },
+    { id: "BCH-8380", date: "2026-05-26", zone: "Uttara", env: "4.9 kg CO₂", soc: "Direct SME B2B Premium Paid", gov: "Manually Signed (BARI)", hash: "0x9a1e...9b" },
   ];
 
   const calculateImpactPercentage = (actual, baseline) => {
@@ -1732,7 +2184,7 @@ function ESGCard({ trustScore, dvs }) {
               formula: "S = (Trust × 0.4) + Base 54",
               logic: [
                 { step: "Fair Pricing", desc: "Direct B2B SME payments bypass high-commission aggregators" },
-                { step: "Trust Foundation", desc: "Certified IoT sensors ensure supply chain transparency" },
+                { step: "Trust Foundation", desc: "Operator-signed manual records ensure supply chain transparency" },
               ],
               score: sScore,
               color: ACCENT.blue
@@ -1742,7 +2194,7 @@ function ESGCard({ trustScore, dvs }) {
               formula: "G = (Trust × 0.6) + Base 38",
               logic: [
                 { step: "BARI Certification", desc: "Bangladesh Agricultural Research Institute approved standards" },
-                { step: "IoT Cryptography", desc: "Blockchain QR codes authenticate every shipment immutably" },
+                { step: "Cryptographic Signing", desc: "Blockchain QR codes authenticate every shipment immutably" },
               ],
               score: gScore,
               color: ACCENT.amber
@@ -1871,7 +2323,7 @@ function ESGCard({ trustScore, dvs }) {
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
           {[
-            { badge: "BARI IoT Certified", desc: "Bangladesh Agricultural Research Institute approved batch standards", status: "✓ Active" },
+            { badge: "BARI Certified", desc: "Bangladesh Agricultural Research Institute approved batch standards", status: "✓ Active" },
             { badge: "Blockchain Audited", desc: "Smart contract ESG accrual auto-logged & immutable", status: "✓ Live" },
             { badge: "Fair Trade Verified", desc: "Direct SME premium pricing with zero hidden aggregator fees", status: "✓ Certified" }
           ].map((cert, i) => (
@@ -2134,6 +2586,99 @@ function DashboardView({ onNewBatch }) {
   const heatmap = dashData?.heatmap || [];
   const isLive = dashData?.liveData;
 
+  // ── Live Tracking + per-product ESG: product list & selection ──
+  const [batchList, setBatchList]   = useState([]);
+  const [batchListLoading, setBatchListLoading] = useState(true);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+
+  const fetchBatches = async () => {
+    try {
+      const json = await window.APIClient.getBatches();
+      if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+        setBatchList(json.data.map(b => ({ ...b, status: (b.status || "").trim().toLowerCase() })));
+      } else {
+        setBatchList(window.__SEED_BATCHES__ || []);
+      }
+    } catch (_) {
+      setBatchList(window.__SEED_BATCHES__ || []);
+    } finally {
+      setBatchListLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBatches();
+    
+    let channel = null;
+    let fallbackInterval = null;
+
+    const setupRealtime = () => {
+      const supabase = window.supabaseClient;
+      if (supabase) {
+        try {
+          channel = supabase
+            .channel('dashboard-batches-realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'batches' }, () => {
+              fetchBatches();
+              fetchDashboard(false);
+            })
+            .subscribe((status) => {
+              if (status !== 'SUBSCRIBED') {
+                if (!fallbackInterval) {
+                  fallbackInterval = setInterval(() => {
+                    fetchBatches();
+                    fetchDashboard(false);
+                  }, 8000);
+                }
+              } else {
+                if (fallbackInterval) {
+                  clearInterval(fallbackInterval);
+                  fallbackInterval = null;
+                }
+              }
+            });
+        } catch (e) {
+          console.warn("Dashboard realtime subscription failed, using polling fallback:", e);
+          fallbackInterval = setInterval(() => {
+            fetchBatches();
+            fetchDashboard(false);
+          }, 8000);
+        }
+      } else {
+        fallbackInterval = setInterval(() => {
+          fetchBatches();
+          fetchDashboard(false);
+        }, 8000);
+      }
+    };
+
+    setupRealtime();
+
+    return () => {
+      if (channel) {
+        window.supabaseClient?.removeChannel(channel);
+      }
+      if (fallbackInterval) {
+        clearInterval(fallbackInterval);
+      }
+    };
+  }, []);
+
+  // Auto-pick from QR deep-link if present, else most-recent batch
+  useEffect(() => {
+    if (batchList.length === 0 || selectedProduct) return;
+    const qrId = typeof window !== "undefined" ? window.__QR_PRODUCT__ : null;
+    if (qrId) {
+      const match = batchList.find(b => (b.id || "").toUpperCase() === qrId.toUpperCase());
+      if (match) { setSelectedProduct(match); return; }
+    }
+    // fallback: most recently created
+    const sorted = [...batchList].sort((a, b) =>
+      new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+    );
+    if (sorted[0]) setSelectedProduct(sorted[0]);
+  }, [batchList]);
+
   const statCards = s ? [
     { label: "TOTAL BATCHES",       value: s.totalBatches,       sub: `${s.activeBatches} active`,              icon: "📦" },
     { label: "CERTIFIED BATCHES",   value: s.certifiedBatches,   sub: `${s.certRate} certification rate`,        icon: "🛡️" },
@@ -2183,7 +2728,7 @@ function DashboardView({ onNewBatch }) {
       <Card title="🌐 3-Layer Architecture" style={{ marginBottom: 20 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
           {[
-            { code: "L1", icon: "📡", name: "Sensing", desc: "IoT sensors + BARI knowledge base", kpi: "Real-time field data" },
+            { code: "L1", icon: "�", name: "Registration", desc: "Manual batch registration + BARI knowledge base", kpi: "Operator-signed records" },
             { code: "L2", icon: "🧠", name: "Intelligence", desc: "Trust scores, DVS, climate alerts", kpi: "AI-driven decisions" },
             { code: "L3", icon: "🛍️", name: "Presentation", desc: "Marketplace, ESG report, QR claims", kpi: "Buyer-facing outputs" },
           ].map((layer) => {
@@ -2210,7 +2755,7 @@ function DashboardView({ onNewBatch }) {
           })}
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 12, fontSize: 10, color: "var(--text-dim)" }}>
-          <span style={{ color: LAYER_META.L1.color }}>●</span> IoT
+          <span style={{ color: LAYER_META.L1.color }}>●</span> Registration
           <span style={{ color: "var(--text-dim)" }}>→</span>
           <span style={{ color: LAYER_META.L2.color }}>●</span> AI/ML
           <span style={{ color: "var(--text-dim)" }}>→</span>
@@ -2380,10 +2925,8 @@ function BatchRegistry({ onNewBatch }) {
   const fetchBatches = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/batches`);
-      const json = await res.json();
+      const json = await window.APIClient.getBatches();
       if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-        // normalise status field to lowercase so filters always work
         setBatches(json.data.map(b => ({ ...b, status: (b.status || "").trim().toLowerCase() })));
       } else {
         setBatches(window.__SEED_BATCHES__ || []);
@@ -2396,7 +2939,53 @@ function BatchRegistry({ onNewBatch }) {
     }
   };
 
-  useEffect(() => { fetchBatches(); }, []);
+  useEffect(() => {
+    fetchBatches();
+
+    let channel = null;
+    let fallbackInterval = null;
+
+    const setupRealtime = () => {
+      const supabase = window.supabaseClient;
+      if (supabase) {
+        try {
+          channel = supabase
+            .channel('registry-batches-realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'batches' }, () => {
+              fetchBatches();
+            })
+            .subscribe((status) => {
+              if (status !== 'SUBSCRIBED') {
+                if (!fallbackInterval) {
+                  fallbackInterval = setInterval(fetchBatches, 8000);
+                }
+              } else {
+                if (fallbackInterval) {
+                  clearInterval(fallbackInterval);
+                  fallbackInterval = null;
+                }
+              }
+            });
+        } catch (e) {
+          console.warn("Registry realtime subscription failed, using polling fallback:", e);
+          fallbackInterval = setInterval(fetchBatches, 8000);
+        }
+      } else {
+        fallbackInterval = setInterval(fetchBatches, 8000);
+      }
+    };
+
+    setupRealtime();
+
+    return () => {
+      if (channel) {
+        window.supabaseClient?.removeChannel(channel);
+      }
+      if (fallbackInterval) {
+        clearInterval(fallbackInterval);
+      }
+    };
+  }, []);
 
   const normalise = s => (s || "").trim().toLowerCase();
   const filtered = batches.filter(b => {
@@ -2611,7 +3200,7 @@ function BatchRegistry({ onNewBatch }) {
             )}
             {selectedBatch.status === "pending" && (
               <div style={{ background: ACCENT.amberBg, border: `1px solid ${ACCENT.amberBorder}`, borderRadius: 12, padding: 16, fontSize: 13, color: ACCENT.amber, fontWeight: 600 }}>
-                ⏳ Batch is awaiting IoT sensor verification before certification.
+                ⏳ Batch is awaiting manual verification by a certified processor before certification.
               </div>
             )}
 
@@ -2713,7 +3302,7 @@ function RegisterBatch({ onCancel }) {
           batch_number:    localBatch.id,
           feedstock_type:  productType,   // ← required by backend schema
           product_name:    productName,
-          trust_score:     0,             // ← required by backend schema (default 0 until IoT verified)
+          trust_score:     0,             // ← required by backend schema (default 0 until manually verified)
           processor_id:    null,
           // extra fields stored but not schema-validated:
           destination_zone: destinationZone,
@@ -2835,8 +3424,8 @@ function RegisterBatch({ onCancel }) {
           </div>
           
           <div style={{ background: ACCENT.greenBg, padding: "20px", borderRadius: 8, border: `1px solid ${ACCENT.greenBorder}` }}>
-            <div style={{ color: ACCENT.green, fontWeight: 600, fontSize: 14, marginBottom: 8 }}>Next: IoT Certification</div>
-            <div style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.5 }}>After creating your batch, submit IoT sensor readings to generate a BARI-compliant Trust Score and cryptographic QR certificate.</div>
+            <div style={{ color: ACCENT.green, fontWeight: 600, fontSize: 14, marginBottom: 8 }}>Next: Manual Verification</div>
+            <div style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.5 }}>After creating your batch, a certified processor will review and sign it to generate a BARI-compliant Trust Score and cryptographic QR certificate.</div>
           </div>
 
           <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 8 }}>
@@ -4738,7 +5327,7 @@ function SystemDocsView({ productsList }) {
                   {"2. The Solution: CLimaLogix ClimateShield"}
                 </h3>
                 <p style={{ fontSize: 13.5, color: "var(--text-secondary)", lineHeight: 1.6 }}>
-                  {"CLimaLogix AI implements real-time agricultural trust auditing, microclimate exposure risk estimation, and dynamic delivery viability slotting (DVS) for high-density logistics. Using advanced IoT telemetry mapping and localized UHI offsets, CLimaLogix safeguards heat-sensitive batches, increasing successful deliveries by over 40%."}
+                  {"CLimaLogix AI implements real-time agricultural trust auditing, microclimate exposure risk estimation, and dynamic delivery viability slotting (DVS) for high-density logistics. Using operator-signed manual registration, QR-code provenance, and localized UHI offsets, CLimaLogix safeguards heat-sensitive batches, increasing successful deliveries by over 40%."}
                 </p>
               </div>
 
@@ -4776,7 +5365,7 @@ function SystemDocsView({ productsList }) {
                 {"Unified System Dataflow Pipeline"}
               </h3>
               <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 24 }}>
-                {"The pipeline dynamically processes live sensor telemetry, maps localized thermal risks, evaluates compliance standards, and schedules delivery slots."}
+                {"The pipeline dynamically processes operator-signed registration events, maps localized thermal risks, evaluates compliance standards, and schedules delivery slots."}
               </p>
 
               {/* GORGEOUS PREMIUM FLOWCHART */}
@@ -4784,7 +5373,7 @@ function SystemDocsView({ productsList }) {
                 
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <div style={{ background: "rgba(59, 130, 246, 0.1)", border: `1px solid ${ACCENT.blue}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: ACCENT.blue, fontWeight: 700 }}>
-                    {"1. IoT SENSORS (pH, EC, Temp)"}
+                    {"1. MANUAL REGISTRATION (Operator-signed + BARI standards)"}
                   </div>
                   <div style={{ color: "var(--text-dim)", fontWeight: 700 }}>{"→"}</div>
                   <div style={{ background: "rgba(245, 158, 11, 0.1)", border: `1px solid ${ACCENT.amber}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: ACCENT.amber, fontWeight: 700 }}>
@@ -5139,13 +5728,13 @@ function SystemDocsView({ productsList }) {
 }
 
 // Three-layer architecture, ordered by the natural farm → buyer workflow:
-//   L1 Sensing      → register a batch, capture IoT sensor data
+//   L1 Registration → operator manually registers + signs a batch
 //   L2 Intelligence → trust score, DVS, demand forecast, BI dashboard
 //   L3 Presentation → ESG report, marketplace
 //   Cross-cutting   → chatbot assistant
 // Each tab carries a `layer` tag so the nav bar can group + color-code them.
 const LAYER_META = {
-  L1: { name: "Sensing",      color: "#3b82f6", bg: "rgba(59,130,246,0.10)",  border: "rgba(59,130,246,0.35)" },
+  L1: { name: "Registration", color: "#3b82f6", bg: "rgba(59,130,246,0.10)",  border: "rgba(59,130,246,0.35)" },
   L2: { name: "Intelligence", color: "#a855f7", bg: "rgba(168,85,247,0.10)",  border: "rgba(168,85,247,0.35)" },
   L3: { name: "Presentation", color: "#10b981", bg: "rgba(16,185,129,0.10)",  border: "rgba(16,185,129,0.35)" },
   L0: { name: "Overview",     color: "#94a3b8", bg: "rgba(148,163,184,0.10)", border: "rgba(148,163,184,0.35)" },
@@ -5154,7 +5743,7 @@ const LAYER_META = {
 const TABS = [
   { label: "Overall Dashboard",       icon: "⊞",  layer: "L0" },
   { label: "Batches",                 icon: "📦", layer: "L1" },
-  { label: "Batch Verification",      icon: "📡", layer: "L1" },
+  { label: "Batch Verification",      icon: "✅", layer: "L1" },
   { label: "Microclimate Intelligence", icon: "🌡️", layer: "L2" },
   { label: "Climate Demand",          icon: "📊", layer: "L2" },
   { label: "Business Intelligence",   icon: "🧠", layer: "L2" },
@@ -5381,9 +5970,9 @@ function CLimaLogixApp() {
         {tab === 2 && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, animation: "fadeSlideIn 0.4s ease" }}>
             <div>
-              <SectionLabel icon="📡" text="Batch Sensor Verification" />
+              <SectionLabel icon="✅" text="Batch Verification" />
               <Card>
-                <IoTForm
+                <BatchVerificationForm
                   onResult={setTrustScore}
                   onResultDetail={setTrustScoreResult}
                   prefilledBatchId={verificationBatchId}
@@ -5466,7 +6055,7 @@ function CLimaLogixApp() {
                   </div>
                 )}
                 <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.6, textAlign: "center", marginTop: 12 }}>
-                  Adjust IoT parameters on the left to simulate a batch. A score of 60+ is required for BARI certification and cryptographic signing.
+                  Adjust batch parameters on the left to verify a batch. A score of 60+ is required for BARI certification and cryptographic signing.
                 </div>
               </Card>
             </div>

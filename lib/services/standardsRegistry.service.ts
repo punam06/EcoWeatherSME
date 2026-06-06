@@ -36,7 +36,7 @@ export const STANDARDS: Record<ProductCategory, ProductStandard> = {
     minFermentationDays: 7,
     maxFermentationDays: 14,
     requiresBSTI: false,
-    weights: { ph: 8, ec: 6, temp: 1.2, ratio: 5, days: 4 },
+    weights: { ph: 30, ec: 6, temp: 1.2, ratio: 5, days: 10 },
   },
   retail: {
     category: 'retail',
