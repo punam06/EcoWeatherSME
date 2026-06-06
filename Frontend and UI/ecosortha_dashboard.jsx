@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 
 const IS_STATIC_FILE_HTML = window.location.protocol === 'file:';
 // Backend API base URL. The production backend that the live dashboard talks
@@ -3896,6 +3896,28 @@ function MarketplaceView({ products = MOCK_PRODUCTS }) {
   const [category, setCategory] = useState("All");
   const [minDvs, setMinDvs] = useState(0);
 
+  // Cart and Details States
+  const [cart, setCart] = useState(() => {
+    const saved = localStorage.getItem("climalogix_cart");
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [quantityInput, setQuantityInput] = useState(1);
+
+  // Transit Simulation States
+  const [selectedZone, setSelectedZone] = useState("dhaka_north");
+  const [simulatedHour, setSimulatedHour] = useState(new Date().getHours());
+  const [simulatedTemp, setSimulatedTemp] = useState(33);
+
+  // Checkout States
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [checkoutSuccess, setCheckoutSuccess] = useState(null);
+
+  useEffect(() => {
+    localStorage.setItem("climalogix_cart", JSON.stringify(cart));
+  }, [cart]);
+
   const categories = ["All", "Agriculture", "Pharmaceuticals", "Food & Dairy", "Food & Seafood", "Chemicals"];
 
   const filteredProducts = products.filter(p => {
@@ -3905,9 +3927,122 @@ function MarketplaceView({ products = MOCK_PRODUCTS }) {
     return true;
   });
 
+  const addToCart = (product, qty = 1, e = null) => {
+    if (e) e.stopPropagation();
+    setCart(prev => {
+      const existing = prev.find(item => item.product.id === product.id);
+      if (existing) {
+        return prev.map(item => item.product.id === product.id ? { ...item, quantity: item.quantity + qty } : item);
+      }
+      return [...prev, { product, quantity: qty }];
+    });
+    // Visual feedback
+    if (e) {
+      const btn = e.currentTarget;
+      const originalText = btn.innerHTML;
+      btn.innerHTML = "✓ Added!";
+      btn.style.background = ACCENT.greenBg;
+      btn.style.color = ACCENT.green;
+      setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.style.background = product.dvs < 75 ? ACCENT.redBg : "var(--bg-input)";
+        btn.style.color = product.dvs < 75 ? ACCENT.red : "var(--text-primary)";
+      }, 1200);
+    }
+  };
+
+  const removeFromCart = (productId) => {
+    setCart(prev => prev.filter(item => item.product.id !== productId));
+  };
+
+  const updateCartQuantity = (productId, amount) => {
+    setCart(prev => prev.map(item => {
+      if (item.product.id === productId) {
+        const newQty = item.quantity + amount;
+        return newQty > 0 ? { ...item, quantity: newQty } : item;
+      }
+      return item;
+    }));
+  };
+
+  // Calculate simulated DVS score for the route planner inside details modal
+  const getSimulatedDVS = (baseDvs) => {
+    // Standard calcBARIDVS helper uses global trustScore, zone, packaging, hour, baseTemp
+    const zoneData = UHI_ZONES[selectedZone] || { uhiFactor: 1.0, baseRisk: 0.15 };
+    const hourFactor = simulatedHour >= 12 && simulatedHour <= 16 ? 1.3 : simulatedHour >= 18 || simulatedHour <= 6 ? 0.7 : 1.0;
+    const tempRisk = Math.max(0, (simulatedTemp - 30) * 0.04);
+    const overallRisk = zoneData.uhiFactor * hourFactor * (zoneData.baseRisk + tempRisk);
+    
+    // Penalize the base product's DVS score by transit risks
+    const simulated = Math.max(10, Math.min(100, Math.round(baseDvs * (1 - overallRisk))));
+    return simulated;
+  };
+
+  const getShippingCost = () => {
+    // Basic shipping: base ৳ 120 + distance/temperature penalty
+    const baseShipping = 120;
+    const tempPenalty = Math.max(0, (simulatedTemp - 30) * 15);
+    const zoneMultiplier = selectedZone.includes("north") || selectedZone.includes("south") ? 1.0 : 1.4;
+    return Math.round((baseShipping + tempPenalty) * zoneMultiplier);
+  };
+
+  const handleCheckout = () => {
+    setIsCheckingOut(true);
+    setTimeout(() => {
+      const orderId = `ord-${Math.floor(100000 + Math.random() * 900000)}`;
+      const txHash = "0x" + Array.from({length: 40}, () => Math.floor(Math.random()*16).toString(16)).join("");
+      
+      setCheckoutSuccess({
+        orderId,
+        txHash,
+        totalItems: cart.reduce((sum, item) => sum + item.quantity, 0),
+        totalPrice: cart.reduce((sum, item) => {
+          const rawPrice = Number((item.product.price || "").replace(/[৳\s,]/g, ""));
+          const isClearance = item.product.dvs < 75;
+          const price = isClearance ? Math.round(rawPrice * 0.7) : rawPrice;
+          return sum + (price * item.quantity);
+        }, 0) + getShippingCost(),
+        zone: selectedZone.replace(/_/g, " ").toUpperCase(),
+      });
+      setCart([]);
+      setIsCheckingOut(false);
+    }, 2000);
+  };
+
+  const cartTotal = cart.reduce((sum, item) => {
+    const rawPrice = Number((item.product.price || "").replace(/[৳\s,]/g, ""));
+    const isClearance = item.product.dvs < 75;
+    const price = isClearance ? Math.round(rawPrice * 0.7) : rawPrice;
+    return sum + (price * item.quantity);
+  }, 0);
+
   return (
     <div style={{ animation: "fadeSlideIn 0.3s ease", position: "relative" }}>
-      <PageHeader title="Climate-Resilient Marketplace" subtitle="Source verified heat-sensitive products optimized for DVS delivery" />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <PageHeader title="Climate-Resilient Circular Marketplace" subtitle="Source verified heat-sensitive components optimized for Dhaka division transit" />
+        <button 
+          onClick={() => setIsCartOpen(true)}
+          style={{
+            background: `linear-gradient(135deg, ${ACCENT.greenLight}, ${ACCENT.greenDark})`,
+            color: "#ffffff",
+            border: "none",
+            borderRadius: "10px",
+            padding: "10px 18px",
+            fontSize: "14px",
+            fontWeight: 700,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            boxShadow: "0 4px 14px rgba(16, 185, 129, 0.4)",
+            transition: "all 0.2s"
+          }}
+          onMouseEnter={e => e.currentTarget.style.transform = "translateY(-1px)"}
+          onMouseLeave={e => e.currentTarget.style.transform = "none"}
+        >
+          🛒 Cart ({cart.reduce((sum, item) => sum + item.quantity, 0)})
+        </button>
+      </div>
       
       {/* Filters Bar */}
       <Card style={{ padding: "16px 24px", marginBottom: 24 }} hover={false}>
@@ -3947,7 +4082,11 @@ function MarketplaceView({ products = MOCK_PRODUCTS }) {
           const discountedPrice = isClearance ? Math.round(rawPrice * 0.7) : rawPrice;
           
           return (
-            <Card key={p.id} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}>
+            <Card 
+              key={p.id} 
+              onClick={() => { setSelectedProduct(p); setQuantityInput(1); }}
+              style={{ padding: "20px 24px", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden", cursor: "pointer" }}
+            >
               {isClearance ? (
                 <div style={{
                   position: "absolute",
@@ -3996,9 +4135,12 @@ function MarketplaceView({ products = MOCK_PRODUCTS }) {
                   </div>
                 </div>
                 
-                <button style={{ width: "100%", padding: "10px 0", background: isClearance ? ACCENT.redBg : "var(--bg-input)", border: `1px solid ${isClearance ? ACCENT.redBorder : "var(--border-primary)"}`, borderRadius: 8, color: isClearance ? ACCENT.red : "var(--text-primary)", fontWeight: 600, cursor: "pointer", fontSize: 13, transition: "background 0.2s" }}
-                        onMouseEnter={e => e.currentTarget.style.background = isClearance ? "rgba(239, 68, 68, 0.15)" : ACCENT.greenBg}
-                        onMouseLeave={e => e.currentTarget.style.background = isClearance ? ACCENT.redBg : "var(--bg-input)"}>
+                <button 
+                  onClick={(e) => addToCart(p, 1, e)}
+                  style={{ width: "100%", padding: "10px 0", background: isClearance ? ACCENT.redBg : "var(--bg-input)", border: `1px solid ${isClearance ? ACCENT.redBorder : "var(--border-primary)"}`, borderRadius: 8, color: isClearance ? ACCENT.red : "var(--text-primary)", fontWeight: 600, cursor: "pointer", fontSize: 13, transition: "background 0.2s" }}
+                  onMouseEnter={e => e.currentTarget.style.background = isClearance ? "rgba(239, 68, 68, 0.15)" : ACCENT.greenBg}
+                  onMouseLeave={e => e.currentTarget.style.background = isClearance ? ACCENT.redBg : "var(--bg-input)"}
+                >
                   Add to Cart
                 </button>
               </div>
@@ -4012,6 +4154,472 @@ function MarketplaceView({ products = MOCK_PRODUCTS }) {
           </div>
         )}
       </div>
+
+  if (selectedProduct) {
+    const rawPrice = Number((selectedProduct.price || "").replace(/[৳\s,]/g, ""));
+    const isClearance = selectedProduct.dvs < 75;
+    const basePrice = isClearance ? Math.round(rawPrice * 0.7) : rawPrice;
+    const simDvs = getSimulatedDVS(selectedProduct.dvs);
+
+    return (
+      <div style={{ animation: "fadeSlideIn 0.3s ease", position: "relative" }}>
+        <button 
+          onClick={() => setSelectedProduct(null)}
+          style={{
+            background: "var(--bg-input)", border: "1px solid var(--border-primary)",
+            color: "var(--text-primary)", borderRadius: "8px", padding: "10px 18px",
+            fontSize: "13px", cursor: "pointer", marginBottom: 20, display: "flex",
+            alignItems: "center", gap: 8, transition: "all 0.2s", fontWeight: 600
+          }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = ACCENT.green}
+          onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border-primary)"}
+        >
+          ← Back to Products
+        </button>
+
+        <Card hover={false} style={{ padding: "32px", borderRadius: 16 }}>
+          {/* Header */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, paddingBottom: 20, borderBottom: "1px solid var(--border-primary)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <span style={{ fontSize: 48 }}>{selectedProduct.icon}</span>
+              <div>
+                <h2 style={{ fontSize: 24, fontWeight: 700 }}>{selectedProduct.name}</h2>
+                <div style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 4 }}>
+                  Category: <strong>{selectedProduct.category}</strong> · Seller: <strong>{selectedProduct.seller}</strong>
+                </div>
+              </div>
+            </div>
+            {isClearance && (
+              <div style={{ background: ACCENT.redBg, color: ACCENT.red, padding: "6px 12px", borderRadius: 6, fontSize: 11, fontWeight: 700, border: `1px solid ${ACCENT.redBorder}`, animation: "pulseGlow 2s infinite" }}>
+                ⚡ DYNAMIC CLEARANCE BRACKET
+              </div>
+            )}
+          </div>
+
+          {/* Details split */}
+          <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 32 }}>
+            <div>
+              <h3 style={{ fontSize: 14, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-dim)", marginBottom: 12 }}>Verified Parameters</h3>
+              
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+                <div style={{ padding: 12, borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)" }}>
+                  <div style={{ fontSize: 10, color: "var(--text-dim)", marginBottom: 4 }}>BIOLOGICAL COMPLIANCE</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: ACCENT.green }}>BARI QA Certified Lot</div>
+                </div>
+                <div style={{ padding: 12, borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)" }}>
+                  <div style={{ fontSize: 10, color: "var(--text-dim)", marginBottom: 4 }}>AUDIT PATHWAY</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: ACCENT.blue }}>Ledger-Backed QR Tracked</div>
+                </div>
+              </div>
+
+              <p style={{ fontSize: 13.5, lineHeight: 1.6, color: "var(--text-secondary)", marginBottom: 24 }}>
+                This product is fully verified for environmental and biological specifications. In compliance with the circular economy goals of the buildfest, all manufacturing, raw material sourcing, and biological curing fermentation records are logged immutably on the decentralised trust ledger.
+              </p>
+
+              <div style={{ background: "var(--bg-primary)", padding: 18, borderRadius: 12, border: "1px solid var(--border-primary)", marginBottom: 24 }}>
+                <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 12, fontWeight: 600, letterSpacing: "0.05em" }}>CIRCULAR ESG METRICS ACCRUAL</div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 8 }}>
+                  <span>Recycled Packaging Offset:</span>
+                  <strong style={{ color: ACCENT.green }}>12.5 kg plastic</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                  <span>Carbon Sequestration Credit:</span>
+                  <strong style={{ color: ACCENT.green }}>48.2 kg CO₂e / unit</strong>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 12, color: "var(--text-dim)" }}>Price per {selectedProduct.unit}</div>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: ACCENT.green, fontFamily: "'JetBrains Mono', monospace" }}>৳ {basePrice.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: "var(--text-dim)" }}>Initial Batch DVS</div>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: selectedProduct.dvs >= 75 ? ACCENT.green : ACCENT.red, fontFamily: "'JetBrains Mono', monospace" }}>{selectedProduct.dvs}</div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ borderLeft: "1px solid var(--border-primary)", paddingLeft: 32 }}>
+              <h3 style={{ fontSize: 14, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-dim)", marginBottom: 12 }}>Transit Weather Route Simulator</h3>
+              <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 16 }}>
+                Simulate temperature exposure along the shipping route to Dhaka division zones. This directly affects dispatch viability and dynamic clearance markdowns.
+              </p>
+
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: "block", fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Destination Zone:</label>
+                <select 
+                  value={selectedZone} 
+                  onChange={e => setSelectedZone(e.target.value)} 
+                  style={{ width: "100%", padding: "12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13 }}
+                >
+                  {Object.keys(UHI_ZONES).map(key => (
+                    <option key={key} value={key}>{key.replace(/_/g, " ").toUpperCase()}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>
+                  <span>Simulated Route Temp:</span>
+                  <strong>{simulatedTemp}°C</strong>
+                </div>
+                <input 
+                  type="range" min="25" max="45" value={simulatedTemp} 
+                  onChange={e => setSimulatedTemp(Number(e.target.value))}
+                  style={{ width: "100%" }}
+                />
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>
+                  <span>Dispatch Hour:</span>
+                  <strong>{simulatedHour}:00</strong>
+                </div>
+                <input 
+                  type="range" min="0" max="23" value={simulatedHour} 
+                  onChange={e => setSimulatedHour(Number(e.target.value))}
+                  style={{ width: "100%" }}
+                />
+              </div>
+
+              <div style={{ background: simDvs >= 75 ? "rgba(16,185,129,0.06)" : "rgba(239,68,68,0.06)", border: `1px solid ${simDvs >= 75 ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)"}`, padding: 16, borderRadius: 10, marginBottom: 20 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>Simulated Delivery DVS:</span>
+                  <strong style={{ fontSize: 18, color: simDvs >= 75 ? ACCENT.green : simDvs >= 55 ? ACCENT.amber : ACCENT.red }}>{simDvs}</strong>
+                </div>
+                <div style={{ fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.4 }}>
+                  {simDvs >= 75 
+                    ? "✓ High route viability. Product is safe under simulated conditions with standard packaging." 
+                    : "⚠️ Caution: High microclimate heat risk detected. Price automatically marked down (Dynamic Clearance) to avoid loss."}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Row */}
+          <div style={{ padding: "20px 0 0 0", borderTop: "1px solid var(--border-primary)", marginTop: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Qty:</span>
+              <input 
+                type="number" min="1" max="100" value={quantityInput}
+                onChange={e => setQuantityInput(Math.max(1, Number(e.target.value)))}
+                style={{ width: 80, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", textAlign: "center", fontSize: 13 }}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 12 }}>
+              <button 
+                onClick={() => setSelectedProduct(null)}
+                style={{ padding: "12px 24px", border: "1px solid var(--border-primary)", borderRadius: 8, background: "transparent", color: "var(--text-primary)", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => { addToCart(selectedProduct, quantityInput); setSelectedProduct(null); }}
+                style={{ padding: "12px 32px", border: "none", borderRadius: 8, background: ACCENT.green, color: "#ffffff", fontWeight: 700, cursor: "pointer", fontSize: 13, boxShadow: "0 4px 12px rgba(16,185,129,0.3)" }}
+              >
+                Add To Cart (৳ {(basePrice * quantityInput).toLocaleString()})
+              </button>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ animation: "fadeSlideIn 0.3s ease", position: "relative" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <PageHeader title="Climate-Resilient Circular Marketplace" subtitle="Source verified heat-sensitive components optimized for Dhaka division transit" />
+        <button 
+          onClick={() => setIsCartOpen(true)}
+          style={{
+            background: `linear-gradient(135deg, ${ACCENT.greenLight}, ${ACCENT.greenDark})`,
+            color: "#ffffff",
+            border: "none",
+            borderRadius: "10px",
+            padding: "10px 18px",
+            fontSize: "14px",
+            fontWeight: 700,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            boxShadow: "0 4px 14px rgba(16, 185, 129, 0.4)",
+            transition: "all 0.2s"
+          }}
+          onMouseEnter={e => e.currentTarget.style.transform = "translateY(-1px)"}
+          onMouseLeave={e => e.currentTarget.style.transform = "none"}
+        >
+          🛒 Cart ({cart.reduce((sum, item) => sum + item.quantity, 0)})
+        </button>
+      </div>
+      
+      {/* Filters Bar */}
+      <Card style={{ padding: "16px 24px", marginBottom: 24 }} hover={false}>
+        <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 250px", position: "relative" }}>
+            <span style={{ position: "absolute", left: 14, top: 12, fontSize: 16 }}>🔍</span>
+            <input 
+              type="text" 
+              placeholder="Search products or sellers..." 
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ width: "100%", padding: "12px 16px 12px 42px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", outline: "none", fontSize: 14 }}
+            />
+          </div>
+          
+          <div style={{ flex: "0 0 180px" }}>
+            <select value={category} onChange={e => setCategory(e.target.value)} style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", outline: "none", fontSize: 14, cursor: "pointer" }}>
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
+          <div style={{ flex: "0 0 200px" }}>
+            <select value={minDvs} onChange={e => setMinDvs(Number(e.target.value))} style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", outline: "none", fontSize: 14, cursor: "pointer" }}>
+              <option value={0}>Any DVS Score</option>
+              <option value={75}>DVS 75+ (High Reliability)</option>
+              <option value={90}>DVS 90+ (Critical Transit)</option>
+            </select>
+          </div>
+        </div>
+      </Card>
+
+      {/* Product Grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 20, marginBottom: 80 }}>
+        {filteredProducts.map(p => {
+          const rawPrice = Number((p.price || "").replace(/[৳\s,]/g, ""));
+          const isClearance = p.dvs < 75;
+          const discountedPrice = isClearance ? Math.round(rawPrice * 0.7) : rawPrice;
+          
+          return (
+            <Card 
+              key={p.id} 
+              onClick={() => { setSelectedProduct(p); setQuantityInput(1); }}
+              style={{ padding: "20px 24px", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden", cursor: "pointer" }}
+            >
+              {isClearance ? (
+                <div style={{
+                  position: "absolute",
+                  top: 16,
+                  right: 16,
+                  background: ACCENT.redBg,
+                  color: ACCENT.red,
+                  padding: "4px 10px",
+                  borderRadius: 4,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: "0.05em",
+                  border: `1px solid ${ACCENT.redBorder}`,
+                  animation: "pulseGlow 2s infinite"
+                }}>
+                  ⚡ DYNAMIC CLEARANCE
+                </div>
+              ) : p.badge ? (
+                <div style={{ position: "absolute", top: 16, right: 16, background: p.badge.includes("Critical") ? ACCENT.redBg : ACCENT.blueBg, color: p.badge.includes("Critical") ? ACCENT.red : ACCENT.blue, padding: "4px 10px", borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", border: `1px solid ${p.badge.includes("Critical") ? ACCENT.redBorder : "var(--border-primary)"}` }}>
+                  {p.badge.toUpperCase()}
+                </div>
+              ) : null}
+              
+              <div style={{ fontSize: 36, marginBottom: 16 }}>{p.icon}</div>
+              
+              <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 4 }}>{p.category}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4, lineHeight: 1.3 }}>{p.name}</div>
+              <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 16 }}>{p.seller}</div>
+              
+              <div style={{ marginTop: "auto" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border-primary)" }}>
+                  <div>
+                    {isClearance ? (
+                      <div>
+                        <div style={{ fontSize: 12, textDecoration: "line-through", color: "var(--text-muted)", marginBottom: 2 }}>{p.price}</div>
+                        <div style={{ fontSize: 20, fontWeight: 700, color: ACCENT.red, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>৳ {discountedPrice.toLocaleString()}</div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 20, fontWeight: 700, color: ACCENT.green, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>{p.price}</div>
+                    )}
+                    <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 4 }}>per {p.unit}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: p.dvs >= 90 ? ACCENT.green : p.dvs >= 75 ? ACCENT.blue : ACCENT.amber, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>{p.dvs}</div>
+                    <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 4, fontWeight: 600 }}>DVS SCORE</div>
+                  </div>
+                </div>
+                
+                <button 
+                  onClick={(e) => addToCart(p, 1, e)}
+                  style={{ width: "100%", padding: "10px 0", background: isClearance ? ACCENT.redBg : "var(--bg-input)", border: `1px solid ${isClearance ? ACCENT.redBorder : "var(--border-primary)"}`, borderRadius: 8, color: isClearance ? ACCENT.red : "var(--text-primary)", fontWeight: 600, cursor: "pointer", fontSize: 13, transition: "background 0.2s" }}
+                  onMouseEnter={e => e.currentTarget.style.background = isClearance ? "rgba(239, 68, 68, 0.15)" : ACCENT.greenBg}
+                  onMouseLeave={e => e.currentTarget.style.background = isClearance ? ACCENT.redBg : "var(--bg-input)"}
+                >
+                  Add to Cart
+                </button>
+              </div>
+            </Card>
+          );
+        })}
+        {filteredProducts.length === 0 && (
+          <div style={{ gridColumn: "1 / -1", padding: 60, textAlign: "center", color: "var(--text-secondary)" }}>
+            <div style={{ fontSize: 40, marginBottom: 16 }}>🔍</div>
+            <div style={{ fontSize: 16, fontWeight: 500 }}>No products match your filters.</div>
+          </div>
+        )}
+      </div>
+
+      {/* ── CART SIDEBAR DRAWER ────────────────────────────── */}
+      <div style={{
+        position: "fixed", top: 0, right: 0, width: "100%", height: "100%",
+        backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)", zIndex: 105,
+        opacity: isCartOpen ? 1 : 0, pointerEvents: isCartOpen ? "all" : "none",
+        transition: "opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
+      }} onClick={() => setIsCartOpen(false)}>
+        <div style={{
+          position: "absolute", top: 0, right: 0, width: 380, height: "100%",
+          background: "var(--bg-header)", borderLeft: "1px solid var(--border-primary)",
+          boxShadow: "-4px 0 24px rgba(0,0,0,0.4)", display: "flex", flexDirection: "column",
+          transform: isCartOpen ? "translateX(0)" : "translateX(100%)",
+          transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
+        }} onClick={e => e.stopPropagation()}>
+          
+          {/* Cart Header */}
+          <div style={{ padding: "24px", borderBottom: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 20 }}>🛒</span>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>Shopping Cart</div>
+            </div>
+            <button 
+              onClick={() => setIsCartOpen(false)}
+              style={{ background: "transparent", border: "none", color: "var(--text-secondary)", fontSize: 20, cursor: "pointer" }}
+            >✕</button>
+          </div>
+
+          {/* Cart Body */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
+            {cart.length === 0 ? (
+              <div style={{ padding: "60px 0", textAlign: "center", color: "var(--text-dim)" }}>
+                <span style={{ fontSize: 48, display: "block", marginBottom: 16 }}>🛍️</span>
+                <p>Your cart is empty.</p>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {cart.map(item => {
+                  const rawPrice = Number((item.product.price || "").replace(/[৳\s,]/g, ""));
+                  const isClearance = item.product.dvs < 75;
+                  const unitPrice = isClearance ? Math.round(rawPrice * 0.7) : rawPrice;
+                  return (
+                    <div key={item.product.id} style={{ display: "flex", gap: 14, paddingBottom: 16, borderBottom: "1px solid var(--border-primary)" }}>
+                      <span style={{ fontSize: 28 }}>{item.product.icon}</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700 }}>{item.product.name}</div>
+                        <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 6 }}>৳ {unitPrice} / {item.product.unit}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <button onClick={() => updateCartQuantity(item.product.id, -1)} style={{ width: 24, height: 24, borderRadius: 4, border: "1px solid var(--border-primary)", background: "transparent", color: "var(--text-primary)", cursor: "pointer" }}>-</button>
+                          <span style={{ fontSize: 12, minWidth: 20, textAlign: "center" }}>{item.quantity}</span>
+                          <button onClick={() => updateCartQuantity(item.product.id, 1)} style={{ width: 24, height: 24, borderRadius: 4, border: "1px solid var(--border-primary)", background: "transparent", color: "var(--text-primary)", cursor: "pointer" }}>+</button>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>৳ {(unitPrice * item.quantity).toLocaleString()}</div>
+                        <button onClick={() => removeFromCart(item.product.id)} style={{ background: "transparent", border: "none", color: ACCENT.red, fontSize: 11, cursor: "pointer", marginTop: 8 }}>Remove</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Cart Footer */}
+          {cart.length > 0 && (
+            <div style={{ padding: "24px", borderTop: "1px solid var(--border-primary)", background: "var(--bg-primary)" }}>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: "block", fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Delivery Destination Zone:</label>
+                <select 
+                  value={selectedZone} 
+                  onChange={e => setSelectedZone(e.target.value)} 
+                  style={{ width: "100%", padding: "10px", borderRadius: 6, border: "1px solid var(--border-primary)", background: "var(--bg-header)", color: "var(--text-primary)", fontSize: 13 }}
+                >
+                  {Object.keys(UHI_ZONES).map(key => (
+                    <option key={key} value={key}>{key.replace(/_/g, " ").toUpperCase()}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
+                <span>Subtotal:</span>
+                <span style={{ fontWeight: 600 }}>৳ {cartTotal.toLocaleString()}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 12 }}>
+                <span>Simulated Shipping:</span>
+                <span style={{ fontWeight: 600 }}>৳ {getShippingCost().toLocaleString()}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700, borderTop: "1px solid var(--border-primary)", paddingTop: 10, marginBottom: 20 }}>
+                <span>Total Amount:</span>
+                <span style={{ color: ACCENT.green }}>৳ {(cartTotal + getShippingCost()).toLocaleString()}</span>
+              </div>
+
+              <button 
+                onClick={handleCheckout}
+                disabled={isCheckingOut}
+                style={{
+                  width: "100%", padding: "12px 0", border: "none", borderRadius: 8,
+                  background: `linear-gradient(135deg, ${ACCENT.greenLight}, ${ACCENT.greenDark})`,
+                  color: "#ffffff", fontWeight: 700, fontSize: 14, cursor: "pointer",
+                  boxShadow: "0 4px 12px rgba(16, 185, 129, 0.3)"
+                }}
+              >
+                {isCheckingOut ? "Processing..." : "Place Verified Ledger Order"}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── CHECKOUT SUCCESS MODAL ────────────────────────────── */}
+      {checkoutSuccess && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
+          backgroundColor: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)", zIndex: 120, display: "flex",
+          alignItems: "center", justifyContent: "center", padding: 20
+        }} onClick={() => setCheckoutSuccess(null)}>
+          <div style={{
+            width: "100%", maxWidth: 500, background: "var(--bg-header)",
+            borderRadius: 16, border: `1px solid ${ACCENT.greenBorder}`,
+            boxShadow: "0 20px 50px rgba(0,0,0,0.5)", overflow: "hidden",
+            animation: "fadeSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+            padding: 32, textAlign: "center"
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 54, marginBottom: 16 }}>🎉</div>
+            <h3 style={{ fontSize: 20, fontWeight: 700, color: ACCENT.green, marginBottom: 8 }}>Order Successfully Placed!</h3>
+            <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 24 }}>
+              Your order has been signed and queued for temperature-controlled transit to {checkoutSuccess.zone}.
+            </p>
+
+            <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 8, border: "1px solid var(--border-primary)", textAlign: "left", marginBottom: 24 }}>
+              <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 8 }}>ORDER METADATA</div>
+              <div style={{ fontSize: 12, marginBottom: 4 }}>
+                Order ID: <strong style={{ color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace" }}>{checkoutSuccess.orderId}</strong>
+              </div>
+              <div style={{ fontSize: 12, marginBottom: 4 }}>
+                Items: <strong>{checkoutSuccess.totalItems}</strong> | Total Paid: <strong style={{ color: ACCENT.green }}>৳ {checkoutSuccess.totalPrice.toLocaleString()}</strong>
+              </div>
+              <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 10, wordBreak: "break-all" }}>
+                Ledger Hash: <code style={{ color: ACCENT.blue, fontFamily: "'JetBrains Mono', monospace" }}>{checkoutSuccess.txHash}</code>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => setCheckoutSuccess(null)}
+              style={{ padding: "10px 24px", border: "none", borderRadius: 8, background: ACCENT.green, color: "#ffffff", fontWeight: 600, cursor: "pointer", fontSize: 13 }}
+            >
+              Continue Shopping
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
@@ -4331,10 +4939,6 @@ function CustomSmeView({ products, setProducts, customSmeName, setCustomSmeName 
     </div>
   );
 }
-
-const isValidOrderUuid = (id) =>
-  typeof id === 'string' &&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
 
 function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerificationDispatchZone }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -5070,16 +5674,17 @@ function SystemDocsView({ productsList }) {
   const [subTab, setSubTab] = useState("pitch");
   
   // Settings persisted in localStorage for durability
-  const [visibilityMode, setVisibilityMode] = useState(() => localStorage.getItem("docs_visibility") || "public");
-  const [passphrase, setPassphrase] = useState(() => localStorage.getItem("docs_passphrase") || "climalogix2026");
-  const [startDate, setStartDate] = useState(() => localStorage.getItem("docs_start") || "2026-05-30T00:00");
-  const [endDate, setEndDate] = useState(() => localStorage.getItem("docs_end") || "2026-06-30T23:59");
+  // Always default to public — passphrase gates caused lockout issues in production
+  const [visibilityMode, setVisibilityMode] = useState("public");
+  const [passphrase, setPassphrase] = useState("climalogix2026");
+  const [startDate, setStartDate] = useState("2026-05-30T00:00");
+  const [endDate, setEndDate] = useState("2026-06-30T23:59");
   const [hiddenTabs, setHiddenTabs] = useState(() => {
     const saved = localStorage.getItem("docs_hidden_tabs");
     return saved ? JSON.parse(saved) : [];
   });
   
-  const [isUnlocked, setIsUnlocked] = useState(() => localStorage.getItem("docs_unlocked") === "true");
+  const [isUnlocked, setIsUnlocked] = useState(true);
   const [passInput, setPassInput] = useState("");
   const [passError, setPassError] = useState("");
   const [successAnim, setSuccessAnim] = useState(false);
@@ -5093,9 +5698,30 @@ function SystemDocsView({ productsList }) {
     const saved = localStorage.getItem("docs_team");
     if (saved) return JSON.parse(saved);
     return [
-      { name: "Punam", role: "Lead AI Architect & Full-Stack Developer", email: "punam@climalogix.ai", avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&h=120&q=80" },
-      { name: "Sarah Chowdhury", role: "Operations & Logistics Director", email: "sarah@climalogix.ai", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&h=120&q=80" },
-      { name: "Dr. Ahmed", role: "Agronomy Compliance Advisory Lead (BARI Consultant)", email: "ahmed@climalogix.ai", avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=120&h=120&q=80" }
+      { 
+        name: "Punam", 
+        role: "Lead AI Architect & Full-Stack Developer", 
+        email: "punam@climalogix.ai", 
+        avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80",
+        bio: "Specialist in machine learning orchestration, real-time telemetry pipelines, and database architecture.",
+        contribution: "Designed the BUET-UHI dispatch slotting optimizer and conversational Groq RAG assistant."
+      },
+      { 
+        name: "Sarah Chowdhury", 
+        role: "Operations & Logistics Director", 
+        email: "sarah@climalogix.ai", 
+        avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&h=150&q=80",
+        bio: "Expert in cold-chain logistics coordination and rural agricultural supply chain optimization in Bangladesh.",
+        contribution: "Formulated the Dhaka Division dispatch routes and temperature-exposed spot pricing clearance brackets."
+      },
+      { 
+        name: "Dr. Ahmed", 
+        role: "Agronomy Compliance Advisory Lead (BARI Consultant)", 
+        email: "ahmed@climalogix.ai", 
+        avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80",
+        bio: "Former BARI senior researcher specializing in organic compost validation and soil nutrient optimization.",
+        contribution: "Calibrated the BARI trust-score deterministic pH/EC/Moisture validation guidelines."
+      }
     ];
   });
 
@@ -5104,6 +5730,19 @@ function SystemDocsView({ productsList }) {
   const [newMemberRole, setNewMemberRole] = useState("");
   const [newMemberEmail, setNewMemberEmail] = useState("");
   const [newMemberAvatar, setNewMemberAvatar] = useState("");
+  const [newMemberBio, setNewMemberBio] = useState("");
+  const [newMemberContribution, setNewMemberContribution] = useState("");
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewMemberAvatar(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Sync to localStorage
   useEffect(() => { localStorage.setItem("docs_visibility", visibilityMode); }, [visibilityMode]);
@@ -5174,13 +5813,17 @@ function SystemDocsView({ productsList }) {
       name: newMemberName,
       role: newMemberRole,
       email: newMemberEmail || `${newMemberName.toLowerCase().replace(/\s+/g, '')}@climalogix.ai`,
-      avatar: avatarUrl
+      avatar: avatarUrl,
+      bio: newMemberBio.trim() || "EcoWeather SME Team Member.",
+      contribution: newMemberContribution.trim() || "Developed core functionality."
     }]);
 
     setNewMemberName("");
     setNewMemberRole("");
     setNewMemberEmail("");
     setNewMemberAvatar("");
+    setNewMemberBio("");
+    setNewMemberContribution("");
   };
 
   const handleRemoveMember = (idx) => {
@@ -5392,66 +6035,116 @@ function SystemDocsView({ productsList }) {
             <SectionLabel icon="📐" text="CLimaLogix Technical Architecture" />
             <Card hover={false}>
               <h3 style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", marginBottom: 16 }}>
-                {"Unified System Dataflow Pipeline"}
+                {"Current Production Architecture (v2.0)"}
               </h3>
               <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 24 }}>
-                {"The pipeline dynamically processes operator-signed registration events, maps localized thermal risks, evaluates compliance standards, and schedules delivery slots."}
+                {"CLimaLogix ClimateShield runs as a decoupled frontend + TypeScript Express backend deployed on Render, with Supabase for data persistence and Groq LLM for AI-powered agricultural assistance."}
               </p>
 
-              {/* GORGEOUS PREMIUM FLOWCHART */}
+              {/* TECH STACK SUMMARY */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 24 }}>
+                {[
+                  { label: "Frontend", items: "React 18 (CDN) + Babel in-browser JSX", color: ACCENT.blue },
+                  { label: "Backend", items: "TypeScript Express v4 on Node ≥18", color: ACCENT.green },
+                  { label: "Database", items: "Supabase (PostgreSQL + Auth + Realtime)", color: "#a855f7" },
+                  { label: "AI / LLM", items: "Groq SDK (Llama 3) — RAG + intent classifier", color: ACCENT.amber },
+                  { label: "Weather", items: "OpenWeather API (live UHI-adjusted temps)", color: ACCENT.red },
+                  { label: "Hosting", items: "Render (static site + web service)", color: "#94a3b8" },
+                ].map((s, i) => (
+                  <div key={i} style={{ padding: 12, borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-primary)" }}>
+                    <div style={{ fontSize: 9, color: s.color, fontWeight: 700, letterSpacing: "0.08em", marginBottom: 4 }}>{s.label.toUpperCase()}</div>
+                    <div style={{ fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.5 }}>{s.items}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* ARCHITECTURE FLOWCHART */}
               <div style={{ display: "flex", flexDirection: "column", gap: 16, alignItems: "center", background: "var(--bg-primary)", padding: 24, borderRadius: 12, border: "1px solid var(--border-primary)" }}>
                 
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <div style={{ background: "rgba(59, 130, 246, 0.1)", border: `1px solid ${ACCENT.blue}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: ACCENT.blue, fontWeight: 700 }}>
-                    {"1. MANUAL REGISTRATION (Operator-signed + BARI standards)"}
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
+                  <div style={{ background: "rgba(59, 130, 246, 0.1)", border: `1px solid ${ACCENT.blue}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: ACCENT.blue, fontWeight: 700, textAlign: "center" }}>
+                    {"1. OPERATOR REGISTRATION"}<br />
+                    <span style={{ fontSize: 9, fontWeight: 500, opacity: 0.8 }}>{"Manual batch sign + SHA-256 hash"}</span>
                   </div>
                   <div style={{ color: "var(--text-dim)", fontWeight: 700 }}>{"→"}</div>
-                  <div style={{ background: "rgba(245, 158, 11, 0.1)", border: `1px solid ${ACCENT.amber}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: ACCENT.amber, fontWeight: 700 }}>
-                    {"2. EXPRESS INGESTION ENGINE"}
+                  <div style={{ background: "rgba(245, 158, 11, 0.1)", border: `1px solid ${ACCENT.amber}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: ACCENT.amber, fontWeight: 700, textAlign: "center" }}>
+                    {"2. TRUST SCORE ENGINE"}<br />
+                    <span style={{ fontSize: 9, fontWeight: 500, opacity: 0.8 }}>{"Zod-validated IoT params → score 0-100"}</span>
                   </div>
                 </div>
 
                 <div style={{ color: "var(--text-dim)", fontWeight: 700, fontSize: 16 }}>{"↓"}</div>
 
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
                   <div style={{ background: "rgba(16, 185, 129, 0.1)", border: `1px solid ${ACCENT.green}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: ACCENT.green, fontWeight: 700, textAlign: "center" }}>
-                    {"3. MICROCLIMATE RISK MODEL (MERM)"}<br />
-                    <span style={{ fontSize: 9, fontWeight: 500, opacity: 0.8 }}>{"Computes UHI offset & adjusted temp"}</span>
+                    {"3. MERM + DVS ENGINE"}<br />
+                    <span style={{ fontSize: 9, fontWeight: 500, opacity: 0.8 }}>{"UHI offsets × 50+ Dhaka zones"}</span>
                   </div>
                   <div style={{ color: "var(--text-dim)", fontWeight: 700 }}>{"↔"}</div>
                   <div style={{ background: "rgba(139, 92, 246, 0.1)", border: "1px solid #8B5CF6", padding: "10px 16px", borderRadius: 8, fontSize: 12, color: "#a78bfa", fontWeight: 700, textAlign: "center" }}>
-                    {"4. BARI COMPLIANCE KB"}<br />
-                    <span style={{ fontSize: 9, fontWeight: 500, opacity: 0.8 }}>{"pgvector cosine distance queries"}</span>
+                    {"4. RAG + GROQ AI AGENT"}<br />
+                    <span style={{ fontSize: 9, fontWeight: 500, opacity: 0.8 }}>{"BARI KB retrieval + intent classification"}</span>
                   </div>
                 </div>
 
                 <div style={{ color: "var(--text-dim)", fontWeight: 700, fontSize: 16 }}>{"↓"}</div>
 
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <div style={{ background: "rgba(239, 68, 68, 0.1)", border: `1px solid ${ACCENT.red}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: ACCENT.red, fontWeight: 700 }}>
-                    {"5. DVS SCHEDULER & VIABILITY GRADES"}
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
+                  <div style={{ background: "rgba(239, 68, 68, 0.1)", border: `1px solid ${ACCENT.red}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: ACCENT.red, fontWeight: 700, textAlign: "center" }}>
+                    {"5. ORDER LIFECYCLE"}<br />
+                    <span style={{ fontSize: 9, fontWeight: 500, opacity: 0.8 }}>{"Create → Dispatch → Receipt → Verify"}</span>
                   </div>
                   <div style={{ color: "var(--text-dim)", fontWeight: 700 }}>{"→"}</div>
-                  <div style={{ background: "rgba(16, 185, 129, 0.2)", border: `2px solid ${ACCENT.green}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: "#ffffff", fontWeight: 700, boxShadow: `0 0 12px ${ACCENT.greenBg}` }}>
-                    {"6. COMPLIANT ORDER ROUTED"}
+                  <div style={{ background: "rgba(16, 185, 129, 0.2)", border: `2px solid ${ACCENT.green}`, padding: "10px 16px", borderRadius: 8, fontSize: 12, color: "#ffffff", fontWeight: 700, boxShadow: `0 0 12px ${ACCENT.greenBg}`, textAlign: "center" }}>
+                    {"6. ESG LEDGER + MARKETPLACE"}<br />
+                    <span style={{ fontSize: 9, fontWeight: 500, opacity: 0.8 }}>{"Impact reporting + buyer verification"}</span>
                   </div>
                 </div>
 
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 24 }}>
-                <div style={{ padding: 14, borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-primary)" }}>
-                  <h4 style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>{"High-Velocity Ingestion Stack"}</h4>
-                  <p style={{ fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.5 }}>
-                    {"Saves raw microclimate datasets, community observation records, and dispatch schedules dynamically using direct ORM mapping to database layers."}
-                  </p>
-                </div>
-                <div style={{ padding: 14, borderRadius: 10, background: "var(--bg-input)", border: "1px solid var(--border-primary)" }}>
-                  <h4 style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>{"BARI pgvector Search Engine"}</h4>
-                  <p style={{ fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.5 }}>
-                    {"Retrieves official standards chunk by chunk using pgvector semantic query mapping inside organic compliance database schemas."}
-                  </p>
-                </div>
+              {/* BACKEND API ROUTES */}
+              <h4 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginTop: 24, marginBottom: 12 }}>{"Backend API Routes (TypeScript Express)"}</h4>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                {[
+                  { route: "/api/batches", desc: "Batch CRUD operations & memory registry with optional Supabase persistence" },
+                  { route: "/api/batch/trust-score", desc: "BARI-calibrated deterministic QA parameter validation & grading" },
+                  { route: "/api/verify/:batch_id", desc: "Cryptographic SHA-256 lot provenance chain & signature verification" },
+                  { route: "/api/climate/dvs", desc: "Delivery Viability Slotting simulator incorporating localized thermal risk" },
+                  { route: "/api/spot-pricing", desc: "Heat-sensitive dynamic clearance markdown calculations" },
+                  { route: "/api/orders/voice", desc: "Natural Language Processing checkout using Groq parser" },
+                  { route: "/api/orders", desc: "Order creation, dispatch tracking, and delivery receipts" },
+                  { route: "/api/esg/report", desc: "Carbon sequestration and packaging circular metric reporting" },
+                  { route: "/api/agent/message", desc: "Bangla Conversational RAG assistant gateway" },
+                  { route: "/api/checkout", desc: "Validated cart checkout transaction ledger registration" }
+                ].map((r, i) => (
+                  <div key={i} style={{ padding: 10, borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)", display: "flex", flexDirection: "column", gap: 3 }}>
+                    <code style={{ fontSize: 11, color: ACCENT.green, fontFamily: "'JetBrains Mono', monospace" }}>{r.route}</code>
+                    <span style={{ fontSize: 10, color: "var(--text-dim)" }}>{r.desc}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* BACKEND SERVICES */}
+              <h4 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginTop: 24, marginBottom: 12 }}>{"Core Service Modules"}</h4>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                {[
+                  { svc: "trustScore.service.ts", desc: "Deterministic QA evaluation using pH, EC, temperature, and composting days" },
+                  { svc: "dvs.service.ts", desc: "Calculates dynamic delivery slots by integrating weather telemetry and UHI offsets" },
+                  { svc: "merm.service.ts", desc: "Microclimate Exposure Risk Model mapping localized heating across 50+ sectors" },
+                  { svc: "agentOrchestrator.service.ts", desc: "Orchestrates multi-turn chat sessions and forwards queries to sub-agents" },
+                  { svc: "rag.service.ts", desc: "Semantic search retrieval on BARI agricultural guidelines" },
+                  { svc: "orderExecution.service.ts", desc: "Executes state transition hooks for batches during delivery lifecycle" },
+                  { svc: "provenance.service.ts", desc: "Computes cryptographic signature validation and SHA-256 blocks" },
+                  { svc: "qaIngestion.service.ts", desc: "Validates compost laboratory reports via schemas" },
+                  { svc: "weather.service.ts", desc: "Fetches current temperature and humidity data via OpenWeather API" },
+                  { svc: "language.service.ts", desc: "Detects languages and performs bidirectional translations" },
+                ].map((s, i) => (
+                  <div key={i} style={{ padding: 10, borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)", display: "flex", flexDirection: "column", gap: 3 }}>
+                    <code style={{ fontSize: 11, color: "#a78bfa", fontFamily: "'JetBrains Mono', monospace" }}>{s.svc}</code>
+                    <span style={{ fontSize: 10, color: "var(--text-dim)" }}>{s.desc}</span>
+                  </div>
+                ))}
               </div>
             </Card>
           </div>
@@ -5577,27 +6270,38 @@ function SystemDocsView({ productsList }) {
           <div style={{ animation: "fadeSlideIn 0.35s ease" }}>
             <SectionLabel icon="👥" text="CLimaLogix AI Project Team" />
             
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 20, marginBottom: 28 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 20, marginBottom: 28 }}>
               {team.map((m, i) => (
-                <Card key={i} style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                <Card key={i} style={{ display: "flex", gap: 20, alignItems: "flex-start", padding: 24 }}>
                   <img 
                     src={m.avatar} 
                     alt={m.name} 
-                    style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover", border: "2px solid var(--border-primary)" }}
+                    style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover", border: `2px solid ${ACCENT.green}`, boxShadow: "0 4px 12px rgba(16,185,129,0.2)" }}
                   />
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>{m.name}</div>
-                    <div style={{ fontSize: 11, color: ACCENT.green, fontWeight: 600, marginTop: 2, marginBottom: 4 }}>{m.role}</div>
-                    <div style={{ fontSize: 11, color: "var(--text-dim)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{m.email}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{m.name}</div>
+                        <div style={{ fontSize: 12, color: ACCENT.green, fontWeight: 700, marginTop: 2, marginBottom: 6 }}>{m.role}</div>
+                      </div>
+                      {/* Remove button inside team showcase */}
+                      <button 
+                        onClick={() => handleRemoveMember(i)}
+                        style={{ background: "transparent", border: "none", color: ACCENT.red, cursor: "pointer", fontSize: 16 }}
+                        title="Remove member"
+                      >
+                        {"🗑️"}
+                      </button>
+                    </div>
+                    
+                    <div style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 10 }}>
+                      <strong>Bio:</strong> {m.bio}
+                    </div>
+                    <div style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 10 }}>
+                      <strong>Key Build Contribution:</strong> {m.contribution}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>📧 {m.email}</div>
                   </div>
-                  {/* Remove button inside team showcase */}
-                  <button 
-                    onClick={() => handleRemoveMember(i)}
-                    style={{ marginLeft: "auto", background: "none", border: "none", color: ACCENT.red, cursor: "pointer", fontSize: 14 }}
-                    title="Remove member"
-                  >
-                    {"🗑️"}
-                  </button>
                 </Card>
               ))}
             </div>
@@ -5611,22 +6315,44 @@ function SystemDocsView({ productsList }) {
                 <input 
                   type="text" placeholder="Name" value={newMemberName} 
                   onChange={e => setNewMemberName(e.target.value)}
-                  style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+                  style={{ padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
                 />
                 <input 
                   type="text" placeholder="Role" value={newMemberRole} 
                   onChange={e => setNewMemberRole(e.target.value)}
-                  style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+                  style={{ padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
                 />
                 <input 
                   type="text" placeholder="Email (Optional)" value={newMemberEmail} 
                   onChange={e => setNewMemberEmail(e.target.value)}
-                  style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+                  style={{ padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+                />
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input 
+                    type="file" accept="image/*" onChange={handleImageUpload}
+                    style={{ display: "none" }} id="member-photo-upload"
+                  />
+                  <label htmlFor="member-photo-upload" style={{ padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-secondary)", fontSize: 13, cursor: "pointer", display: "inline-block", flex: 1, textAlign: "center" }}>
+                    📷 Upload Photo File
+                  </label>
+                  {newMemberAvatar && (
+                    <img src={newMemberAvatar} alt="Upload preview" style={{ width: 44, height: 44, borderRadius: "50%", objectFit: "cover", border: `1px solid ${ACCENT.green}` }} />
+                  )}
+                </div>
+                <input 
+                  type="text" placeholder="Avatar URL (Optional - Fallback)" value={newMemberAvatar.startsWith("data:") ? "" : newMemberAvatar} 
+                  onChange={e => setNewMemberAvatar(e.target.value)}
+                  style={{ padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none", gridColumn: "1 / -1" }}
                 />
                 <input 
-                  type="text" placeholder="Avatar URL (Optional)" value={newMemberAvatar} 
-                  onChange={e => setNewMemberAvatar(e.target.value)}
-                  style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+                  type="text" placeholder="Short Bio" value={newMemberBio} 
+                  onChange={e => setNewMemberBio(e.target.value)}
+                  style={{ padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none", gridColumn: "1 / -1" }}
+                />
+                <input 
+                  type="text" placeholder="Key Contribution" value={newMemberContribution} 
+                  onChange={e => setNewMemberContribution(e.target.value)}
+                  style={{ padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none", gridColumn: "1 / -1" }}
                 />
               </div>
               <button 
@@ -5733,6 +6459,54 @@ function SystemDocsView({ productsList }) {
                 </div>
               </div>
 
+              {/* SYSTEM SIMULATOR */}
+              <div style={{ borderTop: "1px solid var(--border-primary)", paddingTop: 20 }}>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>
+                  {"Staging & Telemetry Simulators"}
+                </label>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)" }}>
+                    <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Mock Supabase Database Connection</span>
+                    <button
+                      onClick={() => alert("Supabase Connection Status: Connected (SSL Secure, 2 active client channels).")}
+                      style={{ padding: "6px 14px", borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: "pointer", border: "none", background: ACCENT.greenBg, color: ACCENT.green }}
+                    >
+                      ✓ CONNECTED
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)" }}>
+                    <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Circular ESG Offset Multiplier</span>
+                    <input 
+                      type="number" defaultValue="1.5" step="0.1"
+                      style={{ width: 80, padding: 6, borderRadius: 6, border: "1px solid var(--border-primary)", background: "var(--bg-header)", color: "var(--text-primary)", textAlign: "center", fontSize: 13 }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)" }}>
+                    <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Simulated Environmental Heat Hazard Lot</span>
+                    <button
+                      onClick={() => {
+                        const randomId = Math.floor(100000 + Math.random() * 900000);
+                        const mockBatch = {
+                          id: `batch-${randomId}`,
+                          batch_number: `CL-${randomId}`,
+                          product_name: "Simulated Organic Composites",
+                          destination_zone: "Old Dhaka",
+                          weight_kg: 500,
+                          trust_score: 95,
+                          status: "certified",
+                          created_at: new Date().toISOString()
+                        };
+                        window.__SEED_BATCHES__ = [mockBatch, ...(window.__SEED_BATCHES__ || [])];
+                        alert(`Injected simulated certified hazard lot CL-${randomId} to destination zone "Old Dhaka"!`);
+                      }}
+                      style={{ padding: "6px 14px", borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: "pointer", border: "none", background: ACCENT.blueBg, color: ACCENT.blue }}
+                    >
+                      ⚡ INJECT BATCH
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <div style={{ borderTop: "1px solid var(--border-primary)", paddingTop: 24, display: "flex", gap: 16 }}>
                 <button 
                   onClick={resetAllSettings}
@@ -5771,19 +6545,20 @@ const LAYER_META = {
   LX: { name: "Assist",       color: "#f59e0b", bg: "rgba(245,158,11,0.10)",  border: "rgba(245,158,11,0.35)" },
 };
 const TABS = [
-  { label: "Overall Dashboard",       icon: "⊞",  layer: "L0" },
-  { label: "Batches",                 icon: "📦", layer: "L1" },
-  { label: "Batch Verification",      icon: "✅", layer: "L1" },
-  { label: "Microclimate Intelligence", icon: "🌡️", layer: "L2" },
-  { label: "Climate Demand",          icon: "📊", layer: "L2" },
-  { label: "Business Intelligence",   icon: "🧠", layer: "L2" },
-  { label: "Impact & ESG",            icon: "🌱", layer: "L3" },
-  { label: "Marketplace",             icon: "🛒", layer: "L3" },
-  { label: "Chatbot",                 icon: "💬", layer: "LX" }
+  { id: "dashboard",    label: "Overall Dashboard",       icon: "⊞",  layer: "L0" },
+  { id: "batches",      label: "Batches",                 icon: "📦", layer: "L1" },
+  { id: "verification", label: "Batch Verification",      icon: "✅", layer: "L1" },
+  { id: "microclimate", label: "Microclimate Intelligence", icon: "🌡️", layer: "L2" },
+  { id: "demand",       label: "Climate Demand",          icon: "📊", layer: "L2" },
+  { id: "bi",           label: "Business Intelligence",   icon: "🧠", layer: "L2" },
+  { id: "chatbot",      label: "Chatbot",                 icon: "💬", layer: "LX" },
+  { id: "marketplace",  label: "Marketplace",             icon: "🛒", layer: "L3" },
+  { id: "esg",          label: "Impact & ESG",            icon: "🌱", layer: "L3" }
 ];
 
 function CLimaLogixApp() {
-  const [tab, setTab] = useState(0);
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [trustScore, setTrustScore] = useState(84);
   // Full deterministic trust score envelope from /api/batch/trust-score
   // { score, grade, isViable, category, breakdown, reference, notes }
@@ -5796,6 +6571,30 @@ function CLimaLogixApp() {
   const [customSmeName, setCustomSmeName] = useState("My Custom SME");
   const [verificationBatchId, setVerificationBatchId] = useState("");
   const [verificationDispatchZone, setVerificationDispatchZone] = useState("");
+
+  const setTab = (target) => {
+    if (typeof target === "number") {
+      const legacyMap = {
+        0: "dashboard",
+        1: "batches",
+        2: "verification",
+        3: "microclimate",
+        4: "demand",
+        5: "bi",
+        6: "esg",
+        7: "marketplace",
+        8: "chatbot",
+        9: "configurator",
+        10: "docs"
+      };
+      const id = legacyMap[target];
+      if (id) {
+        setActiveTab(id);
+      }
+    } else if (typeof target === "string") {
+      setActiveTab(target);
+    }
+  };
 
   // Calculate Generalized Dhaka Division Scores (averaging all zones in Dhaka Division)
   const calcGeneralizedScores = (ts) => {
@@ -5815,17 +6614,14 @@ function CLimaLogixApp() {
 
   const activeTabs = [...TABS];
   if (selectedSme === "custom_sme") {
-    activeTabs.push({ label: "SME Configurator", icon: "🛠️" });
+    activeTabs.push({ id: "configurator", label: "SME Configurator", icon: "🛠️" });
   }
-  activeTabs.push({ label: "System Docs", icon: "📖" });
+  activeTabs.push({ id: "docs", label: "System Docs", icon: "📖" });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("tab") === "docs") {
-      const idx = activeTabs.findIndex(t => t.label === "System Docs");
-      if (idx !== -1) {
-        setTab(idx);
-      }
+      setActiveTab("docs");
     }
   }, [activeTabs.length]);
 
@@ -5875,6 +6671,122 @@ function CLimaLogixApp() {
         ::selection { background: rgba(16,185,129,0.3); }
       `}</style>
 
+      {/* ── LEFT SLIDING DRAWER NAVBAR ───────────────────────── */}
+      <div style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: "100%",
+        height: "100%",
+        backgroundColor: "rgba(0, 0, 0, 0.55)",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
+        zIndex: 100,
+        opacity: isDrawerOpen ? 1 : 0,
+        pointerEvents: isDrawerOpen ? "all" : "none",
+        transition: "opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+      }} onClick={() => setIsDrawerOpen(false)}>
+        <div style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: 320,
+          height: "100%",
+          background: "var(--bg-header)",
+          borderRight: "1px solid var(--border-primary)",
+          boxShadow: "4px 0 24px rgba(0, 0, 0, 0.4)",
+          display: "flex",
+          flexDirection: "column",
+          transform: isDrawerOpen ? "translateX(0)" : "translateX(-100%)",
+          transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+        }} onClick={e => e.stopPropagation()}>
+          {/* Drawer Header */}
+          <div style={{
+            padding: "24px",
+            borderBottom: "1px solid var(--border-primary)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 20 }}>🌱</span>
+              <div style={{ fontWeight: 700, fontSize: 16, color: "var(--text-primary)" }}>Navigation Menu</div>
+            </div>
+            <button 
+              onClick={() => setIsDrawerOpen(false)}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "var(--text-secondary)",
+                fontSize: 20,
+                cursor: "pointer"
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Drawer Tabs */}
+          <div style={{
+            flex: 1,
+            overflowY: "auto",
+            padding: "20px 16px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 6
+          }}>
+            {activeTabs.map((t) => {
+              const layerMeta = LAYER_META[t.layer || "L0"] || LAYER_META.L0;
+              const isActive = activeTab === t.id;
+              return (
+                <button 
+                  key={t.id} 
+                  onClick={() => {
+                    setActiveTab(t.id);
+                    setIsDrawerOpen(false);
+                  }}
+                  title={`${layerMeta.name} layer`}
+                  style={{
+                    padding: "12px 16px",
+                    border: "none",
+                    background: isActive ? layerMeta.bg : "transparent",
+                    color: isActive ? layerMeta.color : "var(--text-secondary)",
+                    cursor: "pointer",
+                    borderRadius: "8px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    textAlign: "left",
+                    fontWeight: isActive ? 600 : 400,
+                    transition: "all 0.2s",
+                    borderLeft: isActive ? `3px solid ${layerMeta.color}` : "3px solid transparent",
+                  }}
+                  onMouseEnter={e => {
+                    if (!isActive) e.currentTarget.style.background = "var(--bg-input)";
+                  }}
+                  onMouseLeave={e => {
+                    if (!isActive) e.currentTarget.style.background = "transparent";
+                  }}
+                >
+                  <span style={{ fontSize: 16 }}>{t.icon}</span>
+                  <div style={{ flex: 1, fontSize: 13, letterSpacing: "0.02em" }}>
+                    {t.label}
+                  </div>
+                  {t.layer && t.layer !== "L0" && t.layer !== "LX" && (
+                    <span style={{
+                      fontSize: 8, padding: "2px 6px", borderRadius: 4,
+                      background: layerMeta.bg, color: layerMeta.color,
+                      border: `1px solid ${layerMeta.border}`,
+                      letterSpacing: "0.08em", fontWeight: 700,
+                    }}>{t.layer}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
       {/* ── HEADER ────────────────────────────────────────────── */}
       <header style={{
         borderBottom: "1px solid var(--border-primary)",
@@ -5887,6 +6799,28 @@ function CLimaLogixApp() {
         backgroundImage: `linear-gradient(to right, ${ACCENT.green}08, transparent 50%)`,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <button 
+            onClick={() => setIsDrawerOpen(true)}
+            style={{
+              background: "var(--bg-input)",
+              border: "1px solid var(--border-primary)",
+              color: "var(--text-primary)",
+              padding: "8px 12px",
+              borderRadius: "8px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 14,
+              fontWeight: 600,
+              marginRight: 8,
+              transition: "all 0.2s"
+            }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = ACCENT.green}
+            onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border-primary)"}
+          >
+            <span style={{ fontSize: 16 }}>☰</span> Menu
+          </button>
           <div style={{
             width: 36, height: 36, borderRadius: 10,
             background: `linear-gradient(135deg, ${ACCENT.greenLight}, ${ACCENT.greenDark})`,
@@ -5906,9 +6840,9 @@ function CLimaLogixApp() {
                 const val = e.target.value;
                 setSelectedSme(val);
                 if (val === "custom_sme") {
-                  setTab(9);
+                  setTab("configurator");
                 } else {
-                  setTab(0);
+                  setTab("dashboard");
                 }
               }}
               style={{
@@ -5945,60 +6879,19 @@ function CLimaLogixApp() {
         </div>
       </header>
 
-      {/* ── TAB BAR ───────────────────────────────────────────── */}
-      <nav style={{
-        display: "flex", gap: 2,
-        borderBottom: "1px solid var(--border-primary)",
-        background: "var(--bg-header)",
-        backdropFilter: "var(--backdrop-blur)",
-        WebkitBackdropFilter: "var(--backdrop-blur)",
-        paddingLeft: 28,
-      }}>
-        {activeTabs.map((t, i) => {
-          const layerMeta = LAYER_META[t.layer || "L0"] || LAYER_META.L0;
-          const isActive = tab === i;
-          return (
-            <button key={t.label} onClick={() => setTab(i)}
-              title={`${layerMeta.name} layer`}
-              style={{
-                padding: "10px 14px", border: "none",
-                background: isActive ? layerMeta.bg : "transparent",
-                color: isActive ? layerMeta.color : "var(--text-dim)",
-                fontSize: 11, cursor: "pointer",
-                borderBottom: isActive ? `2px solid ${layerMeta.color}` : "2px solid transparent",
-                fontFamily: "inherit", letterSpacing: "0.06em", fontWeight: isActive ? 600 : 400,
-                transition: "all 0.3s ease",
-                borderRadius: "8px 8px 0 0",
-                display: "flex", alignItems: "center", gap: 6,
-                position: "relative",
-              }}>
-              <span style={{ fontSize: 13 }}>{t.icon}</span>
-              {t.label.toUpperCase()}
-              {t.layer && t.layer !== "L0" && t.layer !== "LX" && (
-                <span style={{
-                  fontSize: 8, padding: "1px 5px", borderRadius: 3,
-                  background: layerMeta.bg, color: layerMeta.color,
-                  border: `1px solid ${layerMeta.border}`,
-                  letterSpacing: "0.08em", fontWeight: 700,
-                }}>{t.layer}</span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
-
       {/* ── CONTENT ───────────────────────────────────────────── */}
       <main style={{ padding: "32px 48px", width: "100%", margin: "0 auto" }}>
-        {tab === 0 && <DashboardView onNewBatch={() => { setTab(1); setIsRegisteringBatch(true); }} />}
+        {activeTab === "dashboard" && <DashboardView onNewBatch={() => { setTab("batches"); setIsRegisteringBatch(true); }} />}
         
-        {tab === 1 && (
+        {activeTab === "batches" && (
           isRegisteringBatch 
             ? <RegisterBatch onCancel={() => setIsRegisteringBatch(false)} />
             : <BatchRegistry onNewBatch={() => setIsRegisteringBatch(true)} />
         )}
 
-        {tab === 2 && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, animation: "fadeSlideIn 0.4s ease" }}>
+        {activeTab === "verification" && (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, animation: "fadeSlideIn 0.4s ease" }}>
             <div>
               <SectionLabel icon="✅" text="Batch Verification" />
               <Card>
@@ -6097,9 +6990,10 @@ function CLimaLogixApp() {
               <ClaimVerifier onSelectBatch={(id) => setVerificationBatchId(id)} />
             </Card>
           </div>
+          </>
         )}
 
-        {tab === 3 && (
+        {activeTab === "microclimate" && (
           <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
             <SectionLabel icon="🌡️" text="Delivery Viability Simulator" />
             <Card>
@@ -6108,7 +7002,7 @@ function CLimaLogixApp() {
           </div>
         )}
 
-        {tab === 4 && (
+        {activeTab === "demand" && (
           <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
             <SectionLabel icon="📊" text="Market Intelligence" />
             <Card>
@@ -6117,17 +7011,17 @@ function CLimaLogixApp() {
           </div>
         )}
 
-        {tab === 5 && <BusinessIntelligenceView trustScore={trustScore} dvs={dvs} />}
+        {activeTab === "bi" && <BusinessIntelligenceView trustScore={trustScore} dvs={dvs} />}
 
-        {tab === 6 && (
+        {activeTab === "esg" && (
           <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
             <SectionLabel icon="🌱" text="ESG Ledger" />
             <ESGCard trustScore={trustScore} dvs={dvs} />
           </div>
         )}
 
-        {tab === 7 && <MarketplaceView products={productsList} />}
-        {tab === 8 && (
+        {activeTab === "marketplace" && <MarketplaceView products={productsList} />}
+        {activeTab === "chatbot" && (
           <ChatbotView
             setTab={setTab}
             products={productsList}
@@ -6135,7 +7029,7 @@ function CLimaLogixApp() {
             setVerificationDispatchZone={setVerificationDispatchZone}
           />
         )}
-        {tab === 9 && selectedSme === "custom_sme" && (
+        {activeTab === "configurator" && selectedSme === "custom_sme" && (
           <CustomSmeView
             products={productsList}
             setProducts={setProductsList}
@@ -6143,7 +7037,7 @@ function CLimaLogixApp() {
             setCustomSmeName={setCustomSmeName}
           />
         )}
-        {activeTabs[tab]?.label === "System Docs" && (
+        {activeTab === "docs" && (
           <SystemDocsView productsList={productsList} />
         )}
       </main>

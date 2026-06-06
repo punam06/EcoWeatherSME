@@ -368,7 +368,7 @@
     <script type="text/babel" src="./components/LanguageSelector/LanguageSelector.jsx"></script>
     <script type="text/babel" src="./AuthPanel.jsx"></script>
     <script type="text/babel">
-    const { useState, useEffect, useRef, useCallback, useMemo } = React;
+    const { useState, useEffect, useRef, useCallback } = React;
 
 const IS_STATIC_FILE_HTML = window.location.protocol === 'file:';
 // Backend API base URL. The production backend that the live dashboard talks
@@ -6100,6 +6100,19 @@ function SystemDocsView({ productsList }) {
   const [newMemberRole, setNewMemberRole] = useState("");
   const [newMemberEmail, setNewMemberEmail] = useState("");
   const [newMemberAvatar, setNewMemberAvatar] = useState("");
+  const [newMemberBio, setNewMemberBio] = useState("");
+  const [newMemberContribution, setNewMemberContribution] = useState("");
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewMemberAvatar(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Sync to localStorage
   useEffect(() => { localStorage.setItem("docs_visibility", visibilityMode); }, [visibilityMode]);
@@ -6170,13 +6183,17 @@ function SystemDocsView({ productsList }) {
       name: newMemberName,
       role: newMemberRole,
       email: newMemberEmail || `${newMemberName.toLowerCase().replace(/\s+/g, '')}@climalogix.ai`,
-      avatar: avatarUrl
+      avatar: avatarUrl,
+      bio: newMemberBio.trim() || "EcoWeather SME Team Member.",
+      contribution: newMemberContribution.trim() || "Developed core functionality."
     }]);
 
     setNewMemberName("");
     setNewMemberRole("");
     setNewMemberEmail("");
     setNewMemberAvatar("");
+    setNewMemberBio("");
+    setNewMemberContribution("");
   };
 
   const handleRemoveMember = (idx) => {
@@ -6460,15 +6477,16 @@ function SystemDocsView({ productsList }) {
               <h4 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginTop: 24, marginBottom: 12 }}>{"Backend API Routes (TypeScript Express)"}</h4>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 {[
-                  { route: "/api/batch", desc: "Batch CRUD & Registry with Supabase persistence" },
-                  { route: "/api/trust-score", desc: "BARI-calibrated deterministic QA engine" },
-                  { route: "/api/verify", desc: "Cryptographic signature & lot claims validation" },
-                  { route: "/api/climate-dvs", desc: "BUET UHI Delivery Viability Slotting simulator" },
-                  { route: "/api/spot-pricing", desc: "Heat-sensitive markdown pricing adjustments" },
-                  { route: "/api/checkout/voice", desc: "Voice Checkout natural language processing" },
-                  { route: "/api/order", desc: "Lot dispatch & delivery receipt transitions ledger" },
-                  { route: "/api/esg-report", desc: "Sustainable circular accruals monthly ledger" },
+                  { route: "/api/batches", desc: "Batch CRUD operations & memory registry with optional Supabase persistence" },
+                  { route: "/api/batch/trust-score", desc: "BARI-calibrated deterministic QA parameter validation & grading" },
+                  { route: "/api/verify/:batch_id", desc: "Cryptographic SHA-256 lot provenance chain & signature verification" },
+                  { route: "/api/climate/dvs", desc: "Delivery Viability Slotting simulator incorporating localized thermal risk" },
+                  { route: "/api/spot-pricing", desc: "Heat-sensitive dynamic clearance markdown calculations" },
+                  { route: "/api/orders/voice", desc: "Natural Language Processing checkout using Groq parser" },
+                  { route: "/api/orders", desc: "Order creation, dispatch tracking, and delivery receipts" },
+                  { route: "/api/esg/report", desc: "Carbon sequestration and packaging circular metric reporting" },
                   { route: "/api/agent/message", desc: "Bangla Conversational RAG assistant gateway" },
+                  { route: "/api/checkout", desc: "Validated cart checkout transaction ledger registration" }
                 ].map((r, i) => (
                   <div key={i} style={{ padding: 10, borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)", display: "flex", flexDirection: "column", gap: 3 }}>
                     <code style={{ fontSize: 11, color: ACCENT.green, fontFamily: "'JetBrains Mono', monospace" }}>{r.route}</code>
@@ -6481,16 +6499,16 @@ function SystemDocsView({ productsList }) {
               <h4 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginTop: 24, marginBottom: 12 }}>{"Core Service Modules"}</h4>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 {[
-                  { svc: "trustScore.service", desc: "IoT parameter scoring with BARI compliance weights" },
-                  { svc: "dvs.service", desc: "Delivery viability with thermal risk factors" },
-                  { svc: "merm.service", desc: "Microclimate Exposure Risk Model — 50+ Dhaka zones" },
-                  { svc: "agentOrchestrator.service", desc: "Multi-turn conversational AI with intent routing" },
-                  { svc: "rag.service", desc: "Retrieval-Augmented Generation with BARI knowledge base" },
-                  { svc: "orderExecution.service", desc: "Full order lifecycle: create → dispatch → receipt" },
-                  { svc: "provenance.service", desc: "SHA-256 cryptographic batch provenance chain" },
-                  { svc: "qaIngestion.service", desc: "Quality assurance report ingestion and grading" },
-                  { svc: "weather.service", desc: "OpenWeather API integration for live temps" },
-                  { svc: "language.service", desc: "Bangla ↔ English detection and translation" },
+                  { svc: "trustScore.service.ts", desc: "Deterministic QA evaluation using pH, EC, temperature, and composting days" },
+                  { svc: "dvs.service.ts", desc: "Calculates dynamic delivery slots by integrating weather telemetry and UHI offsets" },
+                  { svc: "merm.service.ts", desc: "Microclimate Exposure Risk Model mapping localized heating across 50+ sectors" },
+                  { svc: "agentOrchestrator.service.ts", desc: "Orchestrates multi-turn chat sessions and forwards queries to sub-agents" },
+                  { svc: "rag.service.ts", desc: "Semantic search retrieval on BARI agricultural guidelines" },
+                  { svc: "orderExecution.service.ts", desc: "Executes state transition hooks for batches during delivery lifecycle" },
+                  { svc: "provenance.service.ts", desc: "Computes cryptographic signature validation and SHA-256 blocks" },
+                  { svc: "qaIngestion.service.ts", desc: "Validates compost laboratory reports via schemas" },
+                  { svc: "weather.service.ts", desc: "Fetches current temperature and humidity data via OpenWeather API" },
+                  { svc: "language.service.ts", desc: "Detects languages and performs bidirectional translations" },
                 ].map((s, i) => (
                   <div key={i} style={{ padding: 10, borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)", display: "flex", flexDirection: "column", gap: 3 }}>
                     <code style={{ fontSize: 11, color: "#a78bfa", fontFamily: "'JetBrains Mono', monospace" }}>{s.svc}</code>
@@ -6679,10 +6697,22 @@ function SystemDocsView({ productsList }) {
                   onChange={e => setNewMemberEmail(e.target.value)}
                   style={{ padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
                 />
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input 
+                    type="file" accept="image/*" onChange={handleImageUpload}
+                    style={{ display: "none" }} id="member-photo-upload"
+                  />
+                  <label htmlFor="member-photo-upload" style={{ padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-secondary)", fontSize: 13, cursor: "pointer", display: "inline-block", flex: 1, textAlign: "center" }}>
+                    📷 Upload Photo File
+                  </label>
+                  {newMemberAvatar && (
+                    <img src={newMemberAvatar} alt="Upload preview" style={{ width: 44, height: 44, borderRadius: "50%", objectFit: "cover", border: `1px solid ${ACCENT.green}` }} />
+                  )}
+                </div>
                 <input 
-                  type="text" placeholder="Avatar URL (Optional)" value={newMemberAvatar} 
+                  type="text" placeholder="Avatar URL (Optional - Fallback)" value={newMemberAvatar.startsWith("data:") ? "" : newMemberAvatar} 
                   onChange={e => setNewMemberAvatar(e.target.value)}
-                  style={{ padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+                  style={{ padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none", gridColumn: "1 / -1" }}
                 />
                 <input 
                   type="text" placeholder="Short Bio" value={newMemberBio} 
@@ -6808,7 +6838,7 @@ function SystemDocsView({ productsList }) {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)" }}>
                     <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Mock Supabase Database Connection</span>
                     <button
-                      onClick={() => alert("Supabase Connection Status: Normal (SSL Active).")}
+                      onClick={() => alert("Supabase Connection Status: Connected (SSL Secure, 2 active client channels).")}
                       style={{ padding: "6px 14px", borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: "pointer", border: "none", background: ACCENT.greenBg, color: ACCENT.green }}
                     >
                       ✓ CONNECTED
@@ -6820,6 +6850,29 @@ function SystemDocsView({ productsList }) {
                       type="number" defaultValue="1.5" step="0.1"
                       style={{ width: 80, padding: 6, borderRadius: 6, border: "1px solid var(--border-primary)", background: "var(--bg-header)", color: "var(--text-primary)", textAlign: "center", fontSize: 13 }}
                     />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)" }}>
+                    <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Simulated Environmental Heat Hazard Lot</span>
+                    <button
+                      onClick={() => {
+                        const randomId = Math.floor(100000 + Math.random() * 900000);
+                        const mockBatch = {
+                          id: `batch-${randomId}`,
+                          batch_number: `CL-${randomId}`,
+                          product_name: "Simulated Organic Composites",
+                          destination_zone: "Old Dhaka",
+                          weight_kg: 500,
+                          trust_score: 95,
+                          status: "certified",
+                          created_at: new Date().toISOString()
+                        };
+                        window.__SEED_BATCHES__ = [mockBatch, ...(window.__SEED_BATCHES__ || [])];
+                        alert(`Injected simulated certified hazard lot CL-${randomId} to destination zone "Old Dhaka"!`);
+                      }}
+                      style={{ padding: "6px 14px", borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: "pointer", border: "none", background: ACCENT.blueBg, color: ACCENT.blue }}
+                    >
+                      ⚡ INJECT BATCH
+                    </button>
                   </div>
                 </div>
               </div>
@@ -7390,7 +7443,6 @@ window.CLimaLogixApp = CLimaLogixApp;
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(<CLimaLogixApp />);
-
   </script>
   </body>
 </html>
