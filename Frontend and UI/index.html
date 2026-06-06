@@ -122,9 +122,7 @@
     <!-- Supabase -->
     <script crossorigin src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-      window.SUPABASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:')
-        ? 'http://localhost:54321'
-        : 'https://pdeskdcdyhbldwfgbowz.supabase.co';
+      window.SUPABASE_URL = 'https://pdeskdcdyhbldwfgbowz.supabase.co';
       window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBkZXNrZGNkeWhibGR3Zmdib3d6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5NDk5NTAsImV4cCI6MjA5NTUyNTk1MH0._khcuscMHpYkt6PqOU1_DULgav_0fJntSd8u4yh_i6E';
     </script>
     <script src="./supabaseClient.js"></script>
