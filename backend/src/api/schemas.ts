@@ -162,6 +162,7 @@ export const IngestQARequestSchema = z
     bstiCredential: z.string().min(1).max(100).optional(),
     inspectorNotes: z.string().max(2000).optional(),
     signed_by: z.string().max(200).optional(),
+    signature: z.string().max(256).optional(),
   })
   .strict();
 
