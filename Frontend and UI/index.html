@@ -121,10 +121,6 @@
 
     <!-- Supabase -->
     <script crossorigin src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script>
-      window.SUPABASE_URL = 'https://pdeskdcdyhbldwfgbowz.supabase.co';
-      window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBkZXNrZGNkeWhibGR3Zmdib3d6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5NDk5NTAsImV4cCI6MjA5NTUyNTk1MH0._khcuscMHpYkt6PqOU1_DULgav_0fJntSd8u4yh_i6E';
-    </script>
     <script src="./supabaseClient.js"></script>
 
     <!-- Three.js (for Login 3D background) -->
@@ -7766,8 +7762,35 @@ function CLimaLogixApp() {
 
 window.CLimaLogixApp = CLimaLogixApp;
 
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<CLimaLogixApp />);
+const initializeAndMount = async () => {
+  try {
+    const IS_STATIC_FILE_HTML = window.location.protocol === 'file:';
+    const API_BASE = (IS_STATIC_FILE_HTML || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? 'http://localhost:5001'
+      : 'https://backsme.onrender.com';
+      
+    const configRes = await fetch(`${API_BASE}/api/config`).then(r => r.json());
+    if (configRes && configRes.success && configRes.data) {
+      window.SUPABASE_URL = configRes.data.supabaseUrl;
+      window.SUPABASE_ANON_KEY = configRes.data.supabaseAnonKey;
+      
+      // Initialize Supabase Client dynamically
+      if (window.supabase && !window.supabaseClient) {
+        window.supabaseClient = window.supabase.createClient(
+          window.SUPABASE_URL,
+          window.SUPABASE_ANON_KEY
+        );
+      }
+    }
+  } catch (err) {
+    console.error("Failed to load dynamic Supabase config from backend:", err);
+  } finally {
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<CLimaLogixApp />);
+  }
+};
+
+initializeAndMount();
   </script>
   </body>
 </html>

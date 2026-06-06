@@ -179,6 +179,16 @@ app.get('/api/health', (_req: Request, res: Response) => {
   });
 });
 
+app.get('/api/config', (_req: Request, res: Response) => {
+  res.status(200).json({
+    success: true,
+    data: {
+      supabaseUrl: process.env.SUPABASE_URL,
+      supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
+    },
+  });
+});
+
 app.get('/api/test-db', async (_req: Request, res: Response) => {
   if (!isSupabaseConfigured()) {
     res.status(503).json({
