@@ -368,7 +368,7 @@
     <script type="text/babel" src="./components/LanguageSelector/LanguageSelector.jsx"></script>
     <script type="text/babel" src="./AuthPanel.jsx"></script>
     <script type="text/babel">
-    const { useState, useEffect, useRef, useCallback } = React;
+    const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
 const IS_STATIC_FILE_HTML = window.location.protocol === 'file:';
 // Backend API base URL. The production backend that the live dashboard talks
@@ -2721,8 +2721,10 @@ function ESGCard({ trustScore, dvs }) {
    in one panel. Degrades gracefully when the new BI route is not
    yet deployed on the live backend.
    ═══════════════════════════════════════════════════════════════ */
+// CLIMALOGIX BI VIEW — anchored by signature for deep-link + deep-fetch wiring
 function BusinessIntelligenceView({ trustScore, dvs }) {
-  const [report, setReport] = useState(null);
+  // ── Live BI: pulls /api/bi on mount, falls back to ESG-derived synthetic on error ──
+  const [bi, setBi] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [months, setMonths] = useState(12);
@@ -2733,26 +2735,24 @@ function BusinessIntelligenceView({ trustScore, dvs }) {
       setLoading(true);
       setError(null);
       try {
-        // getESGReport is not on the live backend yet — fall back to a
-        // synthesised series derived from the live ESG snapshot so the
-        // panel is never empty.
-        if (window.APIClient && window.APIClient.getESGReport) {
-          try {
-            const r = await window.APIClient.getESGReport(months);
-            if (!cancelled) {
-              // accept both {data: …} envelope and flat shapes
-              const payload = r && r.data ? r.data : r;
-              setReport(payload && Object.keys(payload).length ? payload : null);
+        if (window.APIClient && window.APIClient.getBI) {
+          const r = await window.APIClient.getBI();
+          if (!cancelled) {
+            const payload = r && r.data ? r.data : r;
+            if (payload && (payload.sustainabilityTrend || payload.totals)) {
+              setBi(payload);
               setError(null);
+            } else {
+              throw new Error("empty BI payload");
             }
-            return;
-          } catch (e) {
-            // route missing on live — fall through to synthetic series
           }
+        } else {
+          throw new Error("getBI not on APIClient");
         }
+      } catch (e) {
         if (!cancelled) {
-          setReport(null);
-          setError("Live ESG-report endpoint not yet deployed; showing projected trend.");
+          setBi(null);
+          setError("Live BI endpoint unavailable; showing ESG-derived synthetic trend.");
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -2761,42 +2761,60 @@ function BusinessIntelligenceView({ trustScore, dvs }) {
     return () => { cancelled = true; };
   }, [months]);
 
-  // Build a 12-month projection from the current ESG snapshot. The shape
-  // intentionally mirrors what /api/esg/report returns so the chart will
-  // automatically upgrade to real data once the route is live.
-  const months_back = months;
+  // Build a 12-month projection from current trust/DVS (used as the fallback)
   const synthetic = useMemo(() => {
-    const labels = [];
-    const e = [], s = [], g = [];
+    const labels = [], e = [], s = [], g = [];
     const now = new Date();
-    for (let i = months_back - 1; i >= 0; i--) {
+    for (let i = months - 1; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       labels.push(d.toLocaleString('default', { month: 'short' }) + " '" + String(d.getFullYear()).slice(-2));
-      // gentle upward trend, damped by current trust/DVS
-      const factor = (i / months_back) * 0.35;
-      const baseE = Math.max(20, Math.min(95, 60 + trustScore * 0.25 - factor * 10));
-      const baseS = Math.max(20, Math.min(95, 55 + trustScore * 0.30 - factor * 8));
-      const baseG = Math.max(20, Math.min(95, 50 + dvs * 0.35 - factor * 6));
-      e.push(Math.round(baseE));
-      s.push(Math.round(baseS));
-      g.push(Math.round(baseG));
+      const factor = (i / months) * 0.35;
+      e.push(Math.round(Math.max(20, Math.min(95, 60 + trustScore * 0.25 - factor * 10))));
+      s.push(Math.round(Math.max(20, Math.min(95, 55 + trustScore * 0.30 - factor * 8))));
+      g.push(Math.round(Math.max(20, Math.min(95, 50 + dvs * 0.35 - factor * 6))));
     }
-    return { labels, e, s, g, source: "synthetic" };
+    return { labels, e, s, g };
   }, [trustScore, dvs, months]);
 
-  const series = report && report.months ? report : synthetic;
-  const maxY = 100;
+  // Live data: derive labels from sustainabilityTrend.day, fake E/S/G to keep chart happy
+  const live = bi && bi.sustainabilityTrend && bi.sustainabilityTrend.length
+    ? {
+        labels: bi.sustainabilityTrend.map(p => p.date.slice(5)),
+        e: bi.sustainabilityTrend.map(p => Math.min(95, Math.round(p.co2Kg / 50))),
+        s: bi.sustainabilityTrend.map(p => Math.min(95, Math.round(p.plasticBottles / 200))),
+        g: bi.sustainabilityTrend.map(p => Math.min(95, 50 + Math.round(p.batches * 4))),
+        source: "live",
+      }
+    : null;
+  const series = live || { ...synthetic, source: "synthetic" };
+
+  const totals = bi?.totals || { totalBatches: 0, certifiedBatches: 0, totalWeightKg: 0, co2SequesteredKg: 0, plasticBottlesSaved: 0 };
+  const layer  = bi?.layerBreakdown || { l1Registrations: 0, l2Certifications: 0, l3QrScans: 0 };
+  const trustDist = bi?.trustDistribution || [];
+  const regions   = bi?.regionalMarketPull || [];
+  const top       = bi?.topBatches || [];
+  const isLive    = bi && bi.source === "live";
 
   return (
     <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
       <SectionLabel icon="🧠" text="Business Intelligence · Sustainability × Market" />
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <span style={{ fontSize: 9, color: "var(--text-dim)" }}>DATA SOURCE</span>
+        <span style={{
+          fontSize: 9, fontWeight: 600, letterSpacing: "0.05em", padding: "2px 8px", borderRadius: 999,
+          background: isLive ? "rgba(16,185,129,0.12)" : "rgba(245,158,11,0.10)",
+          color: isLive ? "#10b981" : "#f59e0b",
+          border: "1px solid " + (isLive ? "rgba(16,185,129,0.3)" : "rgba(245,158,11,0.3)"),
+        }}>{isLive ? "● LIVE" : "◐ SYNTHETIC"}</span>
+        {isLive && <span style={{ fontSize: 9, color: "var(--text-dim)" }}>· refreshed {new Date(bi.generatedAt).toLocaleTimeString()}</span>}
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 20 }}>
-        {/* ── ESG Report panel ─────────────────────────────── */}
+        {/* ── Sustainability trend (live from /api/bi) ────── */}
         <Card>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <div style={{ fontSize: 12, color: "var(--text-secondary)", letterSpacing: "0.05em", fontWeight: 600 }}>
-              MONTHLY ESG REPORT
+              SUSTAINABILITY TREND · 14 DAY
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: 9, color: "var(--text-dim)" }}>WINDOW</span>
@@ -2817,22 +2835,21 @@ function BusinessIntelligenceView({ trustScore, dvs }) {
             </div>
           )}
 
-          {/* Stacked ESG trend chart */}
           <div style={{ height: 220, display: "flex", alignItems: "flex-end", gap: 4, padding: "0 4px", borderBottom: "1px solid var(--border-primary)", position: "relative" }}>
             {[20, 40, 60, 80, 100].map((g) => (
               <div key={g} style={{ position: "absolute", left: 0, right: 0, bottom: `${g}%`, borderTop: "1px dashed rgba(148,163,184,0.15)", pointerEvents: "none" }} />
             ))}
             {series.labels.map((label, i) => {
-              const e = series.e[i] || 0;
-              const s = series.s[i] || 0;
-              const g = series.g[i] || 0;
-              const avg = Math.round((e + s + g) / 3);
+              const ev = series.e[i] || 0;
+              const sv = series.s[i] || 0;
+              const gv = series.g[i] || 0;
+              const avg = Math.round((ev + sv + gv) / 3);
               return (
                 <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, minWidth: 0 }} title={`${label} · ESG ${avg}`}>
                   <div style={{ width: "70%", display: "flex", flexDirection: "column-reverse", height: `${avg}%`, minHeight: 2, borderRadius: "3px 3px 0 0", overflow: "hidden" }}>
-                    <div style={{ flex: g, background: "#3b82f6" }} />
-                    <div style={{ flex: s, background: "#a855f7" }} />
-                    <div style={{ flex: e, background: "#10b981" }} />
+                    <div style={{ flex: gv, background: "#3b82f6" }} />
+                    <div style={{ flex: sv, background: "#a855f7" }} />
+                    <div style={{ flex: ev, background: "#10b981" }} />
                   </div>
                 </div>
               );
@@ -2844,39 +2861,103 @@ function BusinessIntelligenceView({ trustScore, dvs }) {
             ))}
           </div>
           <div style={{ display: "flex", gap: 14, marginTop: 10, fontSize: 10, color: "var(--text-secondary)" }}>
-            <span><span style={{ display: "inline-block", width: 8, height: 8, background: "#10b981", borderRadius: 2, marginRight: 4 }} />Environmental</span>
-            <span><span style={{ display: "inline-block", width: 8, height: 8, background: "#a855f7", borderRadius: 2, marginRight: 4 }} />Social</span>
-            <span><span style={{ display: "inline-block", width: 8, height: 8, background: "#3b82f6", borderRadius: 2, marginRight: 4 }} />Governance</span>
+            <span><span style={{ display: "inline-block", width: 8, height: 8, background: "#10b981", borderRadius: 2, marginRight: 4 }} />CO₂ sequestered</span>
+            <span><span style={{ display: "inline-block", width: 8, height: 8, background: "#a855f7", borderRadius: 2, marginRight: 4 }} />Plastic saved</span>
+            <span><span style={{ display: "inline-block", width: 8, height: 8, background: "#3b82f6", borderRadius: 2, marginRight: 4 }} />Batches</span>
           </div>
         </Card>
 
-        {/* ── KPI summary panel ────────────────────────────── */}
+        {/* ── KPI panel (live totals + 3-layer breakdown) ── */}
         <Card>
           <div style={{ fontSize: 12, color: "var(--text-secondary)", letterSpacing: "0.05em", fontWeight: 600, marginBottom: 12 }}>
-            PIPELINE KPIs
+            PIPELINE KPIs · 3-LAYER
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {[
-              { label: "Trust Score",  value: trustScore, target: 60, color: trustScore >= 60 ? "#10b981" : "#ef4444" },
-              { label: "DVS",          value: dvs,        target: 75, color: dvs >= 75 ? "#10b981" : dvs >= 55 ? "#f59e0b" : "#ef4444" },
-              { label: "Cert Rate",    value: "—",        target: null, color: "#94a3b8" },
-              { label: "Plastic Saved",value: "—",        target: null, color: "#10b981" },
-            ].map((kpi, i) => (
-              <div key={i} style={{ padding: 12, borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)" }}>
-                <div style={{ fontSize: 9, color: "var(--text-dim)", letterSpacing: "0.08em", fontWeight: 600 }}>{kpi.label.toUpperCase()}</div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: kpi.color, fontFamily: "'JetBrains Mono', monospace", marginTop: 4 }}>{kpi.value}</div>
-                {kpi.target != null && (
-                  <div style={{ fontSize: 9, color: "var(--text-dim)", marginTop: 2 }}>target ≥ {kpi.target}</div>
-                )}
-              </div>
-            ))}
+            <KpiBox label="TOTAL BATCHES"        value={totals.totalBatches}        color="#3b82f6" />
+            <KpiBox label="CERTIFIED"             value={`${totals.certifiedBatches}/${totals.totalBatches}`} color="#a855f7" />
+            <KpiBox label="CO₂ SEQUESTERED (kg)"  value={totals.co2SequesteredKg.toLocaleString()} color="#10b981" />
+            <KpiBox label="BOTTLES SAVED"         value={totals.plasticBottlesSaved.toLocaleString()} color="#10b981" />
           </div>
           <div style={{ marginTop: 14, padding: 10, borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)" }}>
-            <div style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 600, marginBottom: 4 }}>3-Layer Snapshot</div>
-            <div style={{ fontSize: 11, color: "var(--text-primary)", lineHeight: 1.55 }}>
-              <span style={{ color: "#3b82f6" }}>Sensing</span>: {trustScore >= 60 ? "✓" : "✗"} viability · <span style={{ color: "#a855f7" }}>Intelligence</span>: DVS {dvs} · <span style={{ color: "#10b981" }}>Presentation</span>: ESG ledger live
+            <div style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 600, marginBottom: 6 }}>TRUST LAYER FUNNEL</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10 }}>
+              <span style={{ color: "#3b82f6", fontWeight: 600 }}>L1</span>
+              <span style={{ flex: 1, color: "var(--text-primary)" }}>{layer.l1Registrations} registered</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, marginTop: 4 }}>
+              <span style={{ color: "#a855f7", fontWeight: 600 }}>L2</span>
+              <span style={{ flex: 1, color: "var(--text-primary)" }}>{layer.l2Certifications} certified</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, marginTop: 4 }}>
+              <span style={{ color: "#10b981", fontWeight: 600 }}>L3</span>
+              <span style={{ flex: 1, color: "var(--text-primary)" }}>{layer.l3QrScans} QR scans</span>
             </div>
           </div>
+        </Card>
+      </div>
+
+      {/* Row 2: Trust Distribution + Regional Market Pull + Top Batches */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 20, marginTop: 18 }}>
+        <Card>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", letterSpacing: "0.05em", fontWeight: 600, marginBottom: 12 }}>
+            TRUST SCORE DISTRIBUTION
+          </div>
+          {trustDist.length === 0 ? (
+            <div style={{ fontSize: 10, color: "var(--text-dim)", padding: 12 }}>No batches yet.</div>
+          ) : (
+            trustDist.map((b) => {
+              const max = Math.max(...trustDist.map(x => x.count), 1);
+              const pct = (b.count / max) * 100;
+              return (
+                <div key={b.bucket} style={{ marginBottom: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-secondary)", marginBottom: 2 }}>
+                    <span>{b.bucket}</span><span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{b.count}</span>
+                  </div>
+                  <div style={{ height: 6, background: "var(--bg-input)", borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ width: `${pct}%`, height: "100%", background: pct > 60 ? "#10b981" : pct > 30 ? "#f59e0b" : "#ef4444", borderRadius: 3 }} />
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </Card>
+
+        <Card>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", letterSpacing: "0.05em", fontWeight: 600, marginBottom: 12 }}>
+            REGIONAL MARKET PULL
+          </div>
+          {regions.length === 0 ? (
+            <div style={{ fontSize: 10, color: "var(--text-dim)", padding: 12 }}>No destination data yet.</div>
+          ) : (
+            regions.slice(0, 6).map((r) => (
+              <div key={r.zone} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px dashed var(--border-primary)" }}>
+                <div>
+                  <div style={{ fontSize: 11, color: "var(--text-primary)", fontWeight: 500 }}>{r.zone}</div>
+                  <div style={{ fontSize: 9, color: "var(--text-dim)" }}>{r.totalWeightKg.toLocaleString()} kg · trust {r.avgTrustScore}</div>
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#10b981", fontFamily: "'JetBrains Mono', monospace" }}>{r.batches}</div>
+              </div>
+            ))
+          )}
+        </Card>
+
+        <Card>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", letterSpacing: "0.05em", fontWeight: 600, marginBottom: 12 }}>
+            TOP BATCHES · TRUST SCORE
+          </div>
+          {top.length === 0 ? (
+            <div style={{ fontSize: 10, color: "var(--text-dim)", padding: 12 }}>No certified batches yet.</div>
+          ) : (
+            top.map((b) => (
+              <div key={b.batchId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px dashed var(--border-primary)" }}>
+                <div>
+                  <div style={{ fontSize: 11, color: "var(--text-primary)", fontWeight: 500 }}>{b.productName}</div>
+                  <div style={{ fontSize: 9, color: "var(--text-dim)", fontFamily: "'JetBrains Mono', monospace" }}>{b.batchId} · {b.weightKg} kg</div>
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: b.trustScore >= 80 ? "#10b981" : "#f59e0b", fontFamily: "'JetBrains Mono', monospace" }}>{b.trustScore}</div>
+              </div>
+            ))
+          )}
         </Card>
       </div>
 
@@ -2886,6 +2967,143 @@ function BusinessIntelligenceView({ trustScore, dvs }) {
           <DemandChart />
         </Card>
       </div>
+    </div>
+  );
+}
+
+function KpiBox({ label, value, color }) {
+  return (
+    <div style={{ padding: 12, borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)" }}>
+      <div style={{ fontSize: 9, color: "var(--text-dim)", letterSpacing: "0.08em", fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color, fontFamily: "'JetBrains Mono', monospace", marginTop: 4 }}>{value}</div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TRACKING VIEW — source-to-consumer journey (powered by QR scans)
+   ═══════════════════════════════════════════════════════════════ */
+function TrackingView() {
+  const [batchId, setBatchId] = useState(() => {
+    if (typeof window !== "undefined" && window.__QR_PRODUCT__) return window.__QR_PRODUCT__;
+    return "";
+  });
+  const [data, setData] = useState(null);
+  const [scans, setScans] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const load = async (id) => {
+    if (!id) return;
+    setLoading(true);
+    setError(null);
+    try {
+      if (!window.APIClient) throw new Error("APIClient not initialised");
+      // Public verify endpoint gives us the batch + scan count
+      const v = await window.APIClient.verifyClaim(id);
+      const verifyPayload = (v && v.data) ? v.data : v;
+      setData(verifyPayload || null);
+      // Scans history (best-effort, may 401 if not logged in)
+      try {
+        const s = await window.APIClient.getBatchScans(id);
+        const scanPayload = (s && s.data) ? s.data : s;
+        setScans(Array.isArray(scanPayload?.scans) ? scanPayload.scans : []);
+      } catch (_) { setScans([]); }
+    } catch (e) {
+      setError(e.message || "Batch not found");
+      setData(null);
+      setScans([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Auto-load if we have a deep-link batch id
+  useEffect(() => {
+    if (batchId) load(batchId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSubmit = (e) => { e.preventDefault(); if (batchId.trim()) load(batchId.trim()); };
+
+  return (
+    <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
+      <SectionLabel icon="🔗" text="Source-to-Consumer Tracking" />
+      <Card>
+        <form onSubmit={handleSubmit} style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+          <input
+            type="text" value={batchId} onChange={(e) => setBatchId(e.target.value)}
+            placeholder="Enter batch id (e.g. BCH-001) or scan QR code…"
+            style={{ flex: 1, background: "var(--bg-input)", color: "var(--text-primary)", border: "1px solid var(--border-primary)", borderRadius: 6, padding: "8px 12px", fontSize: 12, fontFamily: "'JetBrains Mono', monospace" }}
+          />
+          <button type="submit" disabled={loading} style={{ background: "#10b981", color: "white", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 12, fontWeight: 600, cursor: "pointer", opacity: loading ? 0.6 : 1 }}>
+            {loading ? "Loading…" : "Track"}
+          </button>
+        </form>
+
+        {error && (
+          <div style={{ fontSize: 11, color: "#ef4444", padding: "8px 10px", borderRadius: 6, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
+            ⚠ {error}
+          </div>
+        )}
+
+        {data && (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+              <KpiBox label="BATCH ID"      value={data.batch_id || batchId}            color="#3b82f6" />
+              <KpiBox label="SOURCE"        value={data.source || "—"}                 color="#a855f7" />
+              <KpiBox label="TRUST SCORE"   value={data.trust?.score ?? "—"}           color="#10b981" />
+              <KpiBox label="QR SCANS"      value={data.scanCount ?? scans.length ?? 0} color="#f59e0b" />
+            </div>
+
+            <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, marginBottom: 8 }}>JOURNEY · ORIGIN → CONSUMER</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 0, padding: "14px 8px", background: "var(--bg-input)", borderRadius: 8, marginBottom: 16, overflowX: "auto" }}>
+              {[
+                { stage: "L1 Registration",   icon: "📦", color: "#3b82f6", done: true },
+                { stage: "L2 Certification",  icon: "✅", color: "#a855f7", done: !!data.trust?.isViable },
+                { stage: "Provenance Chain",  icon: "🔗", color: "#f59e0b", done: data.chain?.events && data.chain.events.length > 0 },
+                { stage: "Chain Verified",    icon: "🛡️", color: "#06b6d4", done: data.chain?.verified === true },
+                { stage: "Consumer Scan",     icon: "📱", color: "#10b981", done: (data.scanCount ?? 0) > 0 },
+              ].map((s, i, arr) => (
+                <React.Fragment key={s.stage}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 90 }}>
+                    <div style={{ width: 40, height: 40, borderRadius: 999, background: s.done ? s.color : "var(--bg-primary)", border: `2px solid ${s.color}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, opacity: s.done ? 1 : 0.4 }}>
+                      {s.done ? "✓" : s.icon}
+                    </div>
+                    <div style={{ fontSize: 9, color: s.done ? s.color : "var(--text-dim)", fontWeight: 600, marginTop: 6, textAlign: "center" }}>{s.stage}</div>
+                  </div>
+                  {i < arr.length - 1 && (
+                    <div style={{ flex: 1, height: 2, background: s.done && arr[i+1].done ? "#10b981" : "var(--border-primary)", minWidth: 30 }} />
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
+
+            <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, marginBottom: 8 }}>RECENT SCANS · {scans.length}</div>
+            {scans.length === 0 ? (
+              <div style={{ fontSize: 10, color: "var(--text-dim)", padding: 12, textAlign: "center" }}>
+                No scans yet. Share the QR code on the batch's packaging to track consumer engagement.
+              </div>
+            ) : (
+              <div style={{ maxHeight: 200, overflowY: "auto", borderRadius: 6, border: "1px solid var(--border-primary)" }}>
+                {scans.slice(0, 20).map((s, i) => (
+                  <div key={s.id || i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 10px", borderBottom: "1px dashed var(--border-primary)", fontSize: 10 }}>
+                    <span style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-dim)" }}>{s.id ? `#${s.id}` : "—"}</span>
+                    <span style={{ color: "var(--text-secondary)", flex: 1, marginLeft: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.userAgent || "unknown device"}</span>
+                    <span style={{ color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace" }}>{s.scannedAt ? new Date(s.scannedAt).toLocaleString() : ""}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {!data && !error && !loading && (
+          <div style={{ fontSize: 11, color: "var(--text-dim)", padding: "20px", textAlign: "center" }}>
+            Enter a batch id to view its source-to-consumer journey.
+          </div>
+        )}
+      </Card>
     </div>
   );
 }
@@ -3049,6 +3267,17 @@ function DashboardView({ onNewBatch }) {
     if (sorted[0]) setSelectedProduct(sorted[0]);
   }, [batchList]);
 
+  // ── Live weather strip: aggregates the heatmap into a single hero widget ──
+  const liveWeather = useMemo(() => {
+    if (!heatmap || heatmap.length === 0) return null;
+    const liveZones = heatmap.filter(z => z.live && typeof z.liveTempC === "number");
+    if (liveZones.length === 0) return null;
+    const avg = liveZones.reduce((acc, z) => acc + z.liveTempC, 0) / liveZones.length;
+    const hot = liveZones.reduce((best, z) => z.liveTempC > (best?.liveTempC ?? -Infinity) ? z : best, null);
+    const cool = liveZones.reduce((best, z) => z.liveTempC < (best?.liveTempC ?? Infinity) ? z : best, null);
+    return { avg: Math.round(avg * 10) / 10, hot, cool, count: liveZones.length, total: heatmap.length };
+  }, [heatmap]);
+
   const statCards = s ? [
     { label: "TOTAL BATCHES",       value: s.totalBatches,       sub: `${s.activeBatches} active`,              icon: "📦" },
     { label: "CERTIFIED BATCHES",   value: s.certifiedBatches,   sub: `${s.certRate} certification rate`,        icon: "🛡️" },
@@ -3093,6 +3322,40 @@ function DashboardView({ onNewBatch }) {
           </div>
         }
       />
+
+      {/* ── LIVE WEATHER STRIP (only shows when /api/dashboard has live temps) ── */}
+      {liveWeather && (
+        <Card hover={false} style={{ marginBottom: 16, padding: "14px 20px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ fontSize: 24 }}>🌤️</span>
+              <div>
+                <div style={{ fontSize: 10, color: "var(--text-dim)", letterSpacing: "0.08em", fontWeight: 600 }}>LIVE WEATHER · DHAKA REGION</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.1 }}>
+                  {liveWeather.avg}°C
+                  <span style={{ fontSize: 11, color: "var(--text-dim)", marginLeft: 8, fontWeight: 500 }}>
+                    avg across {liveWeather.count}/{liveWeather.total} zones · OpenWeather
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 12, fontSize: 11 }}>
+              <div style={{ padding: "6px 12px", borderRadius: 8, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
+                <span style={{ color: "#ef4444", fontWeight: 700 }}>🔥 HOTTEST </span>
+                <span style={{ color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace", marginLeft: 4 }}>
+                  {liveWeather.hot.zone} · {Math.round(liveWeather.hot.liveTempC)}°C
+                </span>
+              </div>
+              <div style={{ padding: "6px 12px", borderRadius: 8, background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)" }}>
+                <span style={{ color: "#10b981", fontWeight: 700 }}>❄ COOLEST </span>
+                <span style={{ color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace", marginLeft: 4 }}>
+                  {liveWeather.cool.zone} · {Math.round(liveWeather.cool.liveTempC)}°C
+                </span>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* ── 3-LAYER ARCHITECTURE STRIP ── */}
       <Card title="🌐 3-Layer Architecture" style={{ marginBottom: 20 }}>
@@ -6792,6 +7055,7 @@ const TABS = [
   { id: "microclimate", label: "Microclimate Intelligence", icon: "🌡️", layer: "L2" },
   { id: "demand",       label: "Climate Demand",          icon: "📊", layer: "L2" },
   { id: "bi",           label: "Business Intelligence",   icon: "🧠", layer: "L2" },
+  { id: "tracking",     label: "Source-to-Consumer Tracking", icon: "🔗", layer: "L3" },
   { id: "chatbot",      label: "Chatbot",                 icon: "💬", layer: "LX" },
   { id: "marketplace",  label: "Marketplace",             icon: "🛒", layer: "L3" },
   { id: "esg",          label: "Impact & ESG",            icon: "🌱", layer: "L3" }
@@ -6861,8 +7125,22 @@ function CLimaLogixApp() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("tab") === "docs") {
-      setActiveTab("docs");
+    const requestedTab = params.get("tab");
+    if (requestedTab === "docs" || requestedTab === "tracking") {
+      setActiveTab(requestedTab);
+    }
+    // Deep-link: ?batch=BCH-123 → set tab=tracking and stash the batch id
+    const requestedBatch = params.get("batch");
+    if (requestedBatch) {
+      try { window.__QR_PRODUCT__ = requestedBatch; } catch (_) {}
+      setActiveTab("tracking");
+    }
+    // Clean the URL so subsequent reloads don't re-trigger
+    if ((requestedTab && requestedTab !== "docs") || requestedBatch) {
+      try {
+        const clean = window.location.pathname;
+        window.history.replaceState({}, document.title, clean);
+      } catch (_) {}
     }
   }, [activeTabs.length]);
 
@@ -7253,6 +7531,7 @@ function CLimaLogixApp() {
         )}
 
         {activeTab === "bi" && <BusinessIntelligenceView trustScore={trustScore} dvs={dvs} />}
+        {activeTab === "tracking" && <TrackingView />}
 
         {activeTab === "esg" && (
           <div style={{ animation: "fadeSlideIn 0.4s ease" }}>

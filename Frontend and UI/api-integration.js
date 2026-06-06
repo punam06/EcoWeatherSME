@@ -147,6 +147,12 @@ const APIClient = {
   // Monthly ESG report (new route, used by the ESGCard panel)
   getESGReport: (months = 12) => APIClient.request(`/esg/report?months=${months}`),
 
+  // Business Intelligence aggregation (sustainability + market)
+  getBI: () => APIClient.request('/bi'),
+
+  // QR scan history for a batch
+  getBatchScans: (batchId) => APIClient.request(`/batches/${encodeURIComponent(batchId)}/scans`),
+
   // Forecast
   getDemandForecast: () => APIClient.request('/demand-forecast'),
 

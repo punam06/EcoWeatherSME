@@ -237,8 +237,12 @@ router.post('/certify', authenticateJWT, requireRole('processor'), async (req: R
     // Generate actual batch ID if none provided
     const displayBatchId = batchId || `BCH-${Date.now().toString().slice(-6)}`;
     
-    // Create the public verification URL
-    const verificationUrl = `https://climalogix.build/verify/${displayBatchId}`;
+    // Create the public verification URL — uses FRONTEND_URL env (set in .env to
+    // https://ecoweathersme.onrender.com) so QRs always resolve to the live SPA,
+    // which deep-links to the Tracking view via ?batch=<id>.
+    const frontendBase = (process.env.FRONTEND_URL || 'https://ecoweathersme.onrender.com')
+      .replace(/\/+$/, ''); // strip trailing slash
+    const verificationUrl = `${frontendBase}/verify/${displayBatchId}`;
     
     // Generate QR code data URL (Base64 image) securely on the backend
     const qrCodeDataUrl = await QRCode.toDataURL(verificationUrl, {
@@ -423,6 +427,58 @@ router.delete('/:id', authenticateJWT, requireRole('processor'), async (req: Req
   } catch (error) {
     console.error('Delete batch error:', error);
     res.status(500).json({ success: false, error: 'Failed to delete batch' });
+  }
+});
+
+// GET /api/batches/:id/scans
+// Returns the QR scan history for a batch — the source-to-consumer journey
+// proof. Auth required (any authenticated user can view scan logs for
+// transparency in the supply chain).
+router.get('/:id/scans', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!id || typeof id !== 'string' || id.length > 100) {
+      res.status(400).json({ success: false, error: 'Valid batch ID is required' });
+      return;
+    }
+
+    if (!isSupabaseConfigured()) {
+      res.json({ success: true, data: { scans: [], total: 0 } });
+      return;
+    }
+
+    const supabase = getSupabaseClient();
+
+    // Try both batch_number and uuid-style id to be tolerant of input formats
+    const { data: scans, error } = await supabase
+      .from('qr_scans')
+      .select('id, user_agent, ip_hash, scanned_at')
+      .or(`batch_id.eq.${id},batch_id.eq.${encodeURIComponent(id)}`)
+      .order('scanned_at', { ascending: false })
+      .limit(50);
+
+    if (error) {
+      // Table may not exist yet on first deploy — degrade gracefully
+      console.warn('qr_scans query failed (table may not exist yet):', error.message);
+      res.json({ success: true, data: { scans: [], total: 0 } });
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        scans: (scans || []).map((s: any) => ({
+          id: s.id,
+          userAgent: s.user_agent,
+          ipHash: s.ip_hash,
+          scannedAt: s.scanned_at,
+        })),
+        total: scans?.length ?? 0,
+      },
+    });
+  } catch (error) {
+    console.error('Get batch scans error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch scan history' });
   }
 });
 

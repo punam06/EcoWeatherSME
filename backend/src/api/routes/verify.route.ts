@@ -102,6 +102,40 @@ router.get(
         source = 'database';
       }
 
+      // ── QR Scan Logging (non-blocking) ──────────────────────────────
+      // Every hit to /api/verify/:batch_id is a QR scan. Log it so the
+      // operator dashboard can show "Recent QR Scans" and the Tracking
+      // view can display the full source-to-consumer journey.
+      let scanCount = 0;
+      try {
+        const supabase2 = getSupabaseClient();
+        // Insert scan record (fire-and-forget — don't block the response)
+        const userAgent = req.headers['user-agent'] || 'unknown';
+        const ipHash = (() => {
+          const raw = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown';
+          // Simple hash so we never store raw IPs
+          let h = 0;
+          for (let i = 0; i < raw.length; i++) h = ((h << 5) - h + raw.charCodeAt(i)) | 0;
+          return `h_${Math.abs(h).toString(36)}`;
+        })();
+
+        // Fire-and-forget: don't await, don't block the response.
+        // Wrap in Promise.resolve to give us a real Promise with .catch.
+        Promise.resolve(supabase2.from('qr_scans').insert({
+          batch_id,
+          user_agent: userAgent.slice(0, 255),
+          ip_hash: ipHash,
+          scanned_at: new Date().toISOString(),
+        })).catch(() => { /* scan logging is best-effort */ });
+
+        // Count total scans for this batch (best-effort)
+        const { count } = await supabase2
+          .from('qr_scans')
+          .select('*', { count: 'exact', head: true })
+          .eq('batch_id', batch_id);
+        scanCount = count ?? 0;
+      } catch (_scanErr) { /* scan logging is best-effort */ }
+
       res.status(200).json({
         success: true,
         data: {
@@ -115,6 +149,7 @@ router.get(
             : null,
           chain,
           source,
+          scanCount,
         },
       });
     } catch (err) {

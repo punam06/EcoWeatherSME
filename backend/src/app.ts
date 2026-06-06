@@ -55,6 +55,7 @@ import checkoutRouter from './api/routes/checkout.route';
 import spotPricingRouter from './api/routes/spotPricing.route';
 import orderRouter from './api/routes/order.route';
 import languageRouter from './routes/language';
+import biRouter from './api/routes/bi.route';
 import { startSessionPruningInterval } from './lib/services/chatSession.service';
 import { authenticateJWT, optionalJWT } from './middleware/authenticateJWT';
 
@@ -236,6 +237,34 @@ app.use('/api/verify', verifyRouter);
 app.use('/api/language', languageRouter);
 app.use('/api/checkout', checkoutRouter);
 app.use('/api/spot-pricing', spotPricingRouter);
+app.use('/api/bi', biRouter);
+
+// ── In-memory weather cache (5 min TTL) ─────────────────────────────────
+const weatherCache = new Map<string, { data: { temp: number; rh: number; description: string; city: string }; ts: number }>();
+const WEATHER_TTL_MS = 5 * 60 * 1000;
+
+async function fetchWeatherWithCache(city: string, apiKey: string | undefined) {
+  const cached = weatherCache.get(city);
+  if (cached && Date.now() - cached.ts < WEATHER_TTL_MS) return cached.data;
+  if (!apiKey) return null;
+  try {
+    const wRes = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)},BD&appid=${apiKey}&units=metric`);
+    if (wRes.ok) {
+      const wd: any = await wRes.json();
+      if (wd?.main) {
+        const data = {
+          temp: Number(wd.main.temp) || 0,
+          rh: Number(wd.main.humidity) || 0,
+          description: wd.weather?.[0]?.description || '',
+          city: wd.name || city,
+        };
+        weatherCache.set(city, { data, ts: Date.now() });
+        return data;
+      }
+    }
+  } catch (_e) { /* network error → return null */ }
+  return null;
+}
 
 // ── Dashboard Summary Endpoint ────────────────────────────────────────────
 app.get('/api/dashboard', async (req: Request, res: Response) => {
@@ -244,27 +273,28 @@ app.get('/api/dashboard', async (req: Request, res: Response) => {
   // Heatmap zones with UHI offsets
   const zones = [
     { zone: 'Old Dhaka',  city: 'Dhaka',        uhiOffset: 3.8, desc: 'Class A thermal accumulation zone. Narrow concrete corridors trap heat.' },
-    { zone: 'Mirpur',     city: 'Mirpur,Dhaka',  uhiOffset: 2.9, desc: 'Dense residential concrete with limited canopy cover.' },
-    { zone: 'Savar',      city: 'Savar',         uhiOffset: 2.1, desc: 'Mixed urban with partial green canopy. Moderate risk window.' },
-    { zone: 'Gulshan',    city: 'Gulshan,Dhaka', uhiOffset: 1.2, desc: 'High green canopy coverage and lake proximity reduce thermal load.' },
+    { zone: 'Mirpur',     city: 'Mirpur',       uhiOffset: 2.9, desc: 'Dense residential concrete with limited canopy cover.' },
+    { zone: 'Savar',      city: 'Savar',        uhiOffset: 2.1, desc: 'Mixed urban with partial green canopy. Moderate risk window.' },
+    { zone: 'Gulshan',    city: 'Gulshan',      uhiOffset: 1.2, desc: 'High green canopy coverage and lake proximity reduce thermal load.' },
   ];
 
   const heatmap = await Promise.all(zones.map(async (z) => {
-    let baseTemp = 32 + Math.random() * 4;
-    let rh = 60 + Math.floor(Math.random() * 20);
-    try {
-      if (weatherApiKey) {
-        const wRes = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(z.city)},BD&appid=${weatherApiKey}&units=metric`);
-        if (wRes.ok) {
-          const wd: any = await wRes.json();
-          baseTemp = wd.main?.temp ?? baseTemp;
-          rh = wd.main?.humidity ?? rh;
-        }
-      }
-    } catch (_e) { /* use fallback */ }
+    const live = await fetchWeatherWithCache(z.city, weatherApiKey);
+    const baseTemp = live ? live.temp : 32 + Math.random() * 4;
+    const rh = live ? live.rh : 60 + Math.floor(Math.random() * 20);
     const adjustedTemp = baseTemp + z.uhiOffset;
     const hazard = adjustedTemp > 40 ? 'Extreme' : adjustedTemp > 37 ? 'High' : adjustedTemp > 34 ? 'Moderate' : 'Safe';
-    return { zone: z.zone, hazard, temp: `${adjustedTemp.toFixed(1)}°C`, rh: `${rh}%`, desc: z.desc, time: adjustedTemp > 34 ? '11:00 AM – 4:00 PM' : 'N/A' };
+    return {
+      zone: z.zone,
+      hazard,
+      temp: `${adjustedTemp.toFixed(1)}°C`,
+      rh: `${rh}%`,
+      desc: z.desc,
+      time: adjustedTemp > 34 ? '11:00 AM – 4:00 PM' : 'N/A',
+      live: live !== null,
+      liveTempC: live ? Number(baseTemp.toFixed(1)) : null,
+      city: z.city,
+    };
   }));
 
   // Stats — try Supabase first, fall back to daily-seeded data
