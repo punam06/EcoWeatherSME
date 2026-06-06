@@ -12,7 +12,8 @@
     "test": "node -r ts-node/register --test tests/order.integration.test.ts",
     "test:smoke": "bash ../scripts/smoke-trust-layer-v2.sh",
     "test:all": "npm test && npm run test:smoke",
-    "legacy": "node index.js"
+    "legacy": "node index.js",
+    "ingest-bari": "ts-node --transpile-only src/scripts/ingestBariDocs.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.43.4",
