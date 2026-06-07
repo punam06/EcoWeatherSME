@@ -81,7 +81,11 @@ export function resolveEffectiveLanguage(detected: string | null): {
   isSupported: boolean;
   fallbackNotice: string | null;
 } {
-  if (!detected || !isGroqSupported(detected)) {
+  let lang = detected;
+  if (lang === 'bn') {
+    lang = 'en';
+  }
+  if (!lang || !isGroqSupported(lang)) {
     return {
       effectiveLanguage: 'en',
       isSupported: false,
@@ -89,7 +93,7 @@ export function resolveEffectiveLanguage(detected: string | null): {
     };
   }
   return {
-    effectiveLanguage: detected,
+    effectiveLanguage: lang,
     isSupported: true,
     fallbackNotice: null
   };

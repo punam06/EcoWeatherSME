@@ -4,6 +4,10 @@
  */
 const EcoLang = (function () {
   let currentLanguage = localStorage.getItem('ecoLang') || null;
+  if (currentLanguage === 'bn') {
+    currentLanguage = 'en';
+    localStorage.setItem('ecoLang', 'en');
+  }
   let listeners = [];
   let supportedLanguages = {};
 
