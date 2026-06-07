@@ -384,7 +384,7 @@
     <script type="text/babel" src="./components/LanguageSelector/LanguageSelector.jsx"></script>
     <script type="text/babel" src="./AuthPanel.jsx"></script>
     <script type="text/babel">
-    const { useState, useEffect, useRef, useCallback, useMemo } = React;
+    const { useState, useEffect, useRef, useCallback } = React;
 
 const IS_STATIC_FILE_HTML = window.location.protocol === 'file:';
 // Backend API base URL. The production backend that the live dashboard talks
@@ -533,19 +533,6 @@ const UHI_ZONES = {
 /* ═══════════════════════════════════════════════════════════════
    CALCULATION ENGINES
    ═══════════════════════════════════════════════════════════════ */
-function calcTrustScore({ pH, EC, temp, ratio, days }) {
-  let score = 100;
-  const pHOpt = 4.0, ECOpt = 3.5, tempOpt = 28;
-  score -= Math.abs(pH - pHOpt) * 8;
-  score -= Math.abs(EC - ECOpt) * 6;
-  score -= Math.abs(temp - tempOpt) * 1.2;
-  const ratioMap = { "1:1:10": -5, "1:1:20": 0, "1:1:30": -3, "1:1:40": -8 };
-  score += ratioMap[ratio] ?? 0;
-  if (days < 7) score -= (7 - days) * 4;
-  else if (days > 14) score -= (days - 14) * 2;
-  return Math.max(0, Math.min(100, Math.round(score)));
-}
-
 function getSolarFactor(hour) {
   if (hour >= 11 && hour < 15) return 1.0;
   if ((hour >= 8 && hour < 11) || (hour >= 15 && hour < 18)) return 0.6;
@@ -569,11 +556,6 @@ function calcThermalRisk(adjustedTemp) {
   if (adjustedTemp > 35) return { value: 1.0, label: "Critical", color: ACCENT.red };
   if (adjustedTemp > 32) return { value: 0.5, label: "Moderate", color: ACCENT.amber };
   return { value: 0.1, label: "Low", color: ACCENT.green };
-}
-
-function calcDVS(trustScore, adjustedTemp) {
-  const trf = adjustedTemp > 38 ? 1.0 : adjustedTemp > 35 ? 0.5 : 0.1;
-  return Math.max(0, Math.min(100, Math.round(trustScore * (1 - trf * 0.42))));
 }
 
 function calcTST(trustScore, zone, packaging, hour) {
@@ -866,53 +848,6 @@ const STANDARDS_CONFIG = {
   }
 };
 
-function calcTrustScoreV2({ category, pH, EC, temp, ratio, days }) {
-  const std = STANDARDS_CONFIG[category || 'organic'] || STANDARDS_CONFIG.organic;
-  let score = 100;
-  
-  if (std.phRange) {
-    const [pMin, pMax] = std.phRange;
-    const phVal = pH !== undefined ? pH : 7.0;
-    if (phVal < pMin) {
-      const penalty = Math.min(25, (pMin - phVal) * std.weights.ph);
-      score -= penalty;
-    } else if (phVal > pMax) {
-      const penalty = Math.min(25, (phVal - pMax) * (std.weights.ph * 0.7));
-      score -= penalty;
-    }
-  }
-  if (std.ecRange) {
-    const [eMin, eMax] = std.ecRange;
-    if (EC < eMin) {
-      const penalty = Math.min(20, (eMin - EC) * std.weights.ec);
-      score -= penalty;
-    } else if (EC > eMax) {
-      const penalty = Math.min(20, (EC - eMax) * (std.weights.ec * 0.6));
-      score -= penalty;
-    }
-  }
-  const [tMin, tMax] = std.tempRange;
-  if (temp < tMin) {
-    const penalty = Math.min(15, (tMin - temp) * std.weights.temp);
-    score -= penalty;
-  } else if (temp > tMax) {
-    const penalty = Math.min(20, (temp - tMax) * (std.weights.temp * 1.1));
-    score -= penalty;
-  }
-  if (std.requiredRatio && ratio !== std.requiredRatio) {
-    const penalty = std.weights.ratio;
-    score -= penalty;
-  }
-  if (days < std.minFermentationDays) {
-    const penalty = (std.minFermentationDays - days) * std.weights.days;
-    score -= penalty;
-  } else if (days > std.maxFermentationDays) {
-    const penalty = (days - std.maxFermentationDays) * (std.weights.days * 0.5);
-    score -= penalty;
-  }
-  return Math.max(0, Math.min(100, Math.round(score)));
-}
-
 function BatchVerificationForm({ onResult, onResultDetail, prefilledBatchId, prefilledDispatchZone, setPrefilledBatchId, setPrefilledDispatchZone }) {
   const [category, setCategory] = useState("organic");
   const [qaSource, setQaSource] = useState("iot");
@@ -1029,17 +964,17 @@ function BatchVerificationForm({ onResult, onResultDetail, prefilledBatchId, pre
         setBatchNum("");
       } catch (error) {
         console.error("Failed to fetch trust score:", error);
-        // Fallback to local calculation on error
-        const fallbackScore = calcTrustScoreV2({ category, pH: conf.ph ? pH : 7.0, EC, temp, ratio, days });
+        // Display offline fallback error
+        const fallbackScore = 0;
         setTs(fallbackScore);
         const fallbackResult = {
           score: fallbackScore,
-          grade: fallbackScore >= 90 ? 'A+' : fallbackScore >= 80 ? 'A' : fallbackScore >= 70 ? 'B' : fallbackScore >= 60 ? 'C' : 'F',
-          isViable: fallbackScore >= 60,
+          grade: 'F',
+          isViable: false,
           category: category,
           breakdown: null,
-          reference: 'local-fallback',
-          notes: ['Using offline fallback — backend unreachable'],
+          reference: 'API-Offline',
+          notes: ['Backend unreachable — cannot compute score'],
         };
         setTsResult(fallbackResult);
         onResult(fallbackScore);
@@ -1772,6 +1707,265 @@ function ClaimVerifier({ onSelectBatch }) {
   );
 }
 
+function TrackingView() {
+  const [batchId, setBatchId] = useState("");
+  const [status, setStatus] = useState("idle"); // idle | loading | ok | missing | error
+  const [result, setResult] = useState(null);
+  const [scans, setScans] = useState([]);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const extractBatchId = (raw) => {
+    if (!raw) return "";
+    const trimmed = raw.trim();
+    const urlMatch = trimmed.match(/\/verify\/([^/?#]+)/i);
+    if (urlMatch) return urlMatch[1];
+    const paramMatch = trimmed.match(/[?&]batch=([^&]+)/i);
+    if (paramMatch) return paramMatch[1];
+    return trimmed;
+  };
+
+  const handleFetchTracking = async (id) => {
+    const cleanId = extractBatchId(id);
+    if (!cleanId) {
+      setStatus("error");
+      setErrorMsg("Please enter a valid batch ID.");
+      return;
+    }
+    setStatus("loading");
+    setErrorMsg("");
+    setResult(null);
+    setScans([]);
+    try {
+      if (!window.APIClient || !window.APIClient.verifyClaim) {
+        throw new Error("verifyClaim API is not available.");
+      }
+      const r = await window.APIClient.verifyClaim(cleanId);
+      const payload = r && r.success === false ? null : (r && r.data ? r.data : r);
+      
+      if (!payload) {
+        setStatus("missing");
+      } else {
+        setStatus("ok");
+        setResult(payload);
+        
+        // Fetch scans history in parallel
+        try {
+          if (window.APIClient.getBatchScans) {
+            const scansRes = await window.APIClient.getBatchScans(cleanId);
+            const scansData = scansRes && scansRes.success ? (scansRes.data?.scans || scansRes.data || []) : [];
+            setScans(scansData);
+          }
+        } catch (scanErr) {
+          console.warn("Could not fetch scan history:", scanErr);
+        }
+      }
+    } catch (e) {
+      setStatus("error");
+      setErrorMsg(e.message || String(e));
+    }
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlBatch = params.get("batch");
+    if (urlBatch) {
+      setBatchId(urlBatch);
+      handleFetchTracking(urlBatch);
+    }
+  }, []);
+
+  return (
+    <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
+      <SectionLabel icon="🔍" text="Consumer Provenance & Scan Tracking" />
+      <Card>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16 }}>
+          <input
+            value={batchId}
+            onChange={(e) => setBatchId(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleFetchTracking(batchId); }}
+            placeholder="Enter Batch ID (e.g. BCH-123) or paste QR URL"
+            style={{
+              flex: 1, padding: "12px 14px", fontSize: 13,
+              background: "var(--bg-input)", color: "var(--text-primary)",
+              border: "1px solid var(--border-primary)", borderRadius: 8,
+              fontFamily: "'JetBrains Mono', monospace", outline: "none",
+            }}
+          />
+          <button
+            onClick={() => handleFetchTracking(batchId)}
+            disabled={status === "loading"}
+            style={{
+              padding: "12px 20px", fontSize: 12, fontWeight: 700,
+              background: ACCENT.blueBg, color: ACCENT.blue,
+              border: `1px solid ${ACCENT.blueBorder}`, borderRadius: 8,
+              cursor: status === "loading" ? "wait" : "pointer",
+              letterSpacing: "0.06em",
+            }}
+          >
+            {status === "loading" ? "LOADING..." : "TRACK BATCH"}
+          </button>
+        </div>
+
+        {status === "loading" && (
+          <div style={{ textAlign: "center", padding: "40px 0" }}>
+            <span style={{ fontSize: 24 }}>⏳</span>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 8 }}>Verifying cryptographic chain and loading telemetry...</div>
+          </div>
+        )}
+
+        {status === "missing" && (
+          <div style={{ padding: 14, borderRadius: 8, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.35)", color: "#f59e0b", fontSize: 12 }}>
+            ⚠️ No certified batch found matching the query. Please verify the Batch ID.
+          </div>
+        )}
+
+        {status === "error" && (
+          <div style={{ padding: 12, borderRadius: 8, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.35)", color: "#ef4444", fontSize: 12 }}>
+            ❌ {errorMsg}
+          </div>
+        )}
+
+        {status === "ok" && result && (
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
+            {/* Left Column: Provenance Chain */}
+            <div>
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "10px 14px",
+                borderRadius: 8,
+                background: result.chain?.verified ? "rgba(16,185,129,0.06)" : "rgba(239,68,68,0.06)",
+                border: `1px solid ${result.chain?.verified ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
+                color: result.chain?.verified ? ACCENT.green : ACCENT.red,
+                fontSize: 12,
+                fontWeight: 700,
+                marginBottom: 16
+              }}>
+                <span>{result.chain?.verified ? "🔒 CRYPTOGRAPHIC CHAIN SECURED" : "🚨 HASH CHAIN MISMATCH (TAMPERED)"}</span>
+                <span style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", opacity: 0.7 }}>SHA-256 VALIDATED</span>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 16, position: "relative", paddingLeft: 20 }}>
+                <div style={{
+                  position: "absolute",
+                  left: 6,
+                  top: 8,
+                  bottom: 8,
+                  width: 2,
+                  borderLeft: `2px dashed ${result.chain?.verified ? "rgba(16, 185, 129, 0.3)" : "rgba(239, 68, 68, 0.3)"}`
+                }}></div>
+
+                {result.chain?.events && result.chain.events.map((e, idx) => {
+                  const eventType = e.event_type || e.type || "qa";
+                  const actor = e.actor || "system";
+                  const eventData = e.event_data || e.data || {};
+                  const timestamp = e.timestamp || e.signed_at || new Date().toISOString();
+
+                  let icon = "📋";
+                  let title = "QA INTAKE REPORT";
+                  if (eventType === "genesis") { icon = "🌱"; title = "GENESIS REGISTRATION"; }
+                  else if (eventType === "dispatch" || eventType === "dispatched") { icon = "🚚"; title = "DISPATCH COMPLETED"; }
+                  else if (eventType === "delivery" || eventType === "delivered" || eventType === "receipt") { icon = "📦"; title = "DELIVERY RECEIPT CONFIRMED"; }
+
+                  return (
+                    <div key={idx} style={{ position: "relative" }}>
+                      <div style={{
+                        position: "absolute",
+                        left: -18,
+                        top: 5,
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        background: result.chain?.verified ? ACCENT.green : ACCENT.red,
+                        border: "2px solid var(--bg-secondary)",
+                      }}></div>
+
+                      <div style={{ background: "var(--bg-input)", padding: 12, borderRadius: 8, border: "1px solid var(--border-primary)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 6 }}>
+                            <span>{icon}</span> {title}
+                          </span>
+                          <span style={{ fontSize: 10, color: "var(--text-dim)", fontFamily: "'JetBrains Mono', monospace" }}>
+                            {new Date(timestamp).toLocaleString()}
+                          </span>
+                        </div>
+                        
+                        <div style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                          <div><span style={{ color: "var(--text-dim)" }}>Operator/Actor:</span> {actor}</div>
+                          {eventType === "genesis" && (
+                            <>
+                              <div><span style={{ color: "var(--text-dim)" }}>Feedstock Type:</span> {eventData.feedstock_type || eventData.product_type || "Bio-Slurry"}</div>
+                              <div><span style={{ color: "var(--text-dim)" }}>Weight:</span> {eventData.weight_kg || 0} kg</div>
+                            </>
+                          )}
+                          {eventType === "qa" && (
+                            <>
+                              <div><span style={{ color: "var(--text-dim)" }}>QA Metrics:</span> pH {eventData.pH || eventData.ph} | EC {eventData.EC || eventData.ec} | Temp {eventData.temperature || eventData.temp}°C</div>
+                              <div><span style={{ color: "var(--text-dim)" }}>EM-1 Inoculation Ratio:</span> {eventData.em1_ratio || "1:1:20"}</div>
+                              <div><span style={{ color: "var(--text-dim)" }}>Fermentation Window:</span> {eventData.fermentation_days || 0} days</div>
+                            </>
+                          )}
+                          {(eventType === "dispatch" || eventType === "dispatched") && (
+                            <>
+                              <div><span style={{ color: "var(--text-dim)" }}>Destination Zone:</span> {eventData.destination_zone || eventData.to || "Mirpur"}</div>
+                              <div><span style={{ color: "var(--text-dim)" }}>Vehicle Details:</span> {eventData.vehicle || "DHK-1234"} (Driver: {eventData.driver || "Rakib"})</div>
+                            </>
+                          )}
+                          {(eventType === "delivery" || eventType === "delivered") && (
+                            <>
+                              <div><span style={{ color: "var(--text-dim)" }}>Receiver Signature:</span> {eventData.received_by || eventData.receiver || "Warehouse Manager"}</div>
+                              <div><span style={{ color: "var(--text-dim)" }}>Cargo Condition:</span> {eventData.condition || "good"}</div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Right Column: Scan History & Stats */}
+            <div>
+              <div style={{ background: "var(--bg-input)", padding: 16, borderRadius: 10, border: "1px solid var(--border-primary)", marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", letterSpacing: "0.08em", marginBottom: 12 }}>
+                  VERIFIED SCAN AUDIT
+                </div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                  <span style={{ fontSize: 36, fontWeight: 800, color: ACCENT.green }}>{result.scanCount || scans.length || 0}</span>
+                  <span style={{ fontSize: 12, color: "var(--text-dim)" }}>Total Consumer Scans</span>
+                </div>
+              </div>
+
+              <div style={{ background: "var(--bg-input)", padding: 16, borderRadius: 10, border: "1px solid var(--border-primary)", maxHeight: 400, overflowY: "auto" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", letterSpacing: "0.08em", marginBottom: 12 }}>
+                  SCAN ANTECEDENCE FEED
+                </div>
+                {scans.length === 0 ? (
+                  <div style={{ fontSize: 11, color: "var(--text-dim)", padding: "10px 0" }}>No scan records registered yet.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {scans.map((s, sIdx) => (
+                      <div key={sIdx} style={{ fontSize: 10, padding: 8, borderRadius: 6, background: "var(--bg-primary)", border: "1px solid var(--border-primary)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-primary)", fontWeight: 600, marginBottom: 4 }}>
+                          <span>📱 {s.ipHash}</span>
+                          <span>{new Date(s.scannedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                        </div>
+                        <div style={{ color: "var(--text-dim)", wordBreak: "break-all" }}>{s.userAgent}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════════
    TAB 2: MICROCLIMATE INTELLIGENCE (MERM Pipeline)
    ═══════════════════════════════════════════════════════════════ */
@@ -1819,7 +2013,7 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
   const [routeDuration, setRouteDuration] = useState(90);
   const [zoneSearch, setZoneSearch] = useState("");
   const [isFetchingWeather, setIsFetchingWeather] = useState(false);
-  const [weatherSource, setWeatherSource] = useState("estimated"); // "live" | "estimated"
+  const [weatherSource, setWeatherSource] = useState("estimated"); // "live" | "estimated" | "fetching"
   const [isFetchingMetrics, setIsFetchingMetrics] = useState(false);
   const [dvs, setDvs] = useState(0);
   const [tst, setTst] = useState(0);
@@ -2052,78 +2246,56 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
     recognition.start();
   };
 
-  // Time-of-day derived weather fallback for Dhaka (used when backend is stale
-  // or the OpenWeather call fails). Peak at ~13:00 (33–35°C), cool at night
-  // (25–27°C), wind in the 5–14 km/h range. Values are *deterministic* per
-  // current minute so they actually change as time passes.
+  // Local fallback weather model: Dhaka diurnal temperature curve with zone-specific adjustments.
+  // Used when the backend /api/weather endpoint is unavailable (e.g. stale Render build or missing key).
   const deriveLocalFallbackWeather = (zoneName) => {
     const now = new Date();
-    const hour = now.getHours();
-    const minute = now.getMinutes();
-    // Diurnal temperature curve: peak at 13:00, low at 05:00
-    const peakHour = 13;
-    const lowHour = 5;
-    const peak = 34.5; // Dhaka typical peak °C
-    const low = 26.0;
-    const hourDist = Math.abs(hour + minute / 60 - peakHour);
-    const lowDist = Math.abs(hour + minute / 60 - lowHour);
-    const closer = Math.min(hourDist, lowDist);
-    // cosine-shaped curve mapped to [low, peak]
-    const t = closer / 8; // 0 at peak/low, 1 at midpoint
-    const tempRange = peak - low;
-    const baseDhaka = closer === hourDist
-      ? peak - tempRange * (1 - Math.cos(t * Math.PI)) / 2
-      : low + tempRange * (1 - Math.cos(t * Math.PI)) / 2;
-    // Zone adjustments
-    const zoneAdj = { "Old Dhaka": 1.8, "Mirpur": 0.6, "Savar": -0.4, "Gulshan": -0.8, "Dhanmondi": 0.2 };
-    const adj = zoneAdj[zoneName] || 0;
-    const temp = baseDhaka + adj;
-    // Wind: stronger in afternoon, varies with zone (UHI corridors = turbulent)
-    const windBase = 6 + 4 * Math.sin(((hour - 9) / 24) * 2 * Math.PI);
-    const windZoneAdj = { "Old Dhaka": 3, "Mirpur": 1, "Gulshan": -2, "Savar": 0, "Dhanmondi": -1 };
-    const wind = Math.max(2, Math.round(windBase + (windZoneAdj[zoneName] || 0)));
-    return { temp: Math.round(temp * 10) / 10, wind };
+    const h = now.getHours() + now.getMinutes() / 60;
+    // Peak 13:00 → 34.5°C, low 5:00 → 26°C; smooth cosine interpolation between
+    const closer = Math.min(Math.abs(h - 13), Math.abs(h - 5));
+    const peak = 34.5;
+    const trough = 26;
+    const temp = trough + (peak - trough) * (1 - Math.cos((closer / 8) * Math.PI)) / 2;
+    // Wind: 6 km/h base, ±4 sinusoidal
+    const wind = Math.max(3, Math.round(6 + 4 * Math.sin(((h - 9) / 24) * 2 * Math.PI)));
+    // Zone-specific adjustments (urban heat island variations across Dhaka)
+    const zoneAdjustments = {
+      "Old Dhaka": 1.8, "Motijheel": 1.5, "Dhanmondi": 1.2, "Ramna": 1.4,
+      "Tejgaon": 1.6, "Gulshan": 0.9, "Banani": 0.7, "Uttara": 0.3,
+      "Mirpur": 0.6, "Mohammadpur": 0.8, "Savar": -0.4, "Keraniganj": -0.2,
+      "Gazipur": 0.0, "Narayanganj": 0.5, "Tongi": 0.2,
+    };
+    const adjustment = zoneAdjustments[zoneName] ?? 0;
+    return { temp: Math.round((temp + adjustment) * 10) / 10, wind };
   };
 
   const fetchLiveWeather = async (locationQuery = null) => {
     setIsFetchingWeather(true);
+    setWeatherSource("fetching");
     const targetLocation = typeof locationQuery === "string" ? locationQuery : (zoneSearch || zone || "Dhaka");
-    const targetZone = (typeof locationQuery === "string" && UHI_ZONES[locationQuery]) ? locationQuery : zone;
-    let usedFallback = false;
-    let usedSource = "live";
+    let usedLive = false;
     try {
       const geoRes = await window.APIClient.geocode(targetLocation);
-      if (geoRes && geoRes.success && geoRes.data) {
+      if (geoRes.success && geoRes.data) {
         const { lat, lon } = geoRes.data;
         const weatherRes = await window.APIClient.getWeather(lat, lon);
-        if (weatherRes && weatherRes.success && weatherRes.data) {
+        if (weatherRes.success && weatherRes.data) {
           setBaseTemp(Math.round(weatherRes.data.temperature * 10) / 10);
           setWindSpeed(Math.round(weatherRes.data.windspeed_kmh));
-          usedSource = "live";
-        } else {
-          const fb = deriveLocalFallbackWeather(targetZone);
-          setBaseTemp(fb.temp);
-          setWindSpeed(fb.wind);
-          usedFallback = true;
-          usedSource = "estimated";
+          setWeatherSource("live");
+          usedLive = true;
         }
-      } else {
-        const fb = deriveLocalFallbackWeather(targetZone);
-        setBaseTemp(fb.temp);
-        setWindSpeed(fb.wind);
-        usedFallback = true;
-        usedSource = "estimated";
       }
     } catch (e) {
-      console.error("Failed to fetch live weather via backend, using local estimate", e);
-      const fb = deriveLocalFallbackWeather(targetZone);
-      setBaseTemp(fb.temp);
-      setWindSpeed(fb.wind);
-      usedFallback = true;
-      usedSource = "estimated";
+      console.error("Failed to fetch live weather via backend", e);
     }
-    setWeatherSource(usedSource);
-    if (usedSource === "estimated") {
+    if (!usedLive) {
+      // Backend unavailable (404 stale build, missing key, etc.) — fall back to a local Dhaka model
+      // so the UI never displays the static 31°C / 8 km/h defaults indefinitely.
+      const fallback = deriveLocalFallbackWeather(zone);
+      setBaseTemp(fallback.temp);
+      setWindSpeed(fallback.wind);
+      setWeatherSource("estimated");
       console.info(
         "%c[weather]%c Using local Dhaka diurnal estimate — " +
         "live OpenWeather call did not return data. " +
@@ -2150,13 +2322,15 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{ fontSize: 12, color: "var(--text-secondary)", fontWeight: 500 }}>Weather Conditions</div>
-              <span style={{
-                fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "2px 6px", borderRadius: 4,
-                background: weatherSource === "live" ? "rgba(16, 185, 129, 0.12)" : "rgba(245, 158, 11, 0.12)",
-                color: weatherSource === "live" ? ACCENT.green : ACCENT.amber,
-                border: `1px solid ${weatherSource === "live" ? ACCENT.greenBorder : "rgba(245, 158, 11, 0.3)"}`
-              }}>
-                {isFetchingWeather ? "⏳ FETCHING" : weatherSource === "live" ? "● LIVE" : "◐ ESTIMATED"}
+              <span
+                title={weatherSource === "live" ? "Live data from OpenWeather via backend" : weatherSource === "fetching" ? "Fetching live data..." : "Estimated from local Dhaka diurnal model (backend unavailable)"}
+                style={{
+                  fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+                  padding: "2px 8px", borderRadius: 999,
+                  background: weatherSource === "live" ? "#10b981" : weatherSource === "fetching" ? "#6b7280" : "#f59e0b",
+                  color: "#fff", display: "inline-flex", alignItems: "center", gap: 4,
+                }}>
+                {weatherSource === "live" ? "● LIVE" : weatherSource === "fetching" ? "⏳ FETCHING" : "◐ ESTIMATED"}
               </span>
             </div>
             <button
@@ -2479,6 +2653,7 @@ function DemandChart() {
    ═══════════════════════════════════════════════════════════════ */
 function ESGCard({ trustScore, dvs }) {
   const [esgData, setEsgData] = useState(null);
+  const [esgReport, setEsgReport] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -2486,8 +2661,14 @@ function ESGCard({ trustScore, dvs }) {
     const fetchEsgData = async () => {
       try {
         setIsLoading(true);
-        const data = await window.APIClient.getESGMetrics(trustScore, dvs);
+        const [data, reportRes] = await Promise.all([
+           window.APIClient.getESGMetrics(trustScore, dvs),
+           window.APIClient.getESGReport()
+        ]);
         setEsgData(data);
+        if (reportRes && reportRes.success && reportRes.data) {
+           setEsgReport(reportRes.data.ledger || reportRes.data || []);
+        }
         setError(null);
       } catch (err) {
         setError('Failed to load ESG metrics. Please try again later.');
@@ -2534,7 +2715,7 @@ function ESGCard({ trustScore, dvs }) {
     waste_reduced_kg: wasteReduced,
   } = esgData;
 
-  const mockLedger = [
+  const ledgerData = esgReport.length > 0 ? esgReport : [
     { id: "BCH-8492", date: "2026-05-28", zone: "Mirpur", env: "4.2 kg CO₂", soc: "Direct SME B2B Premium Paid", gov: "Manually Signed (BARI)", hash: "0x8f7a...3e" },
     { id: "BCH-8411", date: "2026-05-27", zone: "Jatrabari", env: "3.8 kg CO₂", soc: "Direct SME B2B Premium Paid", gov: "Manually Signed (BARI)", hash: "0x4b2c...7d" },
     { id: "BCH-8380", date: "2026-05-26", zone: "Uttara", env: "4.9 kg CO₂", soc: "Direct SME B2B Premium Paid", gov: "Manually Signed (BARI)", hash: "0x9a1e...9b" },
@@ -2724,7 +2905,7 @@ function ESGCard({ trustScore, dvs }) {
               </tr>
             </thead>
             <tbody>
-              {mockLedger.map(row => (
+              {ledgerData.map(row => (
                 <tr key={row.id} style={{ borderBottom: "1px dashed var(--border-primary)" }}>
                   <td style={{ padding: "10px 4px", fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: ACCENT.green }}>{row.id}</td>
                   <td style={{ padding: "10px 4px", color: "var(--text-secondary)" }}>{row.date}</td>
@@ -2822,10 +3003,8 @@ function ESGCard({ trustScore, dvs }) {
    in one panel. Degrades gracefully when the new BI route is not
    yet deployed on the live backend.
    ═══════════════════════════════════════════════════════════════ */
-// CLIMALOGIX BI VIEW — anchored by signature for deep-link + deep-fetch wiring
 function BusinessIntelligenceView({ trustScore, dvs }) {
-  // ── Live BI: pulls /api/bi on mount, falls back to ESG-derived synthetic on error ──
-  const [bi, setBi] = useState(null);
+  const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [months, setMonths] = useState(12);
@@ -2836,24 +3015,26 @@ function BusinessIntelligenceView({ trustScore, dvs }) {
       setLoading(true);
       setError(null);
       try {
-        if (window.APIClient && window.APIClient.getBI) {
-          const r = await window.APIClient.getBI();
-          if (!cancelled) {
-            const payload = r && r.data ? r.data : r;
-            if (payload && (payload.sustainabilityTrend || payload.totals)) {
-              setBi(payload);
+        // getESGReport is not on the live backend yet — fall back to a
+        // synthesised series derived from the live ESG snapshot so the
+        // panel is never empty.
+        if (window.APIClient && window.APIClient.getESGReport) {
+          try {
+            const r = await window.APIClient.getESGReport(months);
+            if (!cancelled) {
+              // accept both {data: …} envelope and flat shapes
+              const payload = r && r.data ? r.data : r;
+              setReport(payload && Object.keys(payload).length ? payload : null);
               setError(null);
-            } else {
-              throw new Error("empty BI payload");
             }
+            return;
+          } catch (e) {
+            // route missing on live — fall through to synthetic series
           }
-        } else {
-          throw new Error("getBI not on APIClient");
         }
-      } catch (e) {
         if (!cancelled) {
-          setBi(null);
-          setError("Live BI endpoint unavailable; showing ESG-derived synthetic trend.");
+          setReport(null);
+          setError("Live ESG-report endpoint not yet deployed; showing projected trend.");
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -2862,60 +3043,42 @@ function BusinessIntelligenceView({ trustScore, dvs }) {
     return () => { cancelled = true; };
   }, [months]);
 
-  // Build a 12-month projection from current trust/DVS (used as the fallback)
+  // Build a 12-month projection from the current ESG snapshot. The shape
+  // intentionally mirrors what /api/esg/report returns so the chart will
+  // automatically upgrade to real data once the route is live.
+  const months_back = months;
   const synthetic = useMemo(() => {
-    const labels = [], e = [], s = [], g = [];
+    const labels = [];
+    const e = [], s = [], g = [];
     const now = new Date();
-    for (let i = months - 1; i >= 0; i--) {
+    for (let i = months_back - 1; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       labels.push(d.toLocaleString('default', { month: 'short' }) + " '" + String(d.getFullYear()).slice(-2));
-      const factor = (i / months) * 0.35;
-      e.push(Math.round(Math.max(20, Math.min(95, 60 + trustScore * 0.25 - factor * 10))));
-      s.push(Math.round(Math.max(20, Math.min(95, 55 + trustScore * 0.30 - factor * 8))));
-      g.push(Math.round(Math.max(20, Math.min(95, 50 + dvs * 0.35 - factor * 6))));
+      // gentle upward trend, damped by current trust/DVS
+      const factor = (i / months_back) * 0.35;
+      const baseE = Math.max(20, Math.min(95, 60 + trustScore * 0.25 - factor * 10));
+      const baseS = Math.max(20, Math.min(95, 55 + trustScore * 0.30 - factor * 8));
+      const baseG = Math.max(20, Math.min(95, 50 + dvs * 0.35 - factor * 6));
+      e.push(Math.round(baseE));
+      s.push(Math.round(baseS));
+      g.push(Math.round(baseG));
     }
-    return { labels, e, s, g };
+    return { labels, e, s, g, source: "synthetic" };
   }, [trustScore, dvs, months]);
 
-  // Live data: derive labels from sustainabilityTrend.day, fake E/S/G to keep chart happy
-  const live = bi && bi.sustainabilityTrend && bi.sustainabilityTrend.length
-    ? {
-        labels: bi.sustainabilityTrend.map(p => p.date.slice(5)),
-        e: bi.sustainabilityTrend.map(p => Math.min(95, Math.round(p.co2Kg / 50))),
-        s: bi.sustainabilityTrend.map(p => Math.min(95, Math.round(p.plasticBottles / 200))),
-        g: bi.sustainabilityTrend.map(p => Math.min(95, 50 + Math.round(p.batches * 4))),
-        source: "live",
-      }
-    : null;
-  const series = live || { ...synthetic, source: "synthetic" };
-
-  const totals = bi?.totals || { totalBatches: 0, certifiedBatches: 0, totalWeightKg: 0, co2SequesteredKg: 0, plasticBottlesSaved: 0 };
-  const layer  = bi?.layerBreakdown || { l1Registrations: 0, l2Certifications: 0, l3QrScans: 0 };
-  const trustDist = bi?.trustDistribution || [];
-  const regions   = bi?.regionalMarketPull || [];
-  const top       = bi?.topBatches || [];
-  const isLive    = bi && bi.source === "live";
+  const series = report && report.months ? report : synthetic;
+  const maxY = 100;
 
   return (
     <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
       <SectionLabel icon="🧠" text="Business Intelligence · Sustainability × Market" />
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <span style={{ fontSize: 9, color: "var(--text-dim)" }}>DATA SOURCE</span>
-        <span style={{
-          fontSize: 9, fontWeight: 600, letterSpacing: "0.05em", padding: "2px 8px", borderRadius: 999,
-          background: isLive ? "rgba(16,185,129,0.12)" : "rgba(245,158,11,0.10)",
-          color: isLive ? "#10b981" : "#f59e0b",
-          border: "1px solid " + (isLive ? "rgba(16,185,129,0.3)" : "rgba(245,158,11,0.3)"),
-        }}>{isLive ? "● LIVE" : "◐ SYNTHETIC"}</span>
-        {isLive && <span style={{ fontSize: 9, color: "var(--text-dim)" }}>· refreshed {new Date(bi.generatedAt).toLocaleTimeString()}</span>}
-      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 20 }}>
-        {/* ── Sustainability trend (live from /api/bi) ────── */}
+        {/* ── ESG Report panel ─────────────────────────────── */}
         <Card>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <div style={{ fontSize: 12, color: "var(--text-secondary)", letterSpacing: "0.05em", fontWeight: 600 }}>
-              SUSTAINABILITY TREND · 14 DAY
+              MONTHLY ESG REPORT
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: 9, color: "var(--text-dim)" }}>WINDOW</span>
@@ -2936,21 +3099,22 @@ function BusinessIntelligenceView({ trustScore, dvs }) {
             </div>
           )}
 
+          {/* Stacked ESG trend chart */}
           <div style={{ height: 220, display: "flex", alignItems: "flex-end", gap: 4, padding: "0 4px", borderBottom: "1px solid var(--border-primary)", position: "relative" }}>
             {[20, 40, 60, 80, 100].map((g) => (
               <div key={g} style={{ position: "absolute", left: 0, right: 0, bottom: `${g}%`, borderTop: "1px dashed rgba(148,163,184,0.15)", pointerEvents: "none" }} />
             ))}
             {series.labels.map((label, i) => {
-              const ev = series.e[i] || 0;
-              const sv = series.s[i] || 0;
-              const gv = series.g[i] || 0;
-              const avg = Math.round((ev + sv + gv) / 3);
+              const e = series.e[i] || 0;
+              const s = series.s[i] || 0;
+              const g = series.g[i] || 0;
+              const avg = Math.round((e + s + g) / 3);
               return (
                 <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, minWidth: 0 }} title={`${label} · ESG ${avg}`}>
                   <div style={{ width: "70%", display: "flex", flexDirection: "column-reverse", height: `${avg}%`, minHeight: 2, borderRadius: "3px 3px 0 0", overflow: "hidden" }}>
-                    <div style={{ flex: gv, background: "#3b82f6" }} />
-                    <div style={{ flex: sv, background: "#a855f7" }} />
-                    <div style={{ flex: ev, background: "#10b981" }} />
+                    <div style={{ flex: g, background: "#3b82f6" }} />
+                    <div style={{ flex: s, background: "#a855f7" }} />
+                    <div style={{ flex: e, background: "#10b981" }} />
                   </div>
                 </div>
               );
@@ -2962,103 +3126,39 @@ function BusinessIntelligenceView({ trustScore, dvs }) {
             ))}
           </div>
           <div style={{ display: "flex", gap: 14, marginTop: 10, fontSize: 10, color: "var(--text-secondary)" }}>
-            <span><span style={{ display: "inline-block", width: 8, height: 8, background: "#10b981", borderRadius: 2, marginRight: 4 }} />CO₂ sequestered</span>
-            <span><span style={{ display: "inline-block", width: 8, height: 8, background: "#a855f7", borderRadius: 2, marginRight: 4 }} />Plastic saved</span>
-            <span><span style={{ display: "inline-block", width: 8, height: 8, background: "#3b82f6", borderRadius: 2, marginRight: 4 }} />Batches</span>
+            <span><span style={{ display: "inline-block", width: 8, height: 8, background: "#10b981", borderRadius: 2, marginRight: 4 }} />Environmental</span>
+            <span><span style={{ display: "inline-block", width: 8, height: 8, background: "#a855f7", borderRadius: 2, marginRight: 4 }} />Social</span>
+            <span><span style={{ display: "inline-block", width: 8, height: 8, background: "#3b82f6", borderRadius: 2, marginRight: 4 }} />Governance</span>
           </div>
         </Card>
 
-        {/* ── KPI panel (live totals + 3-layer breakdown) ── */}
+        {/* ── KPI summary panel ────────────────────────────── */}
         <Card>
           <div style={{ fontSize: 12, color: "var(--text-secondary)", letterSpacing: "0.05em", fontWeight: 600, marginBottom: 12 }}>
-            PIPELINE KPIs · 3-LAYER
+            PIPELINE KPIs
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <KpiBox label="TOTAL BATCHES"        value={totals.totalBatches}        color="#3b82f6" />
-            <KpiBox label="CERTIFIED"             value={`${totals.certifiedBatches}/${totals.totalBatches}`} color="#a855f7" />
-            <KpiBox label="CO₂ SEQUESTERED (kg)"  value={totals.co2SequesteredKg.toLocaleString()} color="#10b981" />
-            <KpiBox label="BOTTLES SAVED"         value={totals.plasticBottlesSaved.toLocaleString()} color="#10b981" />
+            {[
+              { label: "Trust Score",  value: trustScore, target: 60, color: trustScore >= 60 ? "#10b981" : "#ef4444" },
+              { label: "DVS",          value: dvs,        target: 75, color: dvs >= 75 ? "#10b981" : dvs >= 55 ? "#f59e0b" : "#ef4444" },
+              { label: "Cert Rate",    value: "—",        target: null, color: "#94a3b8" },
+              { label: "Plastic Saved",value: "—",        target: null, color: "#10b981" },
+            ].map((kpi, i) => (
+              <div key={i} style={{ padding: 12, borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)" }}>
+                <div style={{ fontSize: 9, color: "var(--text-dim)", letterSpacing: "0.08em", fontWeight: 600 }}>{kpi.label.toUpperCase()}</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: kpi.color, fontFamily: "'JetBrains Mono', monospace", marginTop: 4 }}>{kpi.value}</div>
+                {kpi.target != null && (
+                  <div style={{ fontSize: 9, color: "var(--text-dim)", marginTop: 2 }}>target ≥ {kpi.target}</div>
+                )}
+              </div>
+            ))}
           </div>
           <div style={{ marginTop: 14, padding: 10, borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)" }}>
-            <div style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 600, marginBottom: 6 }}>TRUST LAYER FUNNEL</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10 }}>
-              <span style={{ color: "#3b82f6", fontWeight: 600 }}>L1</span>
-              <span style={{ flex: 1, color: "var(--text-primary)" }}>{layer.l1Registrations} registered</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, marginTop: 4 }}>
-              <span style={{ color: "#a855f7", fontWeight: 600 }}>L2</span>
-              <span style={{ flex: 1, color: "var(--text-primary)" }}>{layer.l2Certifications} certified</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, marginTop: 4 }}>
-              <span style={{ color: "#10b981", fontWeight: 600 }}>L3</span>
-              <span style={{ flex: 1, color: "var(--text-primary)" }}>{layer.l3QrScans} QR scans</span>
+            <div style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 600, marginBottom: 4 }}>3-Layer Snapshot</div>
+            <div style={{ fontSize: 11, color: "var(--text-primary)", lineHeight: 1.55 }}>
+              <span style={{ color: "#3b82f6" }}>Sensing</span>: {trustScore >= 60 ? "✓" : "✗"} viability · <span style={{ color: "#a855f7" }}>Intelligence</span>: DVS {dvs} · <span style={{ color: "#10b981" }}>Presentation</span>: ESG ledger live
             </div>
           </div>
-        </Card>
-      </div>
-
-      {/* Row 2: Trust Distribution + Regional Market Pull + Top Batches */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 20, marginTop: 18 }}>
-        <Card>
-          <div style={{ fontSize: 11, color: "var(--text-secondary)", letterSpacing: "0.05em", fontWeight: 600, marginBottom: 12 }}>
-            TRUST SCORE DISTRIBUTION
-          </div>
-          {trustDist.length === 0 ? (
-            <div style={{ fontSize: 10, color: "var(--text-dim)", padding: 12 }}>No batches yet.</div>
-          ) : (
-            trustDist.map((b) => {
-              const max = Math.max(...trustDist.map(x => x.count), 1);
-              const pct = (b.count / max) * 100;
-              return (
-                <div key={b.bucket} style={{ marginBottom: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-secondary)", marginBottom: 2 }}>
-                    <span>{b.bucket}</span><span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{b.count}</span>
-                  </div>
-                  <div style={{ height: 6, background: "var(--bg-input)", borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{ width: `${pct}%`, height: "100%", background: pct > 60 ? "#10b981" : pct > 30 ? "#f59e0b" : "#ef4444", borderRadius: 3 }} />
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </Card>
-
-        <Card>
-          <div style={{ fontSize: 11, color: "var(--text-secondary)", letterSpacing: "0.05em", fontWeight: 600, marginBottom: 12 }}>
-            REGIONAL MARKET PULL
-          </div>
-          {regions.length === 0 ? (
-            <div style={{ fontSize: 10, color: "var(--text-dim)", padding: 12 }}>No destination data yet.</div>
-          ) : (
-            regions.slice(0, 6).map((r) => (
-              <div key={r.zone} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px dashed var(--border-primary)" }}>
-                <div>
-                  <div style={{ fontSize: 11, color: "var(--text-primary)", fontWeight: 500 }}>{r.zone}</div>
-                  <div style={{ fontSize: 9, color: "var(--text-dim)" }}>{r.totalWeightKg.toLocaleString()} kg · trust {r.avgTrustScore}</div>
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#10b981", fontFamily: "'JetBrains Mono', monospace" }}>{r.batches}</div>
-              </div>
-            ))
-          )}
-        </Card>
-
-        <Card>
-          <div style={{ fontSize: 11, color: "var(--text-secondary)", letterSpacing: "0.05em", fontWeight: 600, marginBottom: 12 }}>
-            TOP BATCHES · TRUST SCORE
-          </div>
-          {top.length === 0 ? (
-            <div style={{ fontSize: 10, color: "var(--text-dim)", padding: 12 }}>No certified batches yet.</div>
-          ) : (
-            top.map((b) => (
-              <div key={b.batchId} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px dashed var(--border-primary)" }}>
-                <div>
-                  <div style={{ fontSize: 11, color: "var(--text-primary)", fontWeight: 500 }}>{b.productName}</div>
-                  <div style={{ fontSize: 9, color: "var(--text-dim)", fontFamily: "'JetBrains Mono', monospace" }}>{b.batchId} · {b.weightKg} kg</div>
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: b.trustScore >= 80 ? "#10b981" : "#f59e0b", fontFamily: "'JetBrains Mono', monospace" }}>{b.trustScore}</div>
-              </div>
-            ))
-          )}
         </Card>
       </div>
 
@@ -3068,143 +3168,6 @@ function BusinessIntelligenceView({ trustScore, dvs }) {
           <DemandChart />
         </Card>
       </div>
-    </div>
-  );
-}
-
-function KpiBox({ label, value, color }) {
-  return (
-    <div style={{ padding: 12, borderRadius: 8, background: "var(--bg-input)", border: "1px solid var(--border-primary)" }}>
-      <div style={{ fontSize: 9, color: "var(--text-dim)", letterSpacing: "0.08em", fontWeight: 600 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 700, color, fontFamily: "'JetBrains Mono', monospace", marginTop: 4 }}>{value}</div>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   TRACKING VIEW — source-to-consumer journey (powered by QR scans)
-   ═══════════════════════════════════════════════════════════════ */
-function TrackingView() {
-  const [batchId, setBatchId] = useState(() => {
-    if (typeof window !== "undefined" && window.__QR_PRODUCT__) return window.__QR_PRODUCT__;
-    return "";
-  });
-  const [data, setData] = useState(null);
-  const [scans, setScans] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const load = async (id) => {
-    if (!id) return;
-    setLoading(true);
-    setError(null);
-    try {
-      if (!window.APIClient) throw new Error("APIClient not initialised");
-      // Public verify endpoint gives us the batch + scan count
-      const v = await window.APIClient.verifyClaim(id);
-      const verifyPayload = (v && v.data) ? v.data : v;
-      setData(verifyPayload || null);
-      // Scans history (best-effort, may 401 if not logged in)
-      try {
-        const s = await window.APIClient.getBatchScans(id);
-        const scanPayload = (s && s.data) ? s.data : s;
-        setScans(Array.isArray(scanPayload?.scans) ? scanPayload.scans : []);
-      } catch (_) { setScans([]); }
-    } catch (e) {
-      setError(e.message || "Batch not found");
-      setData(null);
-      setScans([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Auto-load if we have a deep-link batch id
-  useEffect(() => {
-    if (batchId) load(batchId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const handleSubmit = (e) => { e.preventDefault(); if (batchId.trim()) load(batchId.trim()); };
-
-  return (
-    <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
-      <SectionLabel icon="🔗" text="Source-to-Consumer Tracking" />
-      <Card>
-        <form onSubmit={handleSubmit} style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-          <input
-            type="text" value={batchId} onChange={(e) => setBatchId(e.target.value)}
-            placeholder="Enter batch id (e.g. BCH-001) or scan QR code…"
-            style={{ flex: 1, background: "var(--bg-input)", color: "var(--text-primary)", border: "1px solid var(--border-primary)", borderRadius: 6, padding: "8px 12px", fontSize: 12, fontFamily: "'JetBrains Mono', monospace" }}
-          />
-          <button type="submit" disabled={loading} style={{ background: "#10b981", color: "white", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 12, fontWeight: 600, cursor: "pointer", opacity: loading ? 0.6 : 1 }}>
-            {loading ? "Loading…" : "Track"}
-          </button>
-        </form>
-
-        {error && (
-          <div style={{ fontSize: 11, color: "#ef4444", padding: "8px 10px", borderRadius: 6, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
-            ⚠ {error}
-          </div>
-        )}
-
-        {data && (
-          <>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
-              <KpiBox label="BATCH ID"      value={data.batch_id || batchId}            color="#3b82f6" />
-              <KpiBox label="SOURCE"        value={data.source || "—"}                 color="#a855f7" />
-              <KpiBox label="TRUST SCORE"   value={data.trust?.score ?? "—"}           color="#10b981" />
-              <KpiBox label="QR SCANS"      value={data.scanCount ?? scans.length ?? 0} color="#f59e0b" />
-            </div>
-
-            <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, marginBottom: 8 }}>JOURNEY · ORIGIN → CONSUMER</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 0, padding: "14px 8px", background: "var(--bg-input)", borderRadius: 8, marginBottom: 16, overflowX: "auto" }}>
-              {[
-                { stage: "L1 Registration",   icon: "📦", color: "#3b82f6", done: true },
-                { stage: "L2 Certification",  icon: "✅", color: "#a855f7", done: !!data.trust?.isViable },
-                { stage: "Provenance Chain",  icon: "🔗", color: "#f59e0b", done: data.chain?.events && data.chain.events.length > 0 },
-                { stage: "Chain Verified",    icon: "🛡️", color: "#06b6d4", done: data.chain?.verified === true },
-                { stage: "Consumer Scan",     icon: "📱", color: "#10b981", done: (data.scanCount ?? 0) > 0 },
-              ].map((s, i, arr) => (
-                <React.Fragment key={s.stage}>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 90 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: 999, background: s.done ? s.color : "var(--bg-primary)", border: `2px solid ${s.color}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, opacity: s.done ? 1 : 0.4 }}>
-                      {s.done ? "✓" : s.icon}
-                    </div>
-                    <div style={{ fontSize: 9, color: s.done ? s.color : "var(--text-dim)", fontWeight: 600, marginTop: 6, textAlign: "center" }}>{s.stage}</div>
-                  </div>
-                  {i < arr.length - 1 && (
-                    <div style={{ flex: 1, height: 2, background: s.done && arr[i+1].done ? "#10b981" : "var(--border-primary)", minWidth: 30 }} />
-                  )}
-                </React.Fragment>
-              ))}
-            </div>
-
-            <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, marginBottom: 8 }}>RECENT SCANS · {scans.length}</div>
-            {scans.length === 0 ? (
-              <div style={{ fontSize: 10, color: "var(--text-dim)", padding: 12, textAlign: "center" }}>
-                No scans yet. Share the QR code on the batch's packaging to track consumer engagement.
-              </div>
-            ) : (
-              <div style={{ maxHeight: 200, overflowY: "auto", borderRadius: 6, border: "1px solid var(--border-primary)" }}>
-                {scans.slice(0, 20).map((s, i) => (
-                  <div key={s.id || i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 10px", borderBottom: "1px dashed var(--border-primary)", fontSize: 10 }}>
-                    <span style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-dim)" }}>{s.id ? `#${s.id}` : "—"}</span>
-                    <span style={{ color: "var(--text-secondary)", flex: 1, marginLeft: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.userAgent || "unknown device"}</span>
-                    <span style={{ color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace" }}>{s.scannedAt ? new Date(s.scannedAt).toLocaleString() : ""}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-
-        {!data && !error && !loading && (
-          <div style={{ fontSize: 11, color: "var(--text-dim)", padding: "20px", textAlign: "center" }}>
-            Enter a batch id to view its source-to-consumer journey.
-          </div>
-        )}
-      </Card>
     </div>
   );
 }
@@ -3368,17 +3331,6 @@ function DashboardView({ onNewBatch }) {
     if (sorted[0]) setSelectedProduct(sorted[0]);
   }, [batchList]);
 
-  // ── Live weather strip: aggregates the heatmap into a single hero widget ──
-  const liveWeather = useMemo(() => {
-    if (!heatmap || heatmap.length === 0) return null;
-    const liveZones = heatmap.filter(z => z.live && typeof z.liveTempC === "number");
-    if (liveZones.length === 0) return null;
-    const avg = liveZones.reduce((acc, z) => acc + z.liveTempC, 0) / liveZones.length;
-    const hot = liveZones.reduce((best, z) => z.liveTempC > (best?.liveTempC ?? -Infinity) ? z : best, null);
-    const cool = liveZones.reduce((best, z) => z.liveTempC < (best?.liveTempC ?? Infinity) ? z : best, null);
-    return { avg: Math.round(avg * 10) / 10, hot, cool, count: liveZones.length, total: heatmap.length };
-  }, [heatmap]);
-
   const statCards = s ? [
     { label: "TOTAL BATCHES",       value: s.totalBatches,       sub: `${s.activeBatches} active`,              icon: "📦" },
     { label: "CERTIFIED BATCHES",   value: s.certifiedBatches,   sub: `${s.certRate} certification rate`,        icon: "🛡️" },
@@ -3423,54 +3375,6 @@ function DashboardView({ onNewBatch }) {
           </div>
         }
       />
-
-      {/* ── LIVE WEATHER STRIP (only shows when /api/dashboard has live temps) ── */}
-      {liveWeather && (
-        <Card hover={false} style={{ marginBottom: 16, padding: "14px 20px" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ fontSize: 24 }}>🌤️</span>
-              <div>
-                <div style={{ fontSize: 10, color: "var(--text-dim)", letterSpacing: "0.08em", fontWeight: 600 }}>LIVE WEATHER · DHAKA REGION</div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.1 }}>
-                  {liveWeather.avg}°C
-                  <span style={{ fontSize: 11, color: "var(--text-dim)", marginLeft: 8, fontWeight: 500 }}>
-                    avg across {liveWeather.count}/{liveWeather.total} zones · OpenWeather
-                  </span>
-                </div>
-                {lastUpdated && (
-                  <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2, fontFamily: "'JetBrains Mono', monospace" }}>
-                    last refresh: {lastUpdated}
-                  </div>
-                )}
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 12, fontSize: 11, alignItems: "center" }}>
-              <div style={{ padding: "6px 12px", borderRadius: 8, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
-                <span style={{ color: "#ef4444", fontWeight: 700 }}>🔥 HOTTEST </span>
-                <span style={{ color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace", marginLeft: 4 }}>
-                  {liveWeather.hot.zone} · {Math.round(liveWeather.hot.liveTempC)}°C
-                </span>
-              </div>
-              <div style={{ padding: "6px 12px", borderRadius: 8, background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)" }}>
-                <span style={{ color: "#10b981", fontWeight: 700 }}>❄ COOLEST </span>
-                <span style={{ color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace", marginLeft: 4 }}>
-                  {liveWeather.cool.zone} · {Math.round(liveWeather.cool.liveTempC)}°C
-                </span>
-              </div>
-              <button
-                onClick={fetchDashboard}
-                disabled={isLoading}
-                title="Refresh live weather"
-                style={{
-                  background: "none", border: "1px solid var(--border-primary)",
-                  borderRadius: 6, padding: "4px 8px", cursor: isLoading ? "wait" : "pointer",
-                  color: "var(--text-secondary)", fontSize: 12,
-                }}>↻</button>
-            </div>
-          </div>
-        </Card>
-      )}
 
       {/* ── 3-LAYER ARCHITECTURE STRIP ── */}
       <Card title="🌐 3-Layer Architecture" style={{ marginBottom: 20 }}>
@@ -3661,6 +3565,17 @@ function BatchRegistry({ onNewBatch }) {
   const [selectedBatch, setSelected]  = useState(null);
   const [lastFetched, setLastFetched] = useState(null);
   const [, setTick]                   = useState(0);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationResult, setVerificationResult] = useState(null);
+  const [isGettingAiRec, setIsGettingAiRec] = useState(false);
+  const [aiRecommendation, setAiRecommendation] = useState(null);
+
+  useEffect(() => {
+    if (!selectedBatch) {
+      setVerificationResult(null);
+      setAiRecommendation(null);
+    }
+  }, [selectedBatch]);
 
   // Real-time dynamic timing ticker to update relative dates every 30 seconds
   useEffect(() => {
@@ -3949,6 +3864,125 @@ function BatchRegistry({ onNewBatch }) {
             {selectedBatch.status === "pending" && (
               <div style={{ background: ACCENT.amberBg, border: `1px solid ${ACCENT.amberBorder}`, borderRadius: 12, padding: 16, fontSize: 13, color: ACCENT.amber, fontWeight: 600 }}>
                 ⏳ Batch is awaiting manual verification by a certified processor before certification.
+              </div>
+            )}
+
+            {/* VERIFICATION ENGINE UI */}
+            {selectedBatch && (
+              <div style={{ background: "var(--bg-input)", borderRadius: 12, padding: 20 }}>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                  Verification Engine
+                </div>
+                {!verificationResult ? (
+                  <button
+                    onClick={async () => {
+                      setIsVerifying(true);
+                      try {
+                        const batchId = selectedBatch.id || selectedBatch.batch_number;
+                        const res = await window.APIClient.verifyClaim(batchId);
+                        setVerificationResult(res);
+                      } catch (err) {
+                        setVerificationResult({ success: false, error: err.message });
+                      } finally {
+                        setIsVerifying(false);
+                      }
+                    }}
+                    disabled={isVerifying}
+                    style={{
+                      width: "100%", padding: "12px", borderRadius: 8,
+                      border: `1px solid ${ACCENT.blueBorder}`, background: "rgba(59, 130, 246, 0.1)",
+                      color: ACCENT.blue, fontWeight: 600, cursor: isVerifying ? "wait" : "pointer",
+                      display: "flex", justifyContent: "center", alignItems: "center", gap: 8
+                    }}
+                  >
+                    {isVerifying ? "Verifying..." : "🔐 Verify Cryptographic Claim"}
+                  </button>
+                ) : (
+                  <div style={{
+                    padding: 12, borderRadius: 8, fontSize: 12, lineHeight: 1.5,
+                    background: verificationResult.success ? ACCENT.greenBg : ACCENT.redBg,
+                    border: `1px solid ${verificationResult.success ? ACCENT.greenBorder : ACCENT.redBorder}`,
+                    color: "var(--text-primary)"
+                  }}>
+                    {verificationResult.success ? (
+                      <>
+                        <strong style={{ color: ACCENT.green }}>✓ Claim Verified Authentic</strong><br/>
+                        <span style={{ color: "var(--text-secondary)" }}>Signature: Valid</span><br/>
+                        <span style={{ color: "var(--text-secondary)" }}>Registry Match: {verificationResult.data?.batch?.batch_number || "Confirmed"}</span>
+                        {verificationResult.data?.claims?.trust_score && (
+                           <><br/><span style={{ color: "var(--text-secondary)" }}>Cryptographic Trust Score: {verificationResult.data.claims.trust_score}</span></>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <strong style={{ color: ACCENT.red }}>❌ Verification Failed</strong><br/>
+                        <span style={{ color: "var(--text-secondary)" }}>{verificationResult.error || "Invalid or missing claim signature."}</span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* AI RECOMMENDATION UI */}
+            {selectedBatch && (
+              <div style={{ background: "var(--bg-input)", borderRadius: 12, padding: 20 }}>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>AI Smart Dispatch</span>
+                  <span style={{ color: ACCENT.amber, fontSize: 10 }}>Powered by Llama 3</span>
+                </div>
+                {!aiRecommendation ? (
+                  <button
+                    onClick={async () => {
+                      setIsGettingAiRec(true);
+                      try {
+                        const payload = {
+                           action: "request_dispatch",
+                           batch_id: selectedBatch.id || selectedBatch.batch_number,
+                           product: selectedBatch.product_name || selectedBatch.product,
+                           destination_zone: selectedBatch.destination_zone || selectedBatch.dest,
+                           trust_score: selectedBatch.trust_score,
+                           status: selectedBatch.status
+                        };
+                        const res = await window.APIClient.getAIRecommendations(payload);
+                        setAiRecommendation(res);
+                      } catch (err) {
+                        setAiRecommendation({ success: false, error: err.message });
+                      } finally {
+                        setIsGettingAiRec(false);
+                      }
+                    }}
+                    disabled={isGettingAiRec}
+                    style={{
+                      width: "100%", padding: "12px", borderRadius: 8,
+                      border: `1px solid ${ACCENT.amberBorder}`, background: "rgba(245, 158, 11, 0.1)",
+                      color: ACCENT.amber, fontWeight: 600, cursor: isGettingAiRec ? "wait" : "pointer",
+                      display: "flex", justifyContent: "center", alignItems: "center", gap: 8
+                    }}
+                  >
+                    {isGettingAiRec ? "Analyzing route & risk..." : "💡 Get AI Dispatch Recommendation"}
+                  </button>
+                ) : (
+                  <div style={{
+                    padding: 14, borderRadius: 8, fontSize: 13, lineHeight: 1.6,
+                    background: "rgba(245, 158, 11, 0.05)",
+                    border: `1px solid ${ACCENT.amberBorder}`,
+                    color: "var(--text-primary)"
+                  }}>
+                    {aiRecommendation.success ? (
+                      <>
+                        <div style={{ fontWeight: 700, color: ACCENT.amber, marginBottom: 8 }}>
+                          {aiRecommendation.data?.recommendation || "Proceed with caution"}
+                        </div>
+                        <div style={{ color: "var(--text-secondary)", fontSize: 12 }}>
+                          {aiRecommendation.data?.explanation || "AI suggests careful monitoring due to microclimate risks."}
+                        </div>
+                      </>
+                    ) : (
+                      <span style={{ color: ACCENT.red }}>❌ Failed to load AI recommendations.</span>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -6281,7 +6315,7 @@ function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerifica
 // TAB: SYSTEM DOCS & AUDIT MODULE (YC PITCH + TECH SPECS + ADMIN)
 // ═══════════════════════════════════════════════════════════════
 
-function SystemDocsView({ productsList }) {
+function SystemDocsView({ productsList, liveWeather }) {
   const [subTab, setSubTab] = useState("pitch");
   
   // Settings persisted in localStorage for durability
@@ -6379,7 +6413,8 @@ function SystemDocsView({ productsList }) {
   const avgDvs = totalBatches > 0
     ? Math.round(batches.reduce((acc, b) => {
         const uhi = UHI_ZONES[b.destination_zone]?.offset || 2.0;
-        const adjustedTemp = 31 + uhi;
+        const baseRegionalTemp = liveWeather?.temp ?? 31;
+        const adjustedTemp = baseRegionalTemp + uhi;
         const risk = Math.max(0, Math.min(1, (adjustedTemp - 25) / 15));
         const multiplier = UHI_ZONES[b.destination_zone]?.hazardMultiplier || 1.3;
         const dvsVal = Math.max(0, Math.min(100, Math.round((b.trust_score || 75) * (1 - risk * multiplier))));
@@ -6439,6 +6474,39 @@ function SystemDocsView({ productsList }) {
 
   const handleRemoveMember = (idx) => {
     setTeam(team.filter((_, i) => i !== idx));
+  };
+
+  // Team member edit state + handlers (System Docs → Team Roster)
+  const [editingIdx, setEditingIdx] = useState(-1);
+  const emptyEditForm = { name: "", role: "", email: "", avatar: "", bio: "", contribution: "" };
+  const [editForm, setEditForm] = useState(emptyEditForm);
+
+  const handleEditMember = (idx) => {
+    setEditingIdx(idx);
+    setEditForm({ ...emptyEditForm, ...team[idx] });
+  };
+
+  const handleSaveEditMember = () => {
+    if (editingIdx < 0) return;
+    if (!editForm.name.trim() || !editForm.role.trim()) return;
+    setTeam(prev => prev.map((m, i) => (i === editingIdx ? { ...m, ...editForm, name: editForm.name.trim(), role: editForm.role.trim() } : m)));
+    setEditingIdx(-1);
+    setEditForm(emptyEditForm);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingIdx(-1);
+    setEditForm(emptyEditForm);
+  };
+
+  const handleEditImageUpload = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setEditForm(prev => ({ ...prev, avatar: reader.result }));
+    };
+    reader.readAsDataURL(file);
   };
 
   const toggleTabHide = (tabId) => {
@@ -6895,37 +6963,114 @@ function SystemDocsView({ productsList }) {
                   <img 
                     src={m.avatar} 
                     alt={m.name} 
-                    style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover", border: `2px solid ${ACCENT.green}`, boxShadow: "0 4px 12px rgba(16,185,129,0.2)" }}
+                    style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover", border: `2px solid ${editingIdx === i ? ACCENT.amber : ACCENT.green}`, boxShadow: editingIdx === i ? "0 4px 12px rgba(245,158,11,0.35)" : "0 4px 12px rgba(16,185,129,0.2)" }}
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <div>
-                        <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{m.name}</div>
-                        <div style={{ fontSize: 12, color: ACCENT.green, fontWeight: 700, marginTop: 2, marginBottom: 6 }}>{m.role}</div>
+                    {editingIdx === i ? (
+                      /* ── INLINE EDIT FORM ─────────────────────── */
+                      <div style={{ animation: "fadeSlideIn 0.25s ease" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", color: ACCENT.amber }}>
+                            ✏️ EDITING MEMBER PROFILE
+                          </span>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button
+                              onClick={handleCancelEdit}
+                              style={{ padding: "6px 12px", borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: "pointer", border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-secondary)" }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={handleSaveEditMember}
+                              style={{ padding: "6px 14px", borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: "pointer", border: "none", background: ACCENT.green, color: "#fff" }}
+                            >
+                              ✓ Save Changes
+                            </button>
+                          </div>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                          <input
+                            type="text" placeholder="Name" value={editForm.name}
+                            onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                            style={{ padding: "10px 12px", borderRadius: 8, border: `1px solid ${ACCENT.amber}`, background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+                          />
+                          <input
+                            type="text" placeholder="Role" value={editForm.role}
+                            onChange={e => setEditForm({ ...editForm, role: e.target.value })}
+                            style={{ padding: "10px 12px", borderRadius: 8, border: `1px solid ${ACCENT.amber}`, background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+                          />
+                          <input
+                            type="text" placeholder="Email" value={editForm.email}
+                            onChange={e => setEditForm({ ...editForm, email: e.target.value })}
+                            style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none", gridColumn: "1 / -1" }}
+                          />
+                          <div style={{ display: "flex", gap: 8, alignItems: "center", gridColumn: "1 / -1" }}>
+                            <input
+                              type="file" accept="image/*" onChange={handleEditImageUpload}
+                              style={{ display: "none" }} id={`member-photo-edit-${i}`}
+                            />
+                            <label htmlFor={`member-photo-edit-${i}`} style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-secondary)", fontSize: 12, cursor: "pointer", display: "inline-block", flex: 1, textAlign: "center" }}>
+                              📷 Replace Photo
+                            </label>
+                            {editForm.avatar && editForm.avatar.startsWith("data:") && (
+                              <span style={{ fontSize: 11, color: ACCENT.green, fontWeight: 700 }}>✓ new photo staged</span>
+                            )}
+                          </div>
+                          <input
+                            type="text" placeholder="Avatar URL (fallback if no upload)" value={editForm.avatar && editForm.avatar.startsWith("data:") ? "" : (editForm.avatar || "")}
+                            onChange={e => setEditForm({ ...editForm, avatar: e.target.value })}
+                            style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none", gridColumn: "1 / -1" }}
+                          />
+                          <textarea
+                            placeholder="Short Bio" value={editForm.bio}
+                            onChange={e => setEditForm({ ...editForm, bio: e.target.value })}
+                            rows={2}
+                            style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none", gridColumn: "1 / -1", resize: "vertical", fontFamily: "inherit" }}
+                          />
+                          <textarea
+                            placeholder="Key Build Contribution" value={editForm.contribution}
+                            onChange={e => setEditForm({ ...editForm, contribution: e.target.value })}
+                            rows={2}
+                            style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none", gridColumn: "1 / -1", resize: "vertical", fontFamily: "inherit" }}
+                          />
+                        </div>
                       </div>
-                      {/* Remove button inside team showcase */}
-                      <button 
-                        onClick={() => handleRemoveMember(i)}
-                        style={{ background: "transparent", border: "none", color: ACCENT.red, cursor: "pointer", fontSize: 16 }}
-                        title="Remove member"
-                      >
-                        {"🗑️"}
-                      </button>
-                    </div>
-                    
-                    <div style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 10 }}>
-                      <strong>Bio:</strong> {m.bio}
-                    </div>
-                    <div style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 10 }}>
-                      <strong>Key Build Contribution:</strong> {m.contribution}
-                    </div>
-                    <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>📧 {m.email}</div>
-                  </div>
-                </Card>
-              ))}
-            </div>
+                    ) : (
+                      /* ── READ-ONLY DISPLAY ─────────────────────── */
+                      <>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                          <div>
+                            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{m.name}</div>
+                            <div style={{ fontSize: 12, color: ACCENT.green, fontWeight: 700, marginTop: 2, marginBottom: 6 }}>{m.role}</div>
+                          </div>
+                          {/* Edit + Remove buttons */}
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button
+                              onClick={() => handleEditMember(i)}
+                              style={{ background: "transparent", border: `1px solid ${ACCENT.amber}`, color: ACCENT.amber, cursor: "pointer", fontSize: 13, padding: "4px 10px", borderRadius: 6, fontWeight: 700 }}
+                              title="Edit member profile"
+                            >
+                              ✏️ Edit
+                            </button>
+                            <button
+                              onClick={() => handleRemoveMember(i)}
+                              style={{ background: "transparent", border: "none", color: ACCENT.red, cursor: "pointer", fontSize: 16, padding: "2px 6px" }}
+                              title="Remove member"
+                            >
+                              {"🗑️"}
+                            </button>
+                          </div>
+                        </div>
 
-            {/* TEAM BUILDER ADDITION FORM */}
+                        <div style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 10 }}>
+                          <strong>Bio:</strong> {m.bio}
+                        </div>
+                        <div style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 10 }}>
+                          <strong>Key Build Contribution:</strong> {m.contribution}
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>📧 {m.email}</div>
+                      </>
+                    )}
             <Card hover={false} style={{ border: `1px solid var(--border-primary)` }}>
               <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 16 }}>
                 {"Add New Team Member"}
@@ -7167,10 +7312,10 @@ const TABS = [
   { id: "dashboard",    label: "Overall Dashboard",       icon: "⊞",  layer: "L0" },
   { id: "batches",      label: "Batches",                 icon: "📦", layer: "L1" },
   { id: "verification", label: "Batch Verification",      icon: "✅", layer: "L1" },
+  { id: "tracking",     label: "Consumer Tracking",       icon: "🔍", layer: "L3" },
   { id: "microclimate", label: "Microclimate Intelligence", icon: "🌡️", layer: "L2" },
   { id: "demand",       label: "Climate Demand",          icon: "📊", layer: "L2" },
   { id: "bi",           label: "Business Intelligence",   icon: "🧠", layer: "L2" },
-  { id: "tracking",     label: "Source-to-Consumer Tracking", icon: "🔗", layer: "L3" },
   { id: "chatbot",      label: "Chatbot",                 icon: "💬", layer: "LX" },
   { id: "marketplace",  label: "Marketplace",             icon: "🛒", layer: "L3" },
   { id: "esg",          label: "Impact & ESG",            icon: "🌱", layer: "L3" }
@@ -7252,13 +7397,152 @@ function CLimaLogixApp() {
     }
   };
 
+  // Live regional weather (drives the DHAKA DIV. GEN SCORE header chip).
+  // Resolution order:
+  //   1. Device geolocation (navigator.geolocation) — "live" badge
+  //   2. Dhaka centroid (23.8103, 90.4125)        — "live · Dhaka" badge
+  //   3. Diurnal estimate for the current hour   — "EST" badge
+  const DHAKA_LAT = 23.8103;
+  const DHAKA_LON = 90.4125;
+
+  // Pure diurnal fallback so we always have *some* number that varies by hour
+  // (peaks ~13:00, troughs ~05:00) — avoids the old frozen 31/32°C artefact.
+  const computeDiurnalEstimate = (lat, lon) => {
+    const now = new Date();
+    const h = now.getHours() + now.getMinutes() / 60;
+    const peak = 13;
+    const low = 5;
+    const closer = Math.min(Math.abs(h - peak), Math.abs(h - low));
+    // 26–34.5 °C swing
+    const base = 26 + (8.5 * (1 - Math.cos((closer / 8) * Math.PI)) / 2);
+    // Warmer for lower latitudes, cooler for higher
+    const latAdj = lat != null ? (23.8 - lat) * 0.6 : 0;
+    const temp = base + latAdj;
+    const wind = Math.max(3, Math.round(6 + 4 * Math.sin(((h - 9) / 24) * 2 * Math.PI)));
+    return {
+      temperature: Math.round(temp * 10) / 10,
+      windspeed_kmh: wind,
+      humidity: 65,
+      feelsLike: Math.round((temp + 1.5) * 10) / 10,
+      description: "estimated (no live data)",
+    };
+  };
+
+  const [liveWeather, setLiveWeather] = useState(() => {
+    const est = computeDiurnalEstimate(DHAKA_LAT, DHAKA_LON);
+    return {
+      temp: est.temperature,
+      windSpeed: est.windspeed_kmh,
+      humidity: est.humidity,
+      description: est.description,
+      source: "fallback", // 'live-device' | 'live-dhaka' | 'fallback' | 'fetching'
+      lat: DHAKA_LAT,
+      lon: DHAKA_LON,
+      label: "Dhaka (estimated)",
+      updatedAt: new Date(),
+    };
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    let watchId = null;
+
+    const applyApiResult = (res, meta) => {
+      if (cancelled) return;
+      const w = res?.data || res;
+      if (w && typeof w.temperature === "number") {
+        setLiveWeather({
+          temp: Math.round(w.temperature * 10) / 10,
+          windSpeed: Math.round(w.windspeed_kmh ?? 8),
+          humidity: typeof w.humidity === "number" ? w.humidity : 65,
+          description: w.description || "",
+          source: meta.source,
+          lat: meta.lat,
+          lon: meta.lon,
+          label: meta.label,
+          updatedAt: new Date(),
+        });
+        return true;
+      }
+      return false;
+    };
+
+    const fetchForCoords = async (lat, lon, meta) => {
+      if (!window.APIClient || typeof window.APIClient.getWeather !== "function") {
+        return false;
+      }
+      setLiveWeather(prev => ({ ...prev, source: "fetching" }));
+      try {
+        const res = await window.APIClient.getWeather(lat, lon);
+        return applyApiResult(res, { ...meta, lat, lon });
+      } catch (err) {
+        if (cancelled) return false;
+        console.warn("[LiveWeather] API fetch failed, using diurnal estimate:", err);
+        return false;
+      }
+    };
+
+    const startDhakaPolling = () => {
+      // Device geolocation unavailable or denied — fall back to Dhaka coords
+      const tick = () => {
+        fetchForCoords(DHAKA_LAT, DHAKA_LON, { source: "live-dhaka", label: "Dhaka" });
+      };
+      tick();
+      return setInterval(tick, 5 * 60 * 1000);
+    };
+
+    const startDevicePolling = (lat, lon) => {
+      const tick = () => {
+        fetchForCoords(lat, lon, { source: "live-device", label: "Device location" });
+      };
+      tick();
+      return setInterval(tick, 5 * 60 * 1000);
+    };
+
+    let pollHandle = null;
+    let usedDevice = false;
+
+    const beginWithDevice = () => {
+      if (typeof navigator === "undefined" || !navigator.geolocation) {
+        pollHandle = startDhakaPolling();
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          if (cancelled) return;
+          usedDevice = true;
+          const { latitude, longitude } = pos.coords;
+          pollHandle = startDevicePolling(latitude, longitude);
+        },
+        (err) => {
+          if (cancelled) return;
+          console.info("[LiveWeather] geolocation denied/unavailable, using Dhaka fallback:", err?.message);
+          pollHandle = startDhakaPolling();
+        },
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 10 * 60 * 1000 }
+      );
+    };
+
+    beginWithDevice();
+
+    return () => {
+      cancelled = true;
+      if (watchId != null && navigator?.geolocation?.clearWatch) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+      if (pollHandle) clearInterval(pollHandle);
+    };
+  }, []);
+
   // Calculate Generalized Dhaka Division Scores (averaging all zones in Dhaka Division)
   const calcGeneralizedScores = (ts) => {
     const zones = Object.keys(UHI_ZONES);
     let totalDvs = 0;
     const currentHour = new Date().getHours();
+    const baseTemp = liveWeather?.temp ?? 31;
+    const windSpeed = liveWeather?.windSpeed ?? 8;
     zones.forEach(z => {
-      const { dvs } = calcBARIDVS({ trustScore: ts, zone: z, packaging: "standard", hour: currentHour, baseTemp: 31, windSpeed: 8 });
+      const { dvs } = calcBARIDVS({ trustScore: ts, zone: z, packaging: "standard", hour: currentHour, baseTemp, windSpeed });
       totalDvs += dvs;
     });
     return Math.round(totalDvs / zones.length);
@@ -7276,22 +7560,13 @@ function CLimaLogixApp() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const requestedTab = params.get("tab");
-    if (requestedTab === "docs" || requestedTab === "tracking") {
-      setActiveTab(requestedTab);
+    if (params.get("tab") === "docs") {
+      setActiveTab("docs");
     }
-    // Deep-link: ?batch=BCH-123 → set tab=tracking and stash the batch id
-    const requestedBatch = params.get("batch");
-    if (requestedBatch) {
-      try { window.__QR_PRODUCT__ = requestedBatch; } catch (_) {}
+    const batchId = params.get("batch");
+    if (batchId) {
+      setVerificationBatchId(batchId);
       setActiveTab("tracking");
-    }
-    // Clean the URL so subsequent reloads don't re-trigger
-    if ((requestedTab && requestedTab !== "docs") || requestedBatch) {
-      try {
-        const clean = window.location.pathname;
-        window.history.replaceState({}, document.title, clean);
-      } catch (_) {}
     }
   }, [activeTabs.length]);
 
@@ -7597,10 +7872,28 @@ function CLimaLogixApp() {
             fontSize: 12, color: "var(--text-secondary)",
             letterSpacing: "0.02em"
           }}>
-            <span style={{ fontWeight: 700, color: ACCENT.green }}>DHAKA DIV. GEN SCORE</span>
+            <span style={{ fontWeight: 700, color: ACCENT.green }}>{(liveWeather?.label && liveWeather?.source?.startsWith("live-")) ? `${(liveWeather.label || "DEVICE").toString().toUpperCase()} · GEN SCORE` : "DHAKA DIV. GEN SCORE"}</span>
+            <span title={`Weather: ${liveWeather?.temp ?? 31}°C · wind ${liveWeather?.windSpeed ?? 8} km/h · source: ${liveWeather?.source ?? "fallback"} · ${liveWeather?.label ?? "n/a"}${liveWeather?.lat != null ? ` (${liveWeather.lat.toFixed(3)}, ${liveWeather.lon.toFixed(3)})` : ""}`}>
+              🌡 <strong style={{ color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace" }}>{liveWeather?.temp ?? 31}°C</strong>
+              <span style={{ marginLeft: 6, opacity: 0.75, fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>
+                📍 {liveWeather?.label ?? "detecting…"}
+              </span>
+            </span>
+            <span style={{ width: 1, height: 12, background: "var(--border-primary)" }}></span>
             <span>Gen. Trust: <strong style={{ color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace" }}>{trustScore}</strong></span>
             <span style={{ width: 1, height: 12, background: "var(--border-primary)" }}></span>
             <span>Gen. DVS: <strong style={{ color: genDvs >= 75 ? ACCENT.green : genDvs >= 55 ? ACCENT.amber : ACCENT.red, fontFamily: "'JetBrains Mono', monospace" }}>{genDvs}</strong></span>
+            <span style={{
+              padding: "2px 7px", borderRadius: 999, fontSize: 9, fontWeight: 800, letterSpacing: "0.08em",
+              background: (liveWeather?.source === "live-device" || liveWeather?.source === "live-dhaka") ? "rgba(16,185,129,0.15)" : "rgba(245,158,11,0.15)",
+              color: (liveWeather?.source === "live-device" || liveWeather?.source === "live-dhaka") ? ACCENT.green : ACCENT.amber,
+              border: `1px solid ${(liveWeather?.source === "live-device" || liveWeather?.source === "live-dhaka") ? ACCENT.green : ACCENT.amber}`,
+            }}>
+              {liveWeather?.source === "live-device" ? "● LIVE · GPS"
+                : liveWeather?.source === "live-dhaka" ? "● LIVE · DHAKA"
+                : liveWeather?.source === "fetching" ? "… SYNC"
+                : "◌ EST"}
+            </span>
           </div>
 
           <div style={{ display: "flex", gap: 10 }}>
@@ -7771,7 +8064,7 @@ function CLimaLogixApp() {
           />
         )}
         {activeTab === "docs" && (
-          <SystemDocsView productsList={productsList} />
+          <SystemDocsView productsList={productsList} liveWeather={liveWeather} />
         )}
       </main>
 

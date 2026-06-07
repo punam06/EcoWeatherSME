@@ -56,6 +56,7 @@ import spotPricingRouter from './api/routes/spotPricing.route';
 import orderRouter from './api/routes/order.route';
 import languageRouter from './routes/language';
 import biRouter from './api/routes/bi.route';
+import weatherRouter from './api/routes/weather.route';
 import { startSessionPruningInterval } from './lib/services/chatSession.service';
 import { authenticateJWT, optionalJWT } from './middleware/authenticateJWT';
 
@@ -258,6 +259,7 @@ app.use('/api/language', languageRouter);
 app.use('/api/checkout', checkoutRouter);
 app.use('/api/spot-pricing', spotPricingRouter);
 app.use('/api/bi', biRouter);
+app.use('/api/weather', weatherRouter);
 
 // ── New Feature Module Routes ────────────────────────────────────────────────
 // Task 1: Real-Time Notifications
@@ -276,9 +278,13 @@ const WEATHER_TTL_MS = 5 * 60 * 1000;
 async function fetchWeatherWithCache(city: string, apiKey: string | undefined) {
   const cached = weatherCache.get(city);
   if (cached && Date.now() - cached.ts < WEATHER_TTL_MS) return cached.data;
-  if (!apiKey) return null;
+  if (!apiKey) {
+    console.warn(`[WeatherCache] Cannot fetch weather for ${city}: OPENWEATHER_API_KEY is not configured.`);
+    return null;
+  }
   try {
-    const wRes = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)},BD&appid=${apiKey}&units=metric`);
+    const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)},BD&appid=${apiKey}&units=metric`;
+    const wRes = await fetch(url);
     if (wRes.ok) {
       const wd: any = await wRes.json();
       if (wd?.main) {
@@ -291,8 +297,13 @@ async function fetchWeatherWithCache(city: string, apiKey: string | undefined) {
         weatherCache.set(city, { data, ts: Date.now() });
         return data;
       }
+    } else {
+      const errBody = await wRes.text().catch(() => '');
+      console.error(`[WeatherCache] OpenWeather API returned error status ${wRes.status} for ${city}. Body: ${errBody}`);
     }
-  } catch (_e) { /* network error → return null */ }
+  } catch (e) {
+    console.error(`[WeatherCache] Network error fetching weather for ${city}:`, e);
+  }
   return null;
 }
 
@@ -300,12 +311,12 @@ async function fetchWeatherWithCache(city: string, apiKey: string | undefined) {
 app.get('/api/dashboard', async (req: Request, res: Response) => {
   const weatherApiKey = process.env.OPENWEATHER_API_KEY;
 
-  // Heatmap zones with UHI offsets
+  // Heatmap zones with UHI offsets (aligned to fetch base weather from major cities to avoid 404/401 rate limits)
   const zones = [
     { zone: 'Old Dhaka',  city: 'Dhaka',        uhiOffset: 3.8, desc: 'Class A thermal accumulation zone. Narrow concrete corridors trap heat.' },
-    { zone: 'Mirpur',     city: 'Mirpur',       uhiOffset: 2.9, desc: 'Dense residential concrete with limited canopy cover.' },
+    { zone: 'Mirpur',     city: 'Dhaka',        uhiOffset: 2.9, desc: 'Dense residential concrete with limited canopy cover.' },
     { zone: 'Savar',      city: 'Savar',        uhiOffset: 2.1, desc: 'Mixed urban with partial green canopy. Moderate risk window.' },
-    { zone: 'Gulshan',    city: 'Gulshan',      uhiOffset: 1.2, desc: 'High green canopy coverage and lake proximity reduce thermal load.' },
+    { zone: 'Gulshan',    city: 'Dhaka',        uhiOffset: 1.2, desc: 'High green canopy coverage and lake proximity reduce thermal load.' },
   ];
 
   const heatmap = await Promise.all(zones.map(async (z) => {

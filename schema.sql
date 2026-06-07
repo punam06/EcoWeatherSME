@@ -273,3 +273,15 @@ BEGIN
     END IF;
 END
 $$;
+
+-- 17. Consumer QR Scan Analytics Table
+CREATE TABLE IF NOT EXISTS qr_scans (
+    id BIGSERIAL PRIMARY KEY,
+    batch_id TEXT NOT NULL,
+    user_agent TEXT,
+    ip_hash TEXT,
+    scanned_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_qr_scans_batch_recent ON qr_scans (batch_id, scanned_at DESC);
+CREATE INDEX IF NOT EXISTS idx_qr_scans_recent ON qr_scans (scanned_at DESC);

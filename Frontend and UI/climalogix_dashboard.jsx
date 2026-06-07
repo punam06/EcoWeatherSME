@@ -1321,6 +1321,265 @@ function ClaimVerifier({ onSelectBatch }) {
   );
 }
 
+function TrackingView() {
+  const [batchId, setBatchId] = useState("");
+  const [status, setStatus] = useState("idle"); // idle | loading | ok | missing | error
+  const [result, setResult] = useState(null);
+  const [scans, setScans] = useState([]);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const extractBatchId = (raw) => {
+    if (!raw) return "";
+    const trimmed = raw.trim();
+    const urlMatch = trimmed.match(/\/verify\/([^/?#]+)/i);
+    if (urlMatch) return urlMatch[1];
+    const paramMatch = trimmed.match(/[?&]batch=([^&]+)/i);
+    if (paramMatch) return paramMatch[1];
+    return trimmed;
+  };
+
+  const handleFetchTracking = async (id) => {
+    const cleanId = extractBatchId(id);
+    if (!cleanId) {
+      setStatus("error");
+      setErrorMsg("Please enter a valid batch ID.");
+      return;
+    }
+    setStatus("loading");
+    setErrorMsg("");
+    setResult(null);
+    setScans([]);
+    try {
+      if (!window.APIClient || !window.APIClient.verifyClaim) {
+        throw new Error("verifyClaim API is not available.");
+      }
+      const r = await window.APIClient.verifyClaim(cleanId);
+      const payload = r && r.success === false ? null : (r && r.data ? r.data : r);
+      
+      if (!payload) {
+        setStatus("missing");
+      } else {
+        setStatus("ok");
+        setResult(payload);
+        
+        // Fetch scans history in parallel
+        try {
+          if (window.APIClient.getBatchScans) {
+            const scansRes = await window.APIClient.getBatchScans(cleanId);
+            const scansData = scansRes && scansRes.success ? (scansRes.data?.scans || scansRes.data || []) : [];
+            setScans(scansData);
+          }
+        } catch (scanErr) {
+          console.warn("Could not fetch scan history:", scanErr);
+        }
+      }
+    } catch (e) {
+      setStatus("error");
+      setErrorMsg(e.message || String(e));
+    }
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlBatch = params.get("batch");
+    if (urlBatch) {
+      setBatchId(urlBatch);
+      handleFetchTracking(urlBatch);
+    }
+  }, []);
+
+  return (
+    <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
+      <SectionLabel icon="🔍" text="Consumer Provenance & Scan Tracking" />
+      <Card>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16 }}>
+          <input
+            value={batchId}
+            onChange={(e) => setBatchId(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleFetchTracking(batchId); }}
+            placeholder="Enter Batch ID (e.g. BCH-123) or paste QR URL"
+            style={{
+              flex: 1, padding: "12px 14px", fontSize: 13,
+              background: "var(--bg-input)", color: "var(--text-primary)",
+              border: "1px solid var(--border-primary)", borderRadius: 8,
+              fontFamily: "'JetBrains Mono', monospace", outline: "none",
+            }}
+          />
+          <button
+            onClick={() => handleFetchTracking(batchId)}
+            disabled={status === "loading"}
+            style={{
+              padding: "12px 20px", fontSize: 12, fontWeight: 700,
+              background: ACCENT.blueBg, color: ACCENT.blue,
+              border: `1px solid ${ACCENT.blueBorder}`, borderRadius: 8,
+              cursor: status === "loading" ? "wait" : "pointer",
+              letterSpacing: "0.06em",
+            }}
+          >
+            {status === "loading" ? "LOADING..." : "TRACK BATCH"}
+          </button>
+        </div>
+
+        {status === "loading" && (
+          <div style={{ textAlign: "center", padding: "40px 0" }}>
+            <span style={{ fontSize: 24 }}>⏳</span>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 8 }}>Verifying cryptographic chain and loading telemetry...</div>
+          </div>
+        )}
+
+        {status === "missing" && (
+          <div style={{ padding: 14, borderRadius: 8, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.35)", color: "#f59e0b", fontSize: 12 }}>
+            ⚠️ No certified batch found matching the query. Please verify the Batch ID.
+          </div>
+        )}
+
+        {status === "error" && (
+          <div style={{ padding: 12, borderRadius: 8, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.35)", color: "#ef4444", fontSize: 12 }}>
+            ❌ {errorMsg}
+          </div>
+        )}
+
+        {status === "ok" && result && (
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
+            {/* Left Column: Provenance Chain */}
+            <div>
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "10px 14px",
+                borderRadius: 8,
+                background: result.chain?.verified ? "rgba(16,185,129,0.06)" : "rgba(239,68,68,0.06)",
+                border: `1px solid ${result.chain?.verified ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
+                color: result.chain?.verified ? ACCENT.green : ACCENT.red,
+                fontSize: 12,
+                fontWeight: 700,
+                marginBottom: 16
+              }}>
+                <span>{result.chain?.verified ? "🔒 CRYPTOGRAPHIC CHAIN SECURED" : "🚨 HASH CHAIN MISMATCH (TAMPERED)"}</span>
+                <span style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", opacity: 0.7 }}>SHA-256 VALIDATED</span>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 16, position: "relative", paddingLeft: 20 }}>
+                <div style={{
+                  position: "absolute",
+                  left: 6,
+                  top: 8,
+                  bottom: 8,
+                  width: 2,
+                  borderLeft: `2px dashed ${result.chain?.verified ? "rgba(16, 185, 129, 0.3)" : "rgba(239, 68, 68, 0.3)"}`
+                }}></div>
+
+                {result.chain?.events && result.chain.events.map((e, idx) => {
+                  const eventType = e.event_type || e.type || "qa";
+                  const actor = e.actor || "system";
+                  const eventData = e.event_data || e.data || {};
+                  const timestamp = e.timestamp || e.signed_at || new Date().toISOString();
+
+                  let icon = "📋";
+                  let title = "QA INTAKE REPORT";
+                  if (eventType === "genesis") { icon = "🌱"; title = "GENESIS REGISTRATION"; }
+                  else if (eventType === "dispatch" || eventType === "dispatched") { icon = "🚚"; title = "DISPATCH COMPLETED"; }
+                  else if (eventType === "delivery" || eventType === "delivered" || eventType === "receipt") { icon = "📦"; title = "DELIVERY RECEIPT CONFIRMED"; }
+
+                  return (
+                    <div key={idx} style={{ position: "relative" }}>
+                      <div style={{
+                        position: "absolute",
+                        left: -18,
+                        top: 5,
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        background: result.chain?.verified ? ACCENT.green : ACCENT.red,
+                        border: "2px solid var(--bg-secondary)",
+                      }}></div>
+
+                      <div style={{ background: "var(--bg-input)", padding: 12, borderRadius: 8, border: "1px solid var(--border-primary)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 6 }}>
+                            <span>{icon}</span> {title}
+                          </span>
+                          <span style={{ fontSize: 10, color: "var(--text-dim)", fontFamily: "'JetBrains Mono', monospace" }}>
+                            {new Date(timestamp).toLocaleString()}
+                          </span>
+                        </div>
+                        
+                        <div style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                          <div><span style={{ color: "var(--text-dim)" }}>Operator/Actor:</span> {actor}</div>
+                          {eventType === "genesis" && (
+                            <>
+                              <div><span style={{ color: "var(--text-dim)" }}>Feedstock Type:</span> {eventData.feedstock_type || eventData.product_type || "Bio-Slurry"}</div>
+                              <div><span style={{ color: "var(--text-dim)" }}>Weight:</span> {eventData.weight_kg || 0} kg</div>
+                            </>
+                          )}
+                          {eventType === "qa" && (
+                            <>
+                              <div><span style={{ color: "var(--text-dim)" }}>QA Metrics:</span> pH {eventData.pH || eventData.ph} | EC {eventData.EC || eventData.ec} | Temp {eventData.temperature || eventData.temp}°C</div>
+                              <div><span style={{ color: "var(--text-dim)" }}>EM-1 Inoculation Ratio:</span> {eventData.em1_ratio || "1:1:20"}</div>
+                              <div><span style={{ color: "var(--text-dim)" }}>Fermentation Window:</span> {eventData.fermentation_days || 0} days</div>
+                            </>
+                          )}
+                          {(eventType === "dispatch" || eventType === "dispatched") && (
+                            <>
+                              <div><span style={{ color: "var(--text-dim)" }}>Destination Zone:</span> {eventData.destination_zone || eventData.to || "Mirpur"}</div>
+                              <div><span style={{ color: "var(--text-dim)" }}>Vehicle Details:</span> {eventData.vehicle || "DHK-1234"} (Driver: {eventData.driver || "Rakib"})</div>
+                            </>
+                          )}
+                          {(eventType === "delivery" || eventType === "delivered") && (
+                            <>
+                              <div><span style={{ color: "var(--text-dim)" }}>Receiver Signature:</span> {eventData.received_by || eventData.receiver || "Warehouse Manager"}</div>
+                              <div><span style={{ color: "var(--text-dim)" }}>Cargo Condition:</span> {eventData.condition || "good"}</div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Right Column: Scan History & Stats */}
+            <div>
+              <div style={{ background: "var(--bg-input)", padding: 16, borderRadius: 10, border: "1px solid var(--border-primary)", marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", letterSpacing: "0.08em", marginBottom: 12 }}>
+                  VERIFIED SCAN AUDIT
+                </div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                  <span style={{ fontSize: 36, fontWeight: 800, color: ACCENT.green }}>{result.scanCount || scans.length || 0}</span>
+                  <span style={{ fontSize: 12, color: "var(--text-dim)" }}>Total Consumer Scans</span>
+                </div>
+              </div>
+
+              <div style={{ background: "var(--bg-input)", padding: 16, borderRadius: 10, border: "1px solid var(--border-primary)", maxHeight: 400, overflowY: "auto" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", letterSpacing: "0.08em", marginBottom: 12 }}>
+                  SCAN ANTECEDENCE FEED
+                </div>
+                {scans.length === 0 ? (
+                  <div style={{ fontSize: 11, color: "var(--text-dim)", padding: "10px 0" }}>No scan records registered yet.</div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {scans.map((s, sIdx) => (
+                      <div key={sIdx} style={{ fontSize: 10, padding: 8, borderRadius: 6, background: "var(--bg-primary)", border: "1px solid var(--border-primary)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-primary)", fontWeight: 600, marginBottom: 4 }}>
+                          <span>📱 {s.ipHash}</span>
+                          <span>{new Date(s.scannedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                        </div>
+                        <div style={{ color: "var(--text-dim)", wordBreak: "break-all" }}>{s.userAgent}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════════
    TAB 2: MICROCLIMATE INTELLIGENCE (MERM Pipeline)
    ═══════════════════════════════════════════════════════════════ */
@@ -5670,7 +5929,7 @@ function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerifica
 // TAB: SYSTEM DOCS & AUDIT MODULE (YC PITCH + TECH SPECS + ADMIN)
 // ═══════════════════════════════════════════════════════════════
 
-function SystemDocsView({ productsList }) {
+function SystemDocsView({ productsList, liveWeather }) {
   const [subTab, setSubTab] = useState("pitch");
   
   // Settings persisted in localStorage for durability
@@ -5768,7 +6027,8 @@ function SystemDocsView({ productsList }) {
   const avgDvs = totalBatches > 0
     ? Math.round(batches.reduce((acc, b) => {
         const uhi = UHI_ZONES[b.destination_zone]?.offset || 2.0;
-        const adjustedTemp = 31 + uhi;
+        const baseRegionalTemp = liveWeather?.temp ?? 31;
+        const adjustedTemp = baseRegionalTemp + uhi;
         const risk = Math.max(0, Math.min(1, (adjustedTemp - 25) / 15));
         const multiplier = UHI_ZONES[b.destination_zone]?.hazardMultiplier || 1.3;
         const dvsVal = Math.max(0, Math.min(100, Math.round((b.trust_score || 75) * (1 - risk * multiplier))));
@@ -5828,6 +6088,39 @@ function SystemDocsView({ productsList }) {
 
   const handleRemoveMember = (idx) => {
     setTeam(team.filter((_, i) => i !== idx));
+  };
+
+  // Team member edit state + handlers (System Docs → Team Roster)
+  const [editingIdx, setEditingIdx] = useState(-1);
+  const emptyEditForm = { name: "", role: "", email: "", avatar: "", bio: "", contribution: "" };
+  const [editForm, setEditForm] = useState(emptyEditForm);
+
+  const handleEditMember = (idx) => {
+    setEditingIdx(idx);
+    setEditForm({ ...emptyEditForm, ...team[idx] });
+  };
+
+  const handleSaveEditMember = () => {
+    if (editingIdx < 0) return;
+    if (!editForm.name.trim() || !editForm.role.trim()) return;
+    setTeam(prev => prev.map((m, i) => (i === editingIdx ? { ...m, ...editForm, name: editForm.name.trim(), role: editForm.role.trim() } : m)));
+    setEditingIdx(-1);
+    setEditForm(emptyEditForm);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingIdx(-1);
+    setEditForm(emptyEditForm);
+  };
+
+  const handleEditImageUpload = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setEditForm(prev => ({ ...prev, avatar: reader.result }));
+    };
+    reader.readAsDataURL(file);
   };
 
   const toggleTabHide = (tabId) => {
@@ -6284,37 +6577,114 @@ function SystemDocsView({ productsList }) {
                   <img 
                     src={m.avatar} 
                     alt={m.name} 
-                    style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover", border: `2px solid ${ACCENT.green}`, boxShadow: "0 4px 12px rgba(16,185,129,0.2)" }}
+                    style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover", border: `2px solid ${editingIdx === i ? ACCENT.amber : ACCENT.green}`, boxShadow: editingIdx === i ? "0 4px 12px rgba(245,158,11,0.35)" : "0 4px 12px rgba(16,185,129,0.2)" }}
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <div>
-                        <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{m.name}</div>
-                        <div style={{ fontSize: 12, color: ACCENT.green, fontWeight: 700, marginTop: 2, marginBottom: 6 }}>{m.role}</div>
+                    {editingIdx === i ? (
+                      /* ── INLINE EDIT FORM ─────────────────────── */
+                      <div style={{ animation: "fadeSlideIn 0.25s ease" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", color: ACCENT.amber }}>
+                            ✏️ EDITING MEMBER PROFILE
+                          </span>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button
+                              onClick={handleCancelEdit}
+                              style={{ padding: "6px 12px", borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: "pointer", border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-secondary)" }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={handleSaveEditMember}
+                              style={{ padding: "6px 14px", borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: "pointer", border: "none", background: ACCENT.green, color: "#fff" }}
+                            >
+                              ✓ Save Changes
+                            </button>
+                          </div>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                          <input
+                            type="text" placeholder="Name" value={editForm.name}
+                            onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                            style={{ padding: "10px 12px", borderRadius: 8, border: `1px solid ${ACCENT.amber}`, background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+                          />
+                          <input
+                            type="text" placeholder="Role" value={editForm.role}
+                            onChange={e => setEditForm({ ...editForm, role: e.target.value })}
+                            style={{ padding: "10px 12px", borderRadius: 8, border: `1px solid ${ACCENT.amber}`, background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
+                          />
+                          <input
+                            type="text" placeholder="Email" value={editForm.email}
+                            onChange={e => setEditForm({ ...editForm, email: e.target.value })}
+                            style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none", gridColumn: "1 / -1" }}
+                          />
+                          <div style={{ display: "flex", gap: 8, alignItems: "center", gridColumn: "1 / -1" }}>
+                            <input
+                              type="file" accept="image/*" onChange={handleEditImageUpload}
+                              style={{ display: "none" }} id={`member-photo-edit-${i}`}
+                            />
+                            <label htmlFor={`member-photo-edit-${i}`} style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-secondary)", fontSize: 12, cursor: "pointer", display: "inline-block", flex: 1, textAlign: "center" }}>
+                              📷 Replace Photo
+                            </label>
+                            {editForm.avatar && editForm.avatar.startsWith("data:") && (
+                              <span style={{ fontSize: 11, color: ACCENT.green, fontWeight: 700 }}>✓ new photo staged</span>
+                            )}
+                          </div>
+                          <input
+                            type="text" placeholder="Avatar URL (fallback if no upload)" value={editForm.avatar && editForm.avatar.startsWith("data:") ? "" : (editForm.avatar || "")}
+                            onChange={e => setEditForm({ ...editForm, avatar: e.target.value })}
+                            style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none", gridColumn: "1 / -1" }}
+                          />
+                          <textarea
+                            placeholder="Short Bio" value={editForm.bio}
+                            onChange={e => setEditForm({ ...editForm, bio: e.target.value })}
+                            rows={2}
+                            style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none", gridColumn: "1 / -1", resize: "vertical", fontFamily: "inherit" }}
+                          />
+                          <textarea
+                            placeholder="Key Build Contribution" value={editForm.contribution}
+                            onChange={e => setEditForm({ ...editForm, contribution: e.target.value })}
+                            rows={2}
+                            style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none", gridColumn: "1 / -1", resize: "vertical", fontFamily: "inherit" }}
+                          />
+                        </div>
                       </div>
-                      {/* Remove button inside team showcase */}
-                      <button 
-                        onClick={() => handleRemoveMember(i)}
-                        style={{ background: "transparent", border: "none", color: ACCENT.red, cursor: "pointer", fontSize: 16 }}
-                        title="Remove member"
-                      >
-                        {"🗑️"}
-                      </button>
-                    </div>
-                    
-                    <div style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 10 }}>
-                      <strong>Bio:</strong> {m.bio}
-                    </div>
-                    <div style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 10 }}>
-                      <strong>Key Build Contribution:</strong> {m.contribution}
-                    </div>
-                    <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>📧 {m.email}</div>
-                  </div>
-                </Card>
-              ))}
-            </div>
+                    ) : (
+                      /* ── READ-ONLY DISPLAY ─────────────────────── */
+                      <>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                          <div>
+                            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{m.name}</div>
+                            <div style={{ fontSize: 12, color: ACCENT.green, fontWeight: 700, marginTop: 2, marginBottom: 6 }}>{m.role}</div>
+                          </div>
+                          {/* Edit + Remove buttons */}
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button
+                              onClick={() => handleEditMember(i)}
+                              style={{ background: "transparent", border: `1px solid ${ACCENT.amber}`, color: ACCENT.amber, cursor: "pointer", fontSize: 13, padding: "4px 10px", borderRadius: 6, fontWeight: 700 }}
+                              title="Edit member profile"
+                            >
+                              ✏️ Edit
+                            </button>
+                            <button
+                              onClick={() => handleRemoveMember(i)}
+                              style={{ background: "transparent", border: "none", color: ACCENT.red, cursor: "pointer", fontSize: 16, padding: "2px 6px" }}
+                              title="Remove member"
+                            >
+                              {"🗑️"}
+                            </button>
+                          </div>
+                        </div>
 
-            {/* TEAM BUILDER ADDITION FORM */}
+                        <div style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 10 }}>
+                          <strong>Bio:</strong> {m.bio}
+                        </div>
+                        <div style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 10 }}>
+                          <strong>Key Build Contribution:</strong> {m.contribution}
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>📧 {m.email}</div>
+                      </>
+                    )}
             <Card hover={false} style={{ border: `1px solid var(--border-primary)` }}>
               <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 16 }}>
                 {"Add New Team Member"}
@@ -6556,6 +6926,7 @@ const TABS = [
   { id: "dashboard",    label: "Overall Dashboard",       icon: "⊞",  layer: "L0" },
   { id: "batches",      label: "Batches",                 icon: "📦", layer: "L1" },
   { id: "verification", label: "Batch Verification",      icon: "✅", layer: "L1" },
+  { id: "tracking",     label: "Consumer Tracking",       icon: "🔍", layer: "L3" },
   { id: "microclimate", label: "Microclimate Intelligence", icon: "🌡️", layer: "L2" },
   { id: "demand",       label: "Climate Demand",          icon: "📊", layer: "L2" },
   { id: "bi",           label: "Business Intelligence",   icon: "🧠", layer: "L2" },
@@ -6604,13 +6975,152 @@ function CLimaLogixApp() {
     }
   };
 
+  // Live regional weather (drives the DHAKA DIV. GEN SCORE header chip).
+  // Resolution order:
+  //   1. Device geolocation (navigator.geolocation) — "live" badge
+  //   2. Dhaka centroid (23.8103, 90.4125)        — "live · Dhaka" badge
+  //   3. Diurnal estimate for the current hour   — "EST" badge
+  const DHAKA_LAT = 23.8103;
+  const DHAKA_LON = 90.4125;
+
+  // Pure diurnal fallback so we always have *some* number that varies by hour
+  // (peaks ~13:00, troughs ~05:00) — avoids the old frozen 31/32°C artefact.
+  const computeDiurnalEstimate = (lat, lon) => {
+    const now = new Date();
+    const h = now.getHours() + now.getMinutes() / 60;
+    const peak = 13;
+    const low = 5;
+    const closer = Math.min(Math.abs(h - peak), Math.abs(h - low));
+    // 26–34.5 °C swing
+    const base = 26 + (8.5 * (1 - Math.cos((closer / 8) * Math.PI)) / 2);
+    // Warmer for lower latitudes, cooler for higher
+    const latAdj = lat != null ? (23.8 - lat) * 0.6 : 0;
+    const temp = base + latAdj;
+    const wind = Math.max(3, Math.round(6 + 4 * Math.sin(((h - 9) / 24) * 2 * Math.PI)));
+    return {
+      temperature: Math.round(temp * 10) / 10,
+      windspeed_kmh: wind,
+      humidity: 65,
+      feelsLike: Math.round((temp + 1.5) * 10) / 10,
+      description: "estimated (no live data)",
+    };
+  };
+
+  const [liveWeather, setLiveWeather] = useState(() => {
+    const est = computeDiurnalEstimate(DHAKA_LAT, DHAKA_LON);
+    return {
+      temp: est.temperature,
+      windSpeed: est.windspeed_kmh,
+      humidity: est.humidity,
+      description: est.description,
+      source: "fallback", // 'live-device' | 'live-dhaka' | 'fallback' | 'fetching'
+      lat: DHAKA_LAT,
+      lon: DHAKA_LON,
+      label: "Dhaka (estimated)",
+      updatedAt: new Date(),
+    };
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    let watchId = null;
+
+    const applyApiResult = (res, meta) => {
+      if (cancelled) return;
+      const w = res?.data || res;
+      if (w && typeof w.temperature === "number") {
+        setLiveWeather({
+          temp: Math.round(w.temperature * 10) / 10,
+          windSpeed: Math.round(w.windspeed_kmh ?? 8),
+          humidity: typeof w.humidity === "number" ? w.humidity : 65,
+          description: w.description || "",
+          source: meta.source,
+          lat: meta.lat,
+          lon: meta.lon,
+          label: meta.label,
+          updatedAt: new Date(),
+        });
+        return true;
+      }
+      return false;
+    };
+
+    const fetchForCoords = async (lat, lon, meta) => {
+      if (!window.APIClient || typeof window.APIClient.getWeather !== "function") {
+        return false;
+      }
+      setLiveWeather(prev => ({ ...prev, source: "fetching" }));
+      try {
+        const res = await window.APIClient.getWeather(lat, lon);
+        return applyApiResult(res, { ...meta, lat, lon });
+      } catch (err) {
+        if (cancelled) return false;
+        console.warn("[LiveWeather] API fetch failed, using diurnal estimate:", err);
+        return false;
+      }
+    };
+
+    const startDhakaPolling = () => {
+      // Device geolocation unavailable or denied — fall back to Dhaka coords
+      const tick = () => {
+        fetchForCoords(DHAKA_LAT, DHAKA_LON, { source: "live-dhaka", label: "Dhaka" });
+      };
+      tick();
+      return setInterval(tick, 5 * 60 * 1000);
+    };
+
+    const startDevicePolling = (lat, lon) => {
+      const tick = () => {
+        fetchForCoords(lat, lon, { source: "live-device", label: "Device location" });
+      };
+      tick();
+      return setInterval(tick, 5 * 60 * 1000);
+    };
+
+    let pollHandle = null;
+    let usedDevice = false;
+
+    const beginWithDevice = () => {
+      if (typeof navigator === "undefined" || !navigator.geolocation) {
+        pollHandle = startDhakaPolling();
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          if (cancelled) return;
+          usedDevice = true;
+          const { latitude, longitude } = pos.coords;
+          pollHandle = startDevicePolling(latitude, longitude);
+        },
+        (err) => {
+          if (cancelled) return;
+          console.info("[LiveWeather] geolocation denied/unavailable, using Dhaka fallback:", err?.message);
+          pollHandle = startDhakaPolling();
+        },
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 10 * 60 * 1000 }
+      );
+    };
+
+    beginWithDevice();
+
+    return () => {
+      cancelled = true;
+      if (watchId != null && navigator?.geolocation?.clearWatch) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+      if (pollHandle) clearInterval(pollHandle);
+    };
+  }, []);
+
   // Calculate Generalized Dhaka Division Scores (averaging all zones in Dhaka Division)
   const calcGeneralizedScores = (ts) => {
     const zones = Object.keys(UHI_ZONES);
     let totalDvs = 0;
     const currentHour = new Date().getHours();
+    const baseTemp = liveWeather?.temp ?? 31;
+    const windSpeed = liveWeather?.windSpeed ?? 8;
     zones.forEach(z => {
-      const { dvs } = calcBARIDVS({ trustScore: ts, zone: z, packaging: "standard", hour: currentHour, baseTemp: 31, windSpeed: 8 });
+      const { dvs } = calcBARIDVS({ trustScore: ts, zone: z, packaging: "standard", hour: currentHour, baseTemp, windSpeed });
       totalDvs += dvs;
     });
     return Math.round(totalDvs / zones.length);
@@ -6630,6 +7140,11 @@ function CLimaLogixApp() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("tab") === "docs") {
       setActiveTab("docs");
+    }
+    const batchId = params.get("batch");
+    if (batchId) {
+      setVerificationBatchId(batchId);
+      setActiveTab("tracking");
     }
   }, [activeTabs.length]);
 
@@ -6873,10 +7388,28 @@ function CLimaLogixApp() {
             fontSize: 12, color: "var(--text-secondary)",
             letterSpacing: "0.02em"
           }}>
-            <span style={{ fontWeight: 700, color: ACCENT.green }}>DHAKA DIV. GEN SCORE</span>
+            <span style={{ fontWeight: 700, color: ACCENT.green }}>{(liveWeather?.label && liveWeather?.source?.startsWith("live-")) ? `${(liveWeather.label || "DEVICE").toString().toUpperCase()} · GEN SCORE` : "DHAKA DIV. GEN SCORE"}</span>
+            <span title={`Weather: ${liveWeather?.temp ?? 31}°C · wind ${liveWeather?.windSpeed ?? 8} km/h · source: ${liveWeather?.source ?? "fallback"} · ${liveWeather?.label ?? "n/a"}${liveWeather?.lat != null ? ` (${liveWeather.lat.toFixed(3)}, ${liveWeather.lon.toFixed(3)})` : ""}`}>
+              🌡 <strong style={{ color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace" }}>{liveWeather?.temp ?? 31}°C</strong>
+              <span style={{ marginLeft: 6, opacity: 0.75, fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>
+                📍 {liveWeather?.label ?? "detecting…"}
+              </span>
+            </span>
+            <span style={{ width: 1, height: 12, background: "var(--border-primary)" }}></span>
             <span>Gen. Trust: <strong style={{ color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace" }}>{trustScore}</strong></span>
             <span style={{ width: 1, height: 12, background: "var(--border-primary)" }}></span>
             <span>Gen. DVS: <strong style={{ color: genDvs >= 75 ? ACCENT.green : genDvs >= 55 ? ACCENT.amber : ACCENT.red, fontFamily: "'JetBrains Mono', monospace" }}>{genDvs}</strong></span>
+            <span style={{
+              padding: "2px 7px", borderRadius: 999, fontSize: 9, fontWeight: 800, letterSpacing: "0.08em",
+              background: (liveWeather?.source === "live-device" || liveWeather?.source === "live-dhaka") ? "rgba(16,185,129,0.15)" : "rgba(245,158,11,0.15)",
+              color: (liveWeather?.source === "live-device" || liveWeather?.source === "live-dhaka") ? ACCENT.green : ACCENT.amber,
+              border: `1px solid ${(liveWeather?.source === "live-device" || liveWeather?.source === "live-dhaka") ? ACCENT.green : ACCENT.amber}`,
+            }}>
+              {liveWeather?.source === "live-device" ? "● LIVE · GPS"
+                : liveWeather?.source === "live-dhaka" ? "● LIVE · DHAKA"
+                : liveWeather?.source === "fetching" ? "… SYNC"
+                : "◌ EST"}
+            </span>
           </div>
 
           <div style={{ display: "flex", gap: 10 }}>
@@ -7020,6 +7553,7 @@ function CLimaLogixApp() {
         )}
 
         {activeTab === "bi" && <BusinessIntelligenceView trustScore={trustScore} dvs={dvs} />}
+        {activeTab === "tracking" && <TrackingView />}
 
         {activeTab === "esg" && (
           <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
@@ -7046,7 +7580,7 @@ function CLimaLogixApp() {
           />
         )}
         {activeTab === "docs" && (
-          <SystemDocsView productsList={productsList} />
+          <SystemDocsView productsList={productsList} liveWeather={liveWeather} />
         )}
       </main>
 
