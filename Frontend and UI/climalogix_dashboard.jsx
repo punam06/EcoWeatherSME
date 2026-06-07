@@ -85,7 +85,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
         const [password, setPassword] = useState("");
         const [confirmPassword, setConfirmPassword] = useState("");
         const [name, setName] = useState("");
-        const [uiRole, setUiRole] = useState("producer"); 
+        const [uiRole, setUiRole] = useState("sme"); 
         const [isLoading, setIsLoading] = useState(false);
         const [error, setError] = useState("");
         const [showPass, setShowPass] = useState(false);
@@ -247,12 +247,26 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
             return;
           }
 
+          const backendRole = uiRole === "manufacturer" ? "processor" : uiRole === "inspector" ? "admin" : "buyer";
+
+          const sb = window.supabaseClient;
+          if (!sb) {
+            // Local developer bypass mode if database is unconfigured
+            setIsSuccess(true);
+            setTimeout(() => {
+              if (onAuthSuccess) {
+                onAuthSuccess({
+                  email: email || "developer@climalogix.internal",
+                  user_metadata: { name: name || email.split('@')[0] || "Developer", role: backendRole }
+                });
+              }
+              if (onClose) onClose();
+            }, 800);
+            setIsLoading(false);
+            return;
+          }
+
           try {
-            const sb = window.supabaseClient;
-            if (!sb) throw new Error("Supabase client not initialized");
-
-            const backendRole = uiRole === "producer" ? "processor" : "buyer";
-
             let result;
             if (mode === "login") {
               result = await sb.auth.signInWithPassword({ email, password });
@@ -457,12 +471,14 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
             </div>
             <div style={{ position: "absolute", bottom: 20, right: 20, zIndex: 5, color: "#10B981", opacity: 0.2, fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>SYS_OPS: NOMINAL</div>
 
-            <button onClick={onClose} style={{
-              position: "absolute", top: 20, right: 20, zIndex: 20,
-              background: "rgba(255,255,255,0.1)", border: "none", borderRadius: "50%",
-              width: 32, height: 32, color: "#fff", cursor: "pointer", fontSize: "18px",
-              display: "flex", alignItems: "center", justifyContent: "center"
-            }}>×</button>
+            {onClose && (
+              <button onClick={onClose} style={{
+                position: "absolute", top: 20, right: 20, zIndex: 20,
+                background: "rgba(255,255,255,0.1)", border: "none", borderRadius: "50%",
+                width: 32, height: 32, color: "#fff", cursor: "pointer", fontSize: "18px",
+                display: "flex", alignItems: "center", justifyContent: "center"
+              }}>×</button>
+            )}
 
             <div style={{
               position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
@@ -497,9 +513,9 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
                   </div>
 
                   <div className="segment-tabs">
-                    {["producer", "consumer", "sme owner"].map(r => (
+                    {["sme", "inspector", "manufacturer"].map(r => (
                       <button key={r} type="button" className={`segment-btn ${uiRole === r ? "active" : ""}`} onClick={() => setUiRole(r)}>
-                        {r.charAt(0).toUpperCase() + r.slice(1)}
+                        {r.toUpperCase()}
                       </button>
                     ))}
                   </div>
@@ -552,7 +568,43 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
                       ) : "Sign In"}
                     </button>
 
-                    <div style={{ margin: "24px 0", display: "flex", alignItems: "center", textAlign: "center", color: "#4B5563" }}>
+                    <div style={{ marginTop: "20px", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: "16px" }}>
+                      <div style={{ fontSize: "11px", color: "#64748B", marginBottom: "8px", fontFamily: "Inter", textAlign: "center" }}>DEMO SYSTEM ACCOUNTS:</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", justifyContent: "center" }}>
+                        {[
+                          { label: "SME Owner", email: "buyer.demo@climalogix.local", role: "sme" },
+                          { label: "Inspector", email: "admin.demo@climalogix.local", role: "inspector" },
+                          { label: "Manufacturer", email: "processor.demo@climalogix.local", role: "manufacturer" }
+                        ].map(acc => (
+                          <button
+                            key={acc.label}
+                            type="button"
+                            onClick={() => {
+                              setEmail(acc.email);
+                              setPassword("DemoPass123!");
+                              setUiRole(acc.role);
+                            }}
+                            style={{
+                              background: "rgba(16, 185, 129, 0.06)",
+                              border: "1px solid rgba(16, 185, 129, 0.15)",
+                              borderRadius: "6px",
+                              padding: "6px 10px",
+                              fontSize: "10px",
+                              color: "#10B981",
+                              cursor: "pointer",
+                              fontFamily: "Inter",
+                              transition: "all 0.2s"
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = "rgba(16, 185, 129, 0.15)"; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = "rgba(16, 185, 129, 0.06)"; }}
+                          >
+                            {acc.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ margin: "20px 0 10px 0", display: "flex", alignItems: "center", textAlign: "center", color: "#4B5563" }}>
                       <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.1)" }}></div>
                       <span style={{ padding: "0 10px", fontSize: "12px", fontFamily: "Inter" }}>New to ClimaLogix?</span>
                       <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.1)" }}></div>
@@ -562,11 +614,6 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
                       <button type="button" onClick={() => { setMode("register"); setError(""); }} style={{ background: "transparent", border: "none", color: "#10B981", fontSize: "14px", fontFamily: "Inter", cursor: "pointer" }}>
                         Create an account
                       </button>
-                    </div>
-                    
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", color: "#4B5563", fontSize: "11px", fontFamily: "Inter", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: "20px", marginTop: "20px" }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0110 0v4"></path></svg>
-                      Secured with Argon2 + JWT · End-to-end encrypted
                     </div>
                   </form>
                 </div>
@@ -589,9 +636,9 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
                   </div>
 
                   <div className="segment-tabs">
-                    {["producer", "consumer", "sme owner"].map(r => (
+                    {["sme", "inspector", "manufacturer"].map(r => (
                       <button key={r} type="button" className={`segment-btn ${uiRole === r ? "active" : ""}`} onClick={() => setUiRole(r)}>
-                        {r.charAt(0).toUpperCase() + r.slice(1)}
+                        {r.toUpperCase()}
                       </button>
                     ))}
                   </div>
@@ -1966,7 +2013,7 @@ function ClaimVerifier({ onSelectBatch }) {
   );
 }
 
-function TrackingView() {
+function TrackingView({ prefilledId }) {
   const [batchId, setBatchId] = useState("");
   const [status, setStatus] = useState("idle"); // idle | loading | ok | missing | error
   const [result, setResult] = useState(null);
@@ -2025,45 +2072,52 @@ function TrackingView() {
   };
 
   useEffect(() => {
+    if (prefilledId) {
+      setBatchId(prefilledId);
+      handleFetchTracking(prefilledId);
+      return;
+    }
     const params = new URLSearchParams(window.location.search);
     const urlBatch = params.get("batch");
     if (urlBatch) {
       setBatchId(urlBatch);
       handleFetchTracking(urlBatch);
     }
-  }, []);
+  }, [prefilledId]);
 
   return (
     <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
       <SectionLabel icon="🔍" text="Consumer Provenance & Scan Tracking" />
       <Card>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16 }}>
-          <input
-            value={batchId}
-            onChange={(e) => setBatchId(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleFetchTracking(batchId); }}
-            placeholder="Enter Batch ID (e.g. BCH-123) or paste QR URL"
-            style={{
-              flex: 1, padding: "12px 14px", fontSize: 13,
-              background: "var(--bg-input)", color: "var(--text-primary)",
-              border: "1px solid var(--border-primary)", borderRadius: 8,
-              fontFamily: "'JetBrains Mono', monospace", outline: "none",
-            }}
-          />
-          <button
-            onClick={() => handleFetchTracking(batchId)}
-            disabled={status === "loading"}
-            style={{
-              padding: "12px 20px", fontSize: 12, fontWeight: 700,
-              background: ACCENT.blueBg, color: ACCENT.blue,
-              border: `1px solid ${ACCENT.blueBorder}`, borderRadius: 8,
-              cursor: status === "loading" ? "wait" : "pointer",
-              letterSpacing: "0.06em",
-            }}
-          >
-            {status === "loading" ? "LOADING..." : "TRACK BATCH"}
-          </button>
-        </div>
+        {!prefilledId && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16 }}>
+            <input
+              value={batchId}
+              onChange={(e) => setBatchId(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleFetchTracking(batchId); }}
+              placeholder="Enter Batch ID (e.g. BCH-123) or paste QR URL"
+              style={{
+                flex: 1, padding: "12px 14px", fontSize: 13,
+                background: "var(--bg-input)", color: "var(--text-primary)",
+                border: "1px solid var(--border-primary)", borderRadius: 8,
+                fontFamily: "'JetBrains Mono', monospace", outline: "none",
+              }}
+            />
+            <button
+              onClick={() => handleFetchTracking(batchId)}
+              disabled={status === "loading"}
+              style={{
+                padding: "12px 20px", fontSize: 12, fontWeight: 700,
+                background: ACCENT.blueBg, color: ACCENT.blue,
+                border: `1px solid ${ACCENT.blueBorder}`, borderRadius: 8,
+                cursor: status === "loading" ? "wait" : "pointer",
+                letterSpacing: "0.06em",
+              }}
+            >
+              {status === "loading" ? "LOADING..." : "TRACK BATCH"}
+            </button>
+          </div>
+        )}
 
         {status === "loading" && (
           <div style={{ textAlign: "center", padding: "40px 0" }}>
@@ -7699,14 +7753,558 @@ const TABS = [
   { id: "marketplace",  label: "Marketplace",             icon: "🛒", layer: "L3" }
 ];
 
+function LandingView({ onGetStarted }) {
+  const [searchId, setSearchId] = useState("");
+  const [activeSearchId, setActiveSearchId] = useState("");
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    if (searchId.trim()) {
+      setActiveSearchId(searchId.trim());
+    }
+  };
+
+  return (
+    <div style={{
+      minHeight: "100vh",
+      background: "#0B0F19",
+      backgroundImage: "radial-gradient(circle at top right, rgba(16, 185, 129, 0.08), transparent 40%), radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.05), transparent 45%)",
+      color: "#F9FAFB",
+      fontFamily: "'Inter', sans-serif",
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "space-between"
+    }}>
+      <header style={{
+        padding: "20px 40px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        background: "rgba(11, 15, 25, 0.6)",
+        position: "sticky",
+        top: 0,
+        zIndex: 100
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span style={{ fontSize: "24px" }}>🌱</span>
+          <span style={{ fontWeight: 800, fontSize: "20px", letterSpacing: "0.05em", color: "#10B981" }}>ClimaLogix AI</span>
+        </div>
+        <button
+          onClick={onGetStarted}
+          style={{
+            background: "#10B981",
+            color: "#0B0F19",
+            border: "none",
+            borderRadius: "8px",
+            padding: "10px 20px",
+            fontSize: "13px",
+            fontWeight: 700,
+            cursor: "pointer",
+            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+            boxShadow: "0 0 15px rgba(16, 185, 129, 0.3)"
+          }}
+          onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.05)"; e.currentTarget.style.boxShadow = "0 0 25px rgba(16, 185, 129, 0.5)"; }}
+          onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.boxShadow = "0 0 15px rgba(16, 185, 129, 0.3)"; }}
+        >
+          GET STARTED
+        </button>
+      </header>
+
+      <main style={{ flex: 1, padding: "60px 20px", maxWidth: "1200px", margin: "0 auto", width: "100%" }}>
+        <div style={{ textAlign: "center", marginBottom: "60px" }}>
+          <h1 style={{
+            fontSize: "42px",
+            fontWeight: 800,
+            lineHeight: 1.2,
+            marginBottom: "20px",
+            letterSpacing: "-0.02em",
+            background: "linear-gradient(135deg, #FFFFFF 30%, #34D399 100%)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent"
+          }}>
+            Climate-Resilient Agricultural Supply Chains
+          </h1>
+          <p style={{
+            fontSize: "16px",
+            color: "#9CA3AF",
+            maxWidth: "700px",
+            margin: "0 auto 32px auto",
+            lineHeight: 1.6
+          }}>
+            Connecting IoT microclimate sensing, AI thermal hazard modeling, and cryptographic ledger verification to protect supply chain provenance.
+          </p>
+          <div style={{ display: "flex", justifyContent: "center", gap: "16px" }}>
+            <button
+              onClick={onGetStarted}
+              style={{
+                background: "linear-gradient(135deg, #10B981, #059669)",
+                color: "#FFFFFF",
+                border: "none",
+                borderRadius: "10px",
+                padding: "14px 28px",
+                fontSize: "14px",
+                fontWeight: 700,
+                cursor: "pointer",
+                transition: "all 0.2s"
+              }}
+              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; }}
+            >
+              Get Started Panel
+            </button>
+            <a
+              href="#trace"
+              style={{
+                background: "rgba(255, 255, 255, 0.04)",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                borderRadius: "10px",
+                padding: "14px 28px",
+                fontSize: "14px",
+                fontWeight: 700,
+                color: "#F3F4F6",
+                cursor: "pointer",
+                textDecoration: "none",
+                display: "inline-block",
+                transition: "all 0.2s"
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)"; }}
+            >
+              Trace Feedstock
+            </a>
+          </div>
+        </div>
+
+        <div id="trace" style={{
+          background: "rgba(17, 24, 39, 0.65)",
+          backdropFilter: "blur(20px)",
+          border: "1px solid rgba(16, 185, 129, 0.15)",
+          borderRadius: "16px",
+          padding: "32px",
+          boxShadow: "0 10px 40px rgba(0, 0, 0, 0.3)",
+          marginBottom: "60px"
+        }}>
+          <h2 style={{ fontSize: "20px", fontWeight: 700, marginBottom: "12px", color: "#F9FAFB", display: "flex", alignItems: "center", gap: "8px" }}>
+            <span>🔍</span> Direct Provenance Lookup
+          </h2>
+          <p style={{ fontSize: "13px", color: "#9CA3AF", marginBottom: "20px" }}>
+            Trace batch provenance, thermal preservation indexes, and BARI trust certificates instantly. No login required.
+          </p>
+
+          <form onSubmit={handleSearchSubmit} style={{ display: "flex", gap: "10px", marginBottom: "24px" }}>
+            <input
+              type="text"
+              value={searchId}
+              onChange={e => setSearchId(e.target.value)}
+              placeholder="Enter Batch ID (e.g. BCH-3180) or paste QR URL"
+              style={{
+                flex: 1,
+                padding: "14px 16px",
+                fontSize: "13px",
+                background: "rgba(255, 255, 255, 0.03)",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                borderRadius: "10px",
+                color: "#FFFFFF",
+                fontFamily: "'JetBrains Mono', monospace",
+                outline: "none"
+              }}
+            />
+            <button
+              type="submit"
+              style={{
+                background: "rgba(59, 130, 246, 0.12)",
+                color: "#3B82F6",
+                border: "1px solid rgba(59, 130, 246, 0.35)",
+                borderRadius: "10px",
+                padding: "14px 28px",
+                fontSize: "13px",
+                fontWeight: 700,
+                cursor: "pointer",
+                transition: "all 0.2s"
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(59, 130, 246, 0.2)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(59, 130, 246, 0.12)"; }}
+            >
+              TRACE BATCH
+            </button>
+          </form>
+
+          {activeSearchId && (
+            <div style={{ borderTop: "1px solid rgba(255, 255, 255, 0.06)", paddingTop: "24px", marginTop: "10px" }}>
+              <TrackingView prefilledId={activeSearchId} />
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "24px", marginBottom: "40px" }}>
+          <div style={{
+            background: "rgba(17, 24, 39, 0.5)",
+            border: "1px solid rgba(255, 255, 255, 0.06)",
+            borderRadius: "14px",
+            padding: "28px",
+            transition: "all 0.2s"
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(16, 185, 129, 0.3)"; e.currentTarget.style.transform = "translateY(-4px)"; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.06)"; e.currentTarget.style.transform = "translateY(0)"; }}
+          >
+            <div style={{ fontSize: "11px", fontWeight: 700, color: "#10B981", letterSpacing: "0.1em", marginBottom: "12px" }}>LAYER 01 · SENSING & GENESIS</div>
+            <h3 style={{ fontSize: "18px", fontWeight: 700, marginBottom: "10px" }}>Microclimate IoT Registry</h3>
+            <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
+              On-farm IoT sensors log telemetry (pH, moisture, temperature) to register feedstock batches with immutable GPS location bindings.
+            </p>
+          </div>
+
+          <div style={{
+            background: "rgba(17, 24, 39, 0.5)",
+            border: "1px solid rgba(255, 255, 255, 0.06)",
+            borderRadius: "14px",
+            padding: "28px",
+            transition: "all 0.2s"
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.3)"; e.currentTarget.style.transform = "translateY(-4px)"; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.06)"; e.currentTarget.style.transform = "translateY(0)"; }}
+          >
+            <div style={{ fontSize: "11px", fontWeight: 700, color: "#3B82F6", letterSpacing: "0.1em", marginBottom: "12px" }}>LAYER 02 · INTELLIGENCE ENGINE</div>
+            <h3 style={{ fontSize: "18px", fontWeight: 700, marginBottom: "10px" }}>Thermal Hazard & DVS AI</h3>
+            <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
+              AI models evaluate urban heat island (UHI) exposure, dynamic decay risk, and generate optimized route planning to bypass thermal corridors.
+            </p>
+          </div>
+
+          <div style={{
+            background: "rgba(17, 24, 39, 0.5)",
+            border: "1px solid rgba(255, 255, 255, 0.06)",
+            borderRadius: "14px",
+            padding: "28px",
+            transition: "all 0.2s"
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(245, 158, 11, 0.3)"; e.currentTarget.style.transform = "translateY(-4px)"; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.06)"; e.currentTarget.style.transform = "translateY(0)"; }}
+          >
+            <div style={{ fontSize: "11px", fontWeight: 700, color: "#F59E0B", letterSpacing: "0.1em", marginBottom: "12px" }}>LAYER 03 · TRUST & ESG REPORTING</div>
+            <h3 style={{ fontSize: "18px", fontWeight: 700, marginBottom: "10px" }}>Ledger & BARI Verification</h3>
+            <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
+              Generates cryptographic batch trust certs and compiles real-time, audit-ready ESG impact reports on plastic savings and carbon offsets.
+            </p>
+          </div>
+        </div>
+      </main>
+
+      <footer style={{
+        borderTop: "1px solid rgba(255, 255, 255, 0.06)",
+        padding: "20px 40px",
+        textAlign: "center",
+        fontSize: "11px",
+        color: "#6B7280"
+      }}>
+        CLIMALOGIX AI CLIMATESHIELD · INFINITY AI BUILDFEST 2026 · TEAM GLIDERS · ALL RIGHTS RESERVED
+      </footer>
+    </div>
+  );
+}
+
+function NotificationsView({ onSelectBatch }) {
+  const [notifications, setNotifications] = useState([
+    { id: 1, batchId: "BCH-1082", zone: "Kamrangirchar", feedstock: "Bio-Slurry", status: "pending", time: "10 mins ago" },
+    { id: 2, batchId: "BCH-2144", zone: "Mirpur", feedstock: "Organic Fertilizer", status: "pending", time: "1 hour ago" },
+    { id: 3, batchId: "BCH-0941", zone: "Old Dhaka", feedstock: "Liquid Compost", status: "completed", time: "Yesterday" }
+  ]);
+
+  const handleAction = (batchId, zone) => {
+    onSelectBatch(batchId, zone);
+  };
+
+  return (
+    <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
+      <SectionLabel icon="🔔" text="Pending Verification Requests" />
+      <Card>
+        <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "20px" }}>
+          Inspectors receive batch registration requests from manufacturers and SMEs. Review telemetry logs and verify parameters.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {notifications.map(n => (
+            <div key={n.id} style={{
+              background: "var(--bg-input)",
+              border: "1px solid var(--border-primary)",
+              borderRadius: "10px",
+              padding: "16px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center"
+            }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                  <span style={{ fontWeight: 700, fontSize: "14px", fontFamily: "'JetBrains Mono', monospace", color: "var(--text-primary)" }}>{n.batchId}</span>
+                  <span style={{
+                    fontSize: "9px",
+                    fontWeight: 700,
+                    padding: "2px 6px",
+                    borderRadius: "4px",
+                    background: n.status === "pending" ? "rgba(245, 158, 11, 0.12)" : "rgba(16, 185, 129, 0.12)",
+                    color: n.status === "pending" ? "#F59E0B" : "#10B981"
+                  }}>{n.status.toUpperCase()}</span>
+                </div>
+                <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                  Feedstock: <strong>{n.feedstock}</strong> | Zone: <strong>{n.zone}</strong> | Registered: {n.time}
+                </div>
+              </div>
+              {n.status === "pending" && (
+                <button
+                  onClick={() => handleAction(n.batchId, n.zone)}
+                  style={{
+                    background: "#10B981",
+                    color: "#0B0F19",
+                    border: "none",
+                    borderRadius: "8px",
+                    padding: "8px 16px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    transition: "all 0.2s"
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.05)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}
+                >
+                  INSPECT BATCH
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function SettingsView() {
+  const [name, setName] = useState("Demo User");
+  const [badgeId, setBadgeId] = useState("INS-8422-CLX");
+  const [prefZone, setPrefZone] = useState("Mirpur");
+  const [heatwaveAlerts, setHeatwaveAlerts] = useState(true);
+
+  const handleSave = (e) => {
+    e.preventDefault();
+    alert("Profile settings successfully saved!");
+  };
+
+  return (
+    <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
+      <SectionLabel icon="⚙️" text="Profile & Inspector Settings" />
+      <Card>
+        <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: "16px", maxWidth: "480px" }}>
+          <div>
+            <label style={{ display: "block", fontSize: "12px", color: "var(--text-secondary)", marginBottom: "6px" }}>Full Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              style={{
+                width: "100%", padding: "10px 12px", background: "var(--bg-input)",
+                border: "1px solid var(--border-primary)", borderRadius: "8px",
+                color: "var(--text-primary)", fontSize: "13px"
+              }}
+            />
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: "12px", color: "var(--text-secondary)", marginBottom: "6px" }}>Inspector Badge ID / Organization</label>
+            <input
+              type="text"
+              value={badgeId}
+              onChange={e => setBadgeId(e.target.value)}
+              style={{
+                width: "100%", padding: "10px 12px", background: "var(--bg-input)",
+                border: "1px solid var(--border-primary)", borderRadius: "8px",
+                color: "var(--text-primary)", fontSize: "13px", fontFamily: "'JetBrains Mono', monospace"
+              }}
+            />
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: "12px", color: "var(--text-secondary)", marginBottom: "6px" }}>Primary Observation Zone</label>
+            <select
+              value={prefZone}
+              onChange={e => setPrefZone(e.target.value)}
+              style={{
+                width: "100%", padding: "10px 12px", background: "var(--bg-input)",
+                border: "1px solid var(--border-primary)", borderRadius: "8px",
+                color: "var(--text-primary)", fontSize: "13px"
+              }}
+            >
+              {Object.keys(UHI_ZONES).map(z => (
+                <option key={z} value={z}>{z}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "8px" }}>
+            <input
+              type="checkbox"
+              checked={heatwaveAlerts}
+              onChange={e => setHeatwaveAlerts(e.target.checked)}
+              id="hw-alerts"
+              style={{ cursor: "pointer" }}
+            />
+            <label htmlFor="hw-alerts" style={{ fontSize: "13px", color: "var(--text-secondary)", cursor: "pointer" }}>
+              Enable heatwave and UHI microclimate alerts
+            </label>
+          </div>
+          <button
+            type="submit"
+            style={{
+              marginTop: "12px", padding: "12px", background: "#10B981", color: "#0B0F19",
+              border: "none", borderRadius: "8px", fontWeight: 700, cursor: "pointer", fontSize: "13px"
+            }}
+          >
+            SAVE SETTINGS
+          </button>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
+function DeliveryView({ userRole, onUpdateTrustScore }) {
+  const [shipments, setShipments] = useState([
+    { id: "SH-102", batchId: "BCH-1082", origin: "Savár Farm", dest: "Kamrangirchar", eta: "45 mins", temp: "29.4°C", status: "in-transit", optimized: false },
+    { id: "SH-105", batchId: "BCH-2144", origin: "Gazipur Facility", dest: "Mirpur", eta: "1.2 hours", temp: "28.1°C", status: "in-transit", optimized: false }
+  ]);
+  const [optLog, setOptLog] = useState("");
+
+  const handleOptimize = (shipmentId) => {
+    setShipments(prev => prev.map(s => {
+      if (s.id === shipmentId) {
+        return { ...s, optimized: true, temp: "26.5°C", eta: "50 mins" };
+      }
+      return s;
+    }));
+    setOptLog(`[AI OPTIMIZATION] Re-routed shipment ${shipmentId} away from Hazaribagh thermal corridor (+3.5°C) to greenbelt bypass path. Dynamic decay risk reduced!`);
+  };
+
+  const handleAcknowledge = (shipmentId) => {
+    setShipments(prev => prev.map(s => {
+      if (s.id === shipmentId) {
+        return { ...s, status: "delivered", eta: "completed" };
+      }
+      return s;
+    }));
+    if (onUpdateTrustScore) onUpdateTrustScore(prev => Math.min(100, prev + 4));
+    alert(`Delivery acknowledged! BARI Trust Score increased due to chain-of-custody confirmation.`);
+  };
+
+  return (
+    <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
+      <SectionLabel icon="🚚" text="Logistics & Climate-Resilient Routing" />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+        
+        {/* Left Side: Active Shipments */}
+        <div>
+          <Card>
+            <div style={{ fontSize: "14px", fontWeight: 700, marginBottom: "16px" }}>Active Shipments</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {shipments.map(s => (
+                <div key={s.id} style={{
+                  background: "var(--bg-input)", border: "1px solid var(--border-primary)",
+                  borderRadius: "10px", padding: "16px"
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                    <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace" }}>{s.id} ({s.batchId})</span>
+                    <span style={{
+                      fontSize: "9px", fontWeight: 700, padding: "2px 6px", borderRadius: "4px",
+                      background: s.status === "delivered" ? "rgba(16, 185, 129, 0.12)" : "rgba(59, 130, 246, 0.12)",
+                      color: s.status === "delivered" ? "#10B981" : "#3B82F6"
+                    }}>{s.status.toUpperCase()}</span>
+                  </div>
+                  
+                  <div style={{ fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: "12px" }}>
+                    <div>Origin: <strong>{s.origin}</strong></div>
+                    <div>Destination: <strong>{s.dest}</strong></div>
+                    <div>ETA: <strong style={{ color: ACCENT.green }}>{s.eta}</strong></div>
+                    <div>Internal Temp: <strong style={{ color: parseFloat(s.temp) > 28 ? ACCENT.amber : ACCENT.green }}>{s.temp}</strong></div>
+                    {s.optimized && <div style={{ color: "#3B82F6", fontWeight: "bold", fontSize: "10px", marginTop: "4px" }}>⚡ UHI CORRIDOR AVOIDED</div>}
+                  </div>
+
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    {s.status === "in-transit" && !s.optimized && (
+                      <button
+                        onClick={() => handleOptimize(s.id)}
+                        style={{
+                          flex: 1, padding: "8px 12px", background: "rgba(59, 130, 246, 0.12)", color: "#3B82F6",
+                          border: "1px solid rgba(59, 130, 246, 0.3)", borderRadius: "6px", fontSize: "11px", fontWeight: 700, cursor: "pointer"
+                        }}
+                      >
+                        OPTIMIZE ROUTE
+                      </button>
+                    )}
+                    {s.status === "in-transit" && (userRole === "buyer" || userRole === "sme") && (
+                      <button
+                        onClick={() => handleAcknowledge(s.id)}
+                        style={{
+                          flex: 1, padding: "8px 12px", background: "rgba(16, 185, 129, 0.12)", color: "#10B981",
+                          border: "1px solid rgba(16, 185, 129, 0.3)", borderRadius: "6px", fontSize: "11px", fontWeight: 700, cursor: "pointer"
+                        }}
+                      >
+                        ACKNOWLEDGE RECEIPT
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+
+        {/* Right Side: Map Simulation & Logs */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          <Card>
+            <div style={{ fontSize: "14px", fontWeight: 700, marginBottom: "16px" }}>Dynamic Route Optimization Map</div>
+            <div style={{
+              height: "180px", background: "rgba(0,0,0,0.3)", border: "1px solid var(--border-primary)",
+              borderRadius: "10px", position: "relative", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center"
+            }}>
+              <svg width="100%" height="100%" style={{ position: "absolute", inset: 0 }}>
+                {/* Simulated routes and nodes */}
+                <circle cx="50" cy="50" r="5" fill="#EF4444" />
+                <text x="60" y="54" fill="#6B7280" fontSize="10">Gazipur (Origin)</text>
+                <circle cx="150" cy="120" r="5" fill="#3B82F6" />
+                <text x="160" y="124" fill="#6B7280" fontSize="10">Mirpur (Dest)</text>
+                
+                <circle cx="280" cy="80" r="5" fill="#10B981" />
+                <text x="290" y="84" fill="#6B7280" fontSize="10">Savar (Origin)</text>
+                
+                <path d="M 50 50 Q 100 80 150 120" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="2" strokeDasharray="4" />
+                <path d="M 50 50 Q 70 120 150 120" fill="none" stroke="#3B82F6" strokeWidth="2" />
+                
+                <path d="M 280 80 Q 200 100 150 120" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="2" strokeDasharray="4" />
+              </svg>
+              <div style={{ fontSize: "11px", color: "var(--text-dim)", zIndex: 10, textAlign: "center" }}>
+                Interactive GIS Overlay: Dhaka Division Grid
+              </div>
+            </div>
+          </Card>
+
+          {optLog && (
+            <div style={{
+              background: "rgba(59, 130, 246, 0.08)", border: "1px solid rgba(59, 130, 246, 0.2)",
+              borderRadius: "8px", padding: "12px", fontSize: "11.5px", color: "#3B82F6", fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.4
+            }}>
+              {optLog}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CLimaLogixApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [isLanding, setIsLanding] = useState(true);
 
   useEffect(() => {
     if (!window.supabaseClient) {
-      // Fallback developer session if Supabase is not running/configured
-      setCurrentUser({ email: "developer@climalogix.internal", user_metadata: { name: "Developer", role: "processor" } });
+      // Kept unauthenticated by default so Landing Home Page displays
       setAuthLoading(false);
       return;
     }
@@ -7948,11 +8546,55 @@ function CLimaLogixApp() {
 
   const themeVars = THEMES[theme];
 
-  const activeTabs = [...TABS];
-  if (selectedSme === "custom_sme") {
+  const getTabsForRole = (role) => {
+    const isSme = role === "buyer" || role === "sme";
+    const isInspector = role === "admin" || role === "inspector";
+    const isManufacturer = role === "processor" || role === "manufacturer";
+
+    if (isInspector) {
+      return [
+        { id: "notifications", label: "Verification Requests", icon: "🔔", layer: "L0" },
+        { id: "verification",  label: "Batch Verification",   icon: "✅", layer: "L1" },
+        { id: "settings",      label: "Profile & Settings",   icon: "⚙️", layer: "L0" }
+      ];
+    } else if (isManufacturer) {
+      return [
+        { id: "batches",      label: "Batch Registry",        icon: "📦", layer: "L1" },
+        { id: "verification", label: "Batch Verification",   icon: "✅", layer: "L1" },
+        { id: "delivery",     label: "Route Optimization",    icon: "🚚", layer: "L1" },
+        { id: "chatbot",      label: "Chatbot",               icon: "💬", layer: "LX" },
+        { id: "tracking",     label: "Batch Tracking",        icon: "🔍", layer: "L3" },
+        { id: "marketplace",  label: "Marketplace",           icon: "🛒", layer: "L3" }
+      ];
+    } else {
+      return [
+        { id: "dashboard",    label: "Overall Dashboard",     icon: "⊞",  layer: "L0" },
+        { id: "bi",           label: "Microclimate Intel",    icon: "🧠", layer: "L2" },
+        { id: "tracking",     label: "Consumer Tracking",     icon: "🔍", layer: "L3" },
+        { id: "batches",      label: "Batches",               icon: "📦", layer: "L1" },
+        { id: "verification", label: "Batch Verification",   icon: "✅", layer: "L1" },
+        { id: "marketplace",  label: "Marketplace",           icon: "🛒", layer: "L3" },
+        { id: "delivery",     label: "Delivery system",       icon: "🚚", layer: "L1" },
+        { id: "chatbot",      label: "Chatbot",               icon: "💬", layer: "LX" }
+      ];
+    }
+  };
+
+  const userRole = currentUser?.user_metadata?.role || currentUser?.role || "buyer";
+  const activeTabs = getTabsForRole(userRole);
+  if (selectedSme === "custom_sme" && (userRole === "buyer" || userRole === "sme")) {
     activeTabs.push({ id: "configurator", label: "SME Configurator", icon: "🛠️" });
   }
   activeTabs.push({ id: "docs", label: "System Docs", icon: "📖" });
+
+  useEffect(() => {
+    if (currentUser) {
+      const allowed = getTabsForRole(currentUser.user_metadata?.role || currentUser.role);
+      if (allowed.length > 0 && !allowed.find(t => t.id === activeTab)) {
+        setActiveTab(allowed[0].id);
+      }
+    }
+  }, [currentUser]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -7987,7 +8629,10 @@ function CLimaLogixApp() {
   }
 
   if (!currentUser) {
-    return <AuthPanel onAuthSuccess={(user) => setCurrentUser(user)} />;
+    if (isLanding) {
+      return <LandingView onGetStarted={() => setIsLanding(false)} />;
+    }
+    return <AuthPanel onAuthSuccess={(user) => setCurrentUser(user)} onClose={() => setIsLanding(true)} />;
   }
 
   return (
@@ -8448,6 +9093,15 @@ function CLimaLogixApp() {
           />
         )}
         {activeTab === "tracking" && <TrackingView />}
+        {activeTab === "delivery" && <DeliveryView userRole={userRole} onUpdateTrustScore={setTrustScore} />}
+        {activeTab === "notifications" && (
+          <NotificationsView onSelectBatch={(id, zone) => {
+            setVerificationBatchId(id);
+            setVerificationDispatchZone(zone);
+            setActiveTab("verification");
+          }} />
+        )}
+        {activeTab === "settings" && <SettingsView />}
 
         {activeTab === "marketplace" && <MarketplaceView products={productsList} />}
         {activeTab === "chatbot" && (
