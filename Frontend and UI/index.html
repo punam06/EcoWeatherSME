@@ -1099,81 +1099,78 @@ const ACCENT = {
   redLight: "#F87171",
   redBg: "rgba(239, 68, 68, 0.08)",
   redBorder: "rgba(239, 68, 68, 0.2)",
-  blue: "#3B82F6",
-  blueBg: "rgba(59, 130, 246, 0.08)",
-  blueBorder: "rgba(59, 130, 246, 0.2)",
 };
 
-/* ═══════════════════════════════════════════════════════════════
-   BUET-CALIBRATED ZONE DATA (from master prompt)
-   ═══════════════════════════════════════════════════════════════ */
 const UHI_ZONES = {
   // Dense Commercial / Old Dhaka (High UHI)
-  "Old Dhaka":      { offset: 3.4, hazardClass: "A",  hazardMultiplier: 1.80, baseSurvival: 0.90, color: ACCENT.red },
-  "Motijheel":      { offset: 3.1, hazardClass: "A",  hazardMultiplier: 1.70, baseSurvival: 0.92, color: ACCENT.red },
-  "Tejgaon":        { offset: 3.2, hazardClass: "A",  hazardMultiplier: 1.75, baseSurvival: 0.91, color: ACCENT.red },
-  "Hazaribagh":     { offset: 3.5, hazardClass: "A+", hazardMultiplier: 1.85, baseSurvival: 0.88, color: ACCENT.red },
-  "Kamrangirchar":  { offset: 3.3, hazardClass: "A",  hazardMultiplier: 1.78, baseSurvival: 0.90, color: ACCENT.red },
-  "Chowkbazar":     { offset: 3.4, hazardClass: "A",  hazardMultiplier: 1.80, baseSurvival: 0.90, color: ACCENT.red },
-  "Lalbagh":        { offset: 3.2, hazardClass: "A",  hazardMultiplier: 1.75, baseSurvival: 0.91, color: ACCENT.red },
-  "Jatrabari":      { offset: 3.3, hazardClass: "A",  hazardMultiplier: 1.78, baseSurvival: 0.90, color: ACCENT.red },
-  "Sutrapur":       { offset: 3.1, hazardClass: "A",  hazardMultiplier: 1.70, baseSurvival: 0.92, color: ACCENT.red },
-  "Bangshal":       { offset: 3.3, hazardClass: "A",  hazardMultiplier: 1.78, baseSurvival: 0.90, color: ACCENT.red },
-  "Kotwali":        { offset: 3.4, hazardClass: "A",  hazardMultiplier: 1.80, baseSurvival: 0.90, color: ACCENT.red },
+  "Old Dhaka":      { offset: 3.4, hazardClass: "A",  hazardMultiplier: 1.80, baseSurvival: 0.90, color: ACCENT.red, lat: 23.7083, lon: 90.4075 },
+  "Motijheel":      { offset: 3.1, hazardClass: "A",  hazardMultiplier: 1.70, baseSurvival: 0.92, color: ACCENT.red, lat: 23.7330, lon: 90.4172 },
+  "Tejgaon":        { offset: 3.2, hazardClass: "A",  hazardMultiplier: 1.75, baseSurvival: 0.91, color: ACCENT.red, lat: 23.7612, lon: 90.3994 },
+  "Hazaribagh":     { offset: 3.5, hazardClass: "A+", hazardMultiplier: 1.85, baseSurvival: 0.88, color: ACCENT.red, lat: 23.7226, lon: 90.3666 },
+  "Kamrangirchar":  { offset: 3.3, hazardClass: "A",  hazardMultiplier: 1.78, baseSurvival: 0.90, color: ACCENT.red, lat: 23.7154, lon: 90.3542 },
+  "Chowkbazar":     { offset: 3.4, hazardClass: "A",  hazardMultiplier: 1.80, baseSurvival: 0.90, color: ACCENT.red, lat: 23.7163, lon: 90.3971 },
+  "Lalbagh":        { offset: 3.2, hazardClass: "A",  hazardMultiplier: 1.75, baseSurvival: 0.91, color: ACCENT.red, lat: 23.7196, lon: 90.3872 },
+  "Jatrabari":      { offset: 3.3, hazardClass: "A",  hazardMultiplier: 1.78, baseSurvival: 0.90, color: ACCENT.red, lat: 23.7104, lon: 90.4349 },
+  "Sutrapur":       { offset: 3.1, hazardClass: "A",  hazardMultiplier: 1.70, baseSurvival: 0.92, color: ACCENT.red, lat: 23.7051, lon: 90.4218 },
+  "Bangshal":       { offset: 3.3, hazardClass: "A",  hazardMultiplier: 1.78, baseSurvival: 0.90, color: ACCENT.red, lat: 23.7167, lon: 90.4061 },
+  "Kotwali":        { offset: 3.4, hazardClass: "A",  hazardMultiplier: 1.80, baseSurvival: 0.90, color: ACCENT.red, lat: 23.7050, lon: 90.4083 },
+  "Karwan Bazar":   { offset: 3.3, hazardClass: "A",  hazardMultiplier: 1.78, baseSurvival: 0.90, color: ACCENT.red, lat: 23.7516, lon: 90.3934 },
 
   // Dense Residential / Mixed (Medium-High UHI)
-  "Mirpur":         { offset: 2.1, hazardClass: "B-", hazardMultiplier: 1.40, baseSurvival: 1.02, color: ACCENT.amber },
-  "Mohammadpur":    { offset: 2.3, hazardClass: "B",  hazardMultiplier: 1.48, baseSurvival: 1.02, color: ACCENT.amber },
-  "Badda":          { offset: 2.5, hazardClass: "B+", hazardMultiplier: 1.52, baseSurvival: 1.00, color: ACCENT.amber },
-  "Rampura":        { offset: 2.6, hazardClass: "B+", hazardMultiplier: 1.55, baseSurvival: 0.99, color: ACCENT.amber },
-  "Malibagh":       { offset: 2.8, hazardClass: "B+", hazardMultiplier: 1.60, baseSurvival: 0.95, color: ACCENT.amber },
-  "Khilgaon":       { offset: 2.7, hazardClass: "B+", hazardMultiplier: 1.58, baseSurvival: 0.98, color: ACCENT.amber },
-  "Moghbazar":      { offset: 2.9, hazardClass: "A-", hazardMultiplier: 1.65, baseSurvival: 0.94, color: ACCENT.red },
-  "Azimpur":        { offset: 2.4, hazardClass: "B",  hazardMultiplier: 1.50, baseSurvival: 1.01, color: ACCENT.amber },
-  "Shantinagar":    { offset: 2.8, hazardClass: "B+", hazardMultiplier: 1.60, baseSurvival: 0.95, color: ACCENT.amber },
-  "Kakrail":        { offset: 2.7, hazardClass: "B+", hazardMultiplier: 1.58, baseSurvival: 0.98, color: ACCENT.amber },
-  "Paltan":         { offset: 3.0, hazardClass: "A-", hazardMultiplier: 1.68, baseSurvival: 0.93, color: ACCENT.red },
-  "Mugda":          { offset: 2.6, hazardClass: "B+", hazardMultiplier: 1.55, baseSurvival: 0.99, color: ACCENT.amber },
-  "Sabujbagh":      { offset: 2.5, hazardClass: "B+", hazardMultiplier: 1.52, baseSurvival: 1.00, color: ACCENT.amber },
-  "Demra":          { offset: 2.4, hazardClass: "B",  hazardMultiplier: 1.50, baseSurvival: 1.05, color: ACCENT.amber },
-  "Kadamtali":      { offset: 2.6, hazardClass: "B+", hazardMultiplier: 1.55, baseSurvival: 0.99, color: ACCENT.amber },
-  "Shyampur":       { offset: 2.7, hazardClass: "B+", hazardMultiplier: 1.58, baseSurvival: 0.98, color: ACCENT.amber },
-  "Gendaria":       { offset: 2.8, hazardClass: "B+", hazardMultiplier: 1.60, baseSurvival: 0.95, color: ACCENT.amber },
-  "Mohakhali":      { offset: 2.8, hazardClass: "B+", hazardMultiplier: 1.60, baseSurvival: 0.95, color: ACCENT.amber },
-  "Pallabi":        { offset: 2.0, hazardClass: "B-", hazardMultiplier: 1.35, baseSurvival: 1.05, color: ACCENT.amber },
-  "Rupnagar":       { offset: 2.1, hazardClass: "B-", hazardMultiplier: 1.40, baseSurvival: 1.02, color: ACCENT.amber },
-  "Shah Ali":       { offset: 2.2, hazardClass: "B",  hazardMultiplier: 1.45, baseSurvival: 1.00, color: ACCENT.amber },
-  "Darus Salam":    { offset: 2.3, hazardClass: "B",  hazardMultiplier: 1.48, baseSurvival: 1.02, color: ACCENT.amber },
-  "Adabor":         { offset: 2.2, hazardClass: "B",  hazardMultiplier: 1.45, baseSurvival: 1.00, color: ACCENT.amber },
-  "Kalabagan":      { offset: 2.5, hazardClass: "B+", hazardMultiplier: 1.52, baseSurvival: 1.00, color: ACCENT.amber },
-  "New Market":     { offset: 2.9, hazardClass: "A-", hazardMultiplier: 1.65, baseSurvival: 0.94, color: ACCENT.red },
-  "Shahbagh":       { offset: 2.6, hazardClass: "B+", hazardMultiplier: 1.55, baseSurvival: 0.99, color: ACCENT.amber },
-  "Ramna":          { offset: 2.5, hazardClass: "B+", hazardMultiplier: 1.52, baseSurvival: 1.00, color: ACCENT.amber },
-  "Shahjahanpur":   { offset: 2.7, hazardClass: "B+", hazardMultiplier: 1.58, baseSurvival: 0.98, color: ACCENT.amber },
-  "Bhatara":        { offset: 2.4, hazardClass: "B",  hazardMultiplier: 1.50, baseSurvival: 1.01, color: ACCENT.amber },
-  "Bhashantek":     { offset: 2.2, hazardClass: "B",  hazardMultiplier: 1.45, baseSurvival: 1.00, color: ACCENT.amber },
-  "Kafrul":         { offset: 2.3, hazardClass: "B",  hazardMultiplier: 1.48, baseSurvival: 1.02, color: ACCENT.amber },
-  "Sher-e-Bangla":  { offset: 2.0, hazardClass: "B-", hazardMultiplier: 1.35, baseSurvival: 1.05, color: ACCENT.amber },
+  "Mirpur":         { offset: 2.1, hazardClass: "B-", hazardMultiplier: 1.40, baseSurvival: 1.02, color: ACCENT.amber, lat: 23.8041, lon: 90.3625 },
+  "Mirpur 10":      { offset: 2.2, hazardClass: "B",  hazardMultiplier: 1.45, baseSurvival: 1.00, color: ACCENT.amber, lat: 23.8069, lon: 90.3687 },
+  "Mirpur 12":      { offset: 2.0, hazardClass: "B-", hazardMultiplier: 1.35, baseSurvival: 1.05, color: ACCENT.amber, lat: 23.8247, lon: 90.3644 },
+  "Mohammadpur":    { offset: 2.3, hazardClass: "B",  hazardMultiplier: 1.48, baseSurvival: 1.02, color: ACCENT.amber, lat: 23.7660, lon: 90.3586 },
+  "Badda":          { offset: 2.5, hazardClass: "B+", hazardMultiplier: 1.52, baseSurvival: 1.00, color: ACCENT.amber, lat: 23.7805, lon: 90.4267 },
+  "Rampura":        { offset: 2.6, hazardClass: "B+", hazardMultiplier: 1.55, baseSurvival: 0.99, color: ACCENT.amber, lat: 23.7612, lon: 90.4244 },
+  "Malibagh":       { offset: 2.8, hazardClass: "B+", hazardMultiplier: 1.60, baseSurvival: 0.95, color: ACCENT.amber, lat: 23.7487, lon: 90.4174 },
+  "Khilgaon":       { offset: 2.7, hazardClass: "B+", hazardMultiplier: 1.58, baseSurvival: 0.98, color: ACCENT.amber, lat: 23.7508, lon: 90.4303 },
+  "Moghbazar":      { offset: 2.9, hazardClass: "A-", hazardMultiplier: 1.65, baseSurvival: 0.94, color: ACCENT.red, lat: 23.7483, lon: 90.4025 },
+  "Azimpur":        { offset: 2.4, hazardClass: "B",  hazardMultiplier: 1.50, baseSurvival: 1.01, color: ACCENT.amber, lat: 23.7297, lon: 90.3846 },
+  "Shantinagar":    { offset: 2.8, hazardClass: "B+", hazardMultiplier: 1.60, baseSurvival: 0.95, color: ACCENT.amber, lat: 23.7423, lon: 90.4137 },
+  "Kakrail":        { offset: 2.7, hazardClass: "B+", hazardMultiplier: 1.58, baseSurvival: 0.98, color: ACCENT.amber, lat: 23.7397, lon: 90.4093 },
+  "Paltan":         { offset: 3.0, hazardClass: "A-", hazardMultiplier: 1.68, baseSurvival: 0.93, color: ACCENT.red, lat: 23.7358, lon: 90.4143 },
+  "Mugda":          { offset: 2.6, hazardClass: "B+", hazardMultiplier: 1.55, baseSurvival: 0.99, color: ACCENT.amber, lat: 23.7348, lon: 90.4357 },
+  "Sabujbagh":      { offset: 2.5, hazardClass: "B+", hazardMultiplier: 1.52, baseSurvival: 1.00, color: ACCENT.amber, lat: 23.7355, lon: 90.4312 },
+  "Demra":          { offset: 2.4, hazardClass: "B",  hazardMultiplier: 1.50, baseSurvival: 1.05, color: ACCENT.amber, lat: 23.7042, lon: 90.4578 },
+  "Kadamtali":      { offset: 2.6, hazardClass: "B+", hazardMultiplier: 1.55, baseSurvival: 0.99, color: ACCENT.amber, lat: 23.6934, lon: 90.4431 },
+  "Shyampur":       { offset: 2.7, hazardClass: "B+", hazardMultiplier: 1.58, baseSurvival: 0.98, color: ACCENT.amber, lat: 23.6847, lon: 90.4287 },
+  "Gendaria":       { offset: 2.8, hazardClass: "B+", hazardMultiplier: 1.60, baseSurvival: 0.95, color: ACCENT.amber, lat: 23.7012, lon: 90.4251 },
+  "Mohakhali":      { offset: 2.8, hazardClass: "B+", hazardMultiplier: 1.60, baseSurvival: 0.95, color: ACCENT.amber, lat: 23.7778, lon: 90.4056 },
+  "Pallabi":        { offset: 2.0, hazardClass: "B-", hazardMultiplier: 1.35, baseSurvival: 1.05, color: ACCENT.amber, lat: 23.8224, lon: 90.3625 },
+  "Rupnagar":       { offset: 2.1, hazardClass: "B-", hazardMultiplier: 1.40, baseSurvival: 1.02, color: ACCENT.amber, lat: 23.8183, lon: 90.3533 },
+  "Shah Ali":       { offset: 2.2, hazardClass: "B",  hazardMultiplier: 1.45, baseSurvival: 1.00, color: ACCENT.amber, lat: 23.8056, lon: 90.3475 },
+  "Darus Salam":    { offset: 2.3, hazardClass: "B",  hazardMultiplier: 1.48, baseSurvival: 1.02, color: ACCENT.amber, lat: 23.7894, lon: 90.3467 },
+  "Adabor":         { offset: 2.2, hazardClass: "B",  hazardMultiplier: 1.45, baseSurvival: 1.00, color: ACCENT.amber, lat: 23.7745, lon: 90.3524 },
+  "Kalabagan":      { offset: 2.5, hazardClass: "B+", hazardMultiplier: 1.52, baseSurvival: 1.00, color: ACCENT.amber, lat: 23.7487, lon: 90.3768 },
+  "New Market":     { offset: 2.9, hazardClass: "A-", hazardMultiplier: 1.65, baseSurvival: 0.94, color: ACCENT.red, lat: 23.7326, lon: 90.3851 },
+  "Shahbagh":       { offset: 2.6, hazardClass: "B+", hazardMultiplier: 1.55, baseSurvival: 0.99, color: ACCENT.amber, lat: 23.7389, lon: 90.3956 },
+  "Ramna":          { offset: 2.5, hazardClass: "B+", hazardMultiplier: 1.52, baseSurvival: 1.00, color: ACCENT.amber, lat: 23.7461, lon: 90.4011 },
+  "Shahjahanpur":   { offset: 2.7, hazardClass: "B+", hazardMultiplier: 1.58, baseSurvival: 0.98, color: ACCENT.amber, lat: 23.7431, lon: 90.4252 },
+  "Bhatara":        { offset: 2.4, hazardClass: "B",  hazardMultiplier: 1.50, baseSurvival: 1.01, color: ACCENT.amber, lat: 23.8033, lon: 90.4412 },
+  "Bhashantek":     { offset: 2.2, hazardClass: "B",  hazardMultiplier: 1.45, baseSurvival: 1.00, color: ACCENT.amber, lat: 23.8051, lon: 90.3876 },
+  "Kafrul":         { offset: 2.3, hazardClass: "B",  hazardMultiplier: 1.48, baseSurvival: 1.02, color: ACCENT.amber, lat: 23.7951, lon: 90.3822 },
+  "Sher-e-Bangla":  { offset: 2.0, hazardClass: "B-", hazardMultiplier: 1.35, baseSurvival: 1.05, color: ACCENT.amber, lat: 23.7725, lon: 90.3745 },
 
   // Planned Residential / Wealthy (Medium-Low UHI)
-  "Dhanmondi":      { offset: 2.2, hazardClass: "B",  hazardMultiplier: 1.45, baseSurvival: 1.00, color: ACCENT.amber },
-  "Gulshan":        { offset: 1.3, hazardClass: "C",  hazardMultiplier: 1.10, baseSurvival: 1.20, color: ACCENT.green },
-  "Banani":         { offset: 1.5, hazardClass: "C",  hazardMultiplier: 1.15, baseSurvival: 1.18, color: ACCENT.green },
-  "Baridhara":      { offset: 1.2, hazardClass: "C",  hazardMultiplier: 1.08, baseSurvival: 1.22, color: ACCENT.green },
-  "Niketan":        { offset: 1.6, hazardClass: "C",  hazardMultiplier: 1.18, baseSurvival: 1.15, color: ACCENT.green },
-  "Uttara":         { offset: 1.8, hazardClass: "B-", hazardMultiplier: 1.30, baseSurvival: 1.10, color: ACCENT.amber },
-  "Bashundhara RA": { offset: 1.4, hazardClass: "C",  hazardMultiplier: 1.12, baseSurvival: 1.19, color: ACCENT.green },
+  "Dhanmondi":      { offset: 2.2, hazardClass: "B",  hazardMultiplier: 1.45, baseSurvival: 1.00, color: ACCENT.amber, lat: 23.7461, lon: 90.3742 },
+  "Gulshan":        { offset: 1.3, hazardClass: "C",  hazardMultiplier: 1.10, baseSurvival: 1.20, color: ACCENT.green, lat: 23.7925, lon: 90.4078 },
+  "Banani":         { offset: 1.5, hazardClass: "C",  hazardMultiplier: 1.15, baseSurvival: 1.18, color: ACCENT.green, lat: 23.7940, lon: 90.4043 },
+  "Baridhara":      { offset: 1.2, hazardClass: "C",  hazardMultiplier: 1.08, baseSurvival: 1.22, color: ACCENT.green, lat: 23.7995, lon: 90.4208 },
+  "Niketan":        { offset: 1.6, hazardClass: "C",  hazardMultiplier: 1.18, baseSurvival: 1.15, color: ACCENT.green, lat: 23.7811, lon: 90.4092 },
+  "Uttara":         { offset: 1.8, hazardClass: "B-", hazardMultiplier: 1.30, baseSurvival: 1.10, color: ACCENT.amber, lat: 23.8759, lon: 90.3795 },
+  "Bashundhara RA": { offset: 1.4, hazardClass: "C",  hazardMultiplier: 1.12, baseSurvival: 1.19, color: ACCENT.green, lat: 23.8192, lon: 90.4308 },
 
   // Peripheral / Developing / Green (Low UHI)
-  "Purbachal":      { offset: 0.8, hazardClass: "C+", hazardMultiplier: 1.02, baseSurvival: 1.28, color: ACCENT.green },
-  "Cantonment":     { offset: 1.0, hazardClass: "C+", hazardMultiplier: 1.05, baseSurvival: 1.25, color: ACCENT.green },
-  "Turag":          { offset: 1.5, hazardClass: "C",  hazardMultiplier: 1.15, baseSurvival: 1.18, color: ACCENT.green },
-  "Khilkhet":       { offset: 1.7, hazardClass: "C",  hazardMultiplier: 1.20, baseSurvival: 1.14, color: ACCENT.green },
-  "Bimanbandar":    { offset: 1.6, hazardClass: "C",  hazardMultiplier: 1.18, baseSurvival: 1.15, color: ACCENT.green },
-  "Uttar Khan":     { offset: 1.4, hazardClass: "C",  hazardMultiplier: 1.12, baseSurvival: 1.19, color: ACCENT.green },
-  "Dakshinkhan":    { offset: 1.5, hazardClass: "C",  hazardMultiplier: 1.15, baseSurvival: 1.18, color: ACCENT.green },
-  "Savar":          { offset: 2.8, hazardClass: "B+", hazardMultiplier: 1.55, baseSurvival: 1.00, color: ACCENT.amber },
-  "Gazipur":        { offset: 2.4, hazardClass: "B",  hazardMultiplier: 1.50, baseSurvival: 1.05, color: ACCENT.amber },
+  "Purbachal":      { offset: 0.8, hazardClass: "C+", hazardMultiplier: 1.02, baseSurvival: 1.28, color: ACCENT.green, lat: 23.8475, lon: 90.5211 },
+  "Cantonment":     { offset: 1.0, hazardClass: "C+", hazardMultiplier: 1.05, baseSurvival: 1.25, color: ACCENT.green, lat: 23.8197, lon: 90.3921 },
+  "Turag":          { offset: 1.5, hazardClass: "C",  hazardMultiplier: 1.15, baseSurvival: 1.18, color: ACCENT.green, lat: 23.8789, lon: 90.3475 },
+  "Khilkhet":       { offset: 1.7, hazardClass: "C",  hazardMultiplier: 1.20, baseSurvival: 1.14, color: ACCENT.green, lat: 23.8286, lon: 90.4194 },
+  "Bimanbandar":    { offset: 1.6, hazardClass: "C",  hazardMultiplier: 1.18, baseSurvival: 1.15, color: ACCENT.green, lat: 23.8478, lon: 90.4019 },
+  "Uttar Khan":     { offset: 1.4, hazardClass: "C",  hazardMultiplier: 1.12, baseSurvival: 1.19, color: ACCENT.green, lat: 23.8722, lon: 90.4245 },
+  "Dakshinkhan":    { offset: 1.5, hazardClass: "C",  hazardMultiplier: 1.15, baseSurvival: 1.18, color: ACCENT.green, lat: 23.8583, lon: 90.4287 },
+  "Savar":          { offset: 2.8, hazardClass: "B+", hazardMultiplier: 1.55, baseSurvival: 1.00, color: ACCENT.amber, lat: 23.8488, lon: 90.2687 },
+  "Gazipur":        { offset: 2.4, hazardClass: "B",  hazardMultiplier: 1.50, baseSurvival: 1.05, color: ACCENT.amber, lat: 23.9999, lon: 90.4203 },
 };
 
 /* ═══════════════════════════════════════════════════════════════
@@ -2650,9 +2647,11 @@ function DispatchCalendar({ baseTemp, zone, trustScore, windSpeed, packaging }) 
   );
 }
 
-function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDvs }) {
+function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDvs, activeZone, setActiveZone, liveWeather, onDetectGps }) {
   const [baseTemp, setBaseTemp] = useState(31);
-  const [zone, setZone] = useState("Mirpur");
+  const [localZone, setLocalZone] = useState("Mirpur");
+  const zone = activeZone || localZone;
+  const setZone = setActiveZone || setLocalZone;
   const [packaging, setPackaging] = useState("standard");
   const [hour, setHour] = useState(new Date().getHours());
   const [windSpeed, setWindSpeed] = useState(8);
@@ -2681,19 +2680,41 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
 
   const filteredZones = Object.keys(UHI_ZONES).filter(z => z.toLowerCase().includes(zoneSearch.toLowerCase()));
 
-  // Auto-fetch weather whenever the selected zone changes
+  // Sync weather states from parent if liveWeather is provided, otherwise fall back to local fetch
   useEffect(() => {
-    fetchLiveWeather(zone);
-  }, [zone]);
+    if (liveWeather) {
+      if (liveWeather.rawTemp !== undefined) {
+        setBaseTemp(liveWeather.rawTemp);
+      } else if (liveWeather.temp !== undefined) {
+        setBaseTemp(liveWeather.temp);
+      }
+      if (liveWeather.windSpeed !== undefined) {
+        setWindSpeed(liveWeather.windSpeed);
+      }
+      if (liveWeather.source === "fetching") {
+        setWeatherSource("fetching");
+      } else if (liveWeather.source?.startsWith("live-") || liveWeather.source === "live-zone") {
+        setWeatherSource("live");
+      } else if (liveWeather.source === "fallback") {
+        setWeatherSource("estimated");
+      }
+    }
+  }, [liveWeather]);
 
-  // Also fetch once on mount so the page never shows the hardcoded 31/8 default
+  // Fallback auto-fetch if run in standalone mode (no parent liveWeather props)
   useEffect(() => {
-    fetchLiveWeather(zone);
-    // Refresh every 10 minutes so the values stay current while the tab is open
-    const interval = setInterval(() => fetchLiveWeather(zone), 10 * 60 * 1000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!liveWeather) {
+      fetchLiveWeather(zone);
+    }
+  }, [zone, liveWeather]);
+
+  useEffect(() => {
+    if (!liveWeather) {
+      fetchLiveWeather(zone);
+      const interval = setInterval(() => fetchLiveWeather(zone), 10 * 60 * 1000);
+      return () => clearInterval(interval);
+    }
+  }, [liveWeather]);
 
   // Reset scores and prepare for a recalculation when inputs change
   useEffect(() => {
@@ -2980,7 +3001,7 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
               </span>
             </div>
             <button
-              onClick={fetchLiveWeather}
+              onClick={onDetectGps || fetchLiveWeather}
               disabled={isFetchingWeather}
               style={{
                 padding: "6px 12px", borderRadius: 8, border: `1px solid ${ACCENT.blueBorder}`,
@@ -8022,6 +8043,7 @@ function CLimaLogixApp() {
   const [customSmeName, setCustomSmeName] = useState("My Custom SME");
   const [verificationBatchId, setVerificationBatchId] = useState("");
   const [verificationDispatchZone, setVerificationDispatchZone] = useState("");
+  const [activeZone, setActiveZone] = useState("Mirpur");
 
   const setTab = (target) => {
     if (typeof target === "number") {
@@ -8048,12 +8070,23 @@ function CLimaLogixApp() {
   };
 
   // Live regional weather (drives the DHAKA DIV. GEN SCORE header chip).
-  // Resolution order:
-  //   1. Device geolocation (navigator.geolocation) — "live" badge
-  //   2. Dhaka centroid (23.8103, 90.4125)        — "live · Dhaka" badge
-  //   3. Diurnal estimate for the current hour   — "EST" badge
   const DHAKA_LAT = 23.8103;
   const DHAKA_LON = 90.4125;
+
+  const findClosestZone = (lat, lon) => {
+    let closestZone = "Mirpur";
+    let minDistance = Infinity;
+    for (const [zoneName, zoneData] of Object.entries(UHI_ZONES)) {
+      if (zoneData.lat != null && zoneData.lon != null) {
+        const dist = Math.pow(lat - zoneData.lat, 2) + Math.pow(lon - zoneData.lon, 2);
+        if (dist < minDistance) {
+          minDistance = dist;
+          closestZone = zoneName;
+        }
+      }
+    }
+    return closestZone;
+  };
 
   // Pure diurnal fallback so we always have *some* number that varies by hour
   // (peaks ~13:00, troughs ~05:00) — avoids the old frozen 31/32°C artefact.
@@ -8082,10 +8115,11 @@ function CLimaLogixApp() {
     const est = computeDiurnalEstimate(DHAKA_LAT, DHAKA_LON);
     return {
       temp: est.temperature,
+      rawTemp: est.temperature,
       windSpeed: est.windspeed_kmh,
       humidity: est.humidity,
       description: est.description,
-      source: "fallback", // 'live-device' | 'live-dhaka' | 'fallback' | 'fetching'
+      source: "fallback", // 'live-device' | 'live-dhaka' | 'fallback' | 'fetching' | 'live-zone'
       lat: DHAKA_LAT,
       lon: DHAKA_LON,
       label: "Dhaka (estimated)",
@@ -8093,9 +8127,29 @@ function CLimaLogixApp() {
     };
   });
 
+  const detectGpsLocation = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      alert("Geolocation is not supported by your browser.");
+      return;
+    }
+    setLiveWeather(prev => ({ ...prev, source: "fetching" }));
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const closest = findClosestZone(latitude, longitude);
+        setActiveZone(closest);
+        setLiveWeather(prev => ({ ...prev, source: "live-device" }));
+      },
+      (err) => {
+        alert("GPS auto-detection failed: " + err.message + ". Falling back to manual selection.");
+        console.warn("[LiveWeather] Geolocation failed:", err);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
   useEffect(() => {
     let cancelled = false;
-    let watchId = null;
 
     const applyApiResult = (res, meta) => {
       if (cancelled) return;
@@ -8103,6 +8157,7 @@ function CLimaLogixApp() {
       if (w && typeof w.temperature === "number") {
         setLiveWeather({
           temp: Math.round(w.temperature * 10) / 10,
+          rawTemp: w.rawTemp ?? w.temperature,
           windSpeed: Math.round(w.windspeed_kmh ?? 8),
           humidity: typeof w.humidity === "number" ? w.humidity : 65,
           description: w.description || "",
@@ -8128,61 +8183,39 @@ function CLimaLogixApp() {
       } catch (err) {
         if (cancelled) return false;
         console.warn("[LiveWeather] API fetch failed, using diurnal estimate:", err);
+        // Fallback to diurnal
+        const est = computeDiurnalEstimate(lat, lon);
+        setLiveWeather({
+          temp: est.temperature,
+          rawTemp: est.temperature,
+          windSpeed: est.windspeed_kmh,
+          humidity: est.humidity,
+          description: est.description,
+          source: "fallback",
+          lat: lat,
+          lon: lon,
+          label: meta.label,
+          updatedAt: new Date(),
+        });
         return false;
       }
     };
 
-    const startDhakaPolling = () => {
-      // Device geolocation unavailable or denied — fall back to Dhaka coords
-      const tick = () => {
-        fetchForCoords(DHAKA_LAT, DHAKA_LON, { source: "live-dhaka", label: "Dhaka" });
-      };
-      tick();
-      return setInterval(tick, 5 * 60 * 1000);
+    const zoneData = UHI_ZONES[activeZone] || UHI_ZONES["Mirpur"];
+    const lat = zoneData.lat;
+    const lon = zoneData.lon;
+
+    const tick = () => {
+      fetchForCoords(lat, lon, { source: liveWeather.source === "live-device" ? "live-device" : "live-zone", label: activeZone });
     };
-
-    const startDevicePolling = (lat, lon) => {
-      const tick = () => {
-        fetchForCoords(lat, lon, { source: "live-device", label: "Device location" });
-      };
-      tick();
-      return setInterval(tick, 5 * 60 * 1000);
-    };
-
-    let pollHandle = null;
-    let usedDevice = false;
-
-    const beginWithDevice = () => {
-      if (typeof navigator === "undefined" || !navigator.geolocation) {
-        pollHandle = startDhakaPolling();
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          if (cancelled) return;
-          usedDevice = true;
-          const { latitude, longitude } = pos.coords;
-          pollHandle = startDevicePolling(latitude, longitude);
-        },
-        (err) => {
-          if (cancelled) return;
-          console.info("[LiveWeather] geolocation denied/unavailable, using Dhaka fallback:", err?.message);
-          pollHandle = startDhakaPolling();
-        },
-        { enableHighAccuracy: false, timeout: 5000, maximumAge: 10 * 60 * 1000 }
-      );
-    };
-
-    beginWithDevice();
+    tick();
+    const interval = setInterval(tick, 5 * 60 * 1000);
 
     return () => {
       cancelled = true;
-      if (watchId != null && navigator?.geolocation?.clearWatch) {
-        navigator.geolocation.clearWatch(watchId);
-      }
-      if (pollHandle) clearInterval(pollHandle);
+      clearInterval(interval);
     };
-  }, []);
+  }, [activeZone]);
 
   // Calculate Generalized Dhaka Division Scores (averaging all zones in Dhaka Division)
   const calcGeneralizedScores = (ts) => {
@@ -8199,6 +8232,12 @@ function CLimaLogixApp() {
   };
   
   const genDvs = calcGeneralizedScores(trustScore);
+
+  const currentHour = new Date().getHours();
+  const activeUhi = UHI_ZONES[activeZone] || { offset: 0 };
+  const solarFactor = getSolarFactor(currentHour);
+  const windCooling = (liveWeather?.windSpeed ?? 8) > 15 ? 1.0 : 0.0;
+  const adjustedHeaderTemp = (liveWeather?.rawTemp ?? liveWeather?.temp ?? 31) + (activeUhi.offset * solarFactor) - windCooling;
 
   const themeVars = THEMES[theme];
 
@@ -8522,11 +8561,33 @@ function CLimaLogixApp() {
             fontSize: 12, color: "var(--text-secondary)",
             letterSpacing: "0.02em"
           }}>
-            <span style={{ fontWeight: 700, color: ACCENT.green }}>{(liveWeather?.label && liveWeather?.source?.startsWith("live-")) ? `${(liveWeather.label || "DEVICE").toString().toUpperCase()} · GEN SCORE` : "DHAKA DIV. GEN SCORE"}</span>
-            <span title={`Weather: ${liveWeather?.temp ?? 31}°C · wind ${liveWeather?.windSpeed ?? 8} km/h · source: ${liveWeather?.source ?? "fallback"} · ${liveWeather?.label ?? "n/a"}${liveWeather?.lat != null ? ` (${liveWeather.lat.toFixed(3)}, ${liveWeather.lon.toFixed(3)})` : ""}`}>
-              🌡 <strong style={{ color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace" }}>{liveWeather?.temp ?? 31}°C</strong>
+            <span style={{ fontWeight: 700, color: ACCENT.green }}>{activeZone.toUpperCase()} · ZONE SCORE</span>
+            <span title={`Base Weather: ${(liveWeather?.rawTemp ?? liveWeather?.temp ?? 31).toFixed(1)}°C · wind ${liveWeather?.windSpeed ?? 8} km/h · source: ${liveWeather?.source ?? "fallback"} · ${liveWeather?.label ?? "n/a"}`}>
+              🌡 <strong style={{ color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace" }}>{adjustedHeaderTemp.toFixed(1)}°C</strong>
               <span style={{ marginLeft: 6, opacity: 0.75, fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>
-                📍 {liveWeather?.label ?? "detecting…"}
+                📍
+                <select
+                  value={activeZone}
+                  onChange={(e) => setActiveZone(e.target.value)}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--text-primary)",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    outline: "none",
+                    fontSize: 11,
+                    padding: "2px 4px",
+                    borderRadius: 4,
+                    marginLeft: 4,
+                  }}
+                >
+                  {Object.keys(UHI_ZONES).map(z => (
+                    <option key={z} value={z} style={{ background: "var(--bg-card)", color: "var(--text-primary)" }}>
+                      {z}
+                    </option>
+                  ))}
+                </select>
               </span>
             </span>
             <span style={{ width: 1, height: 12, background: "var(--border-primary)" }}></span>
@@ -8535,12 +8596,12 @@ function CLimaLogixApp() {
             <span>Gen. DVS: <strong style={{ color: genDvs >= 75 ? ACCENT.green : genDvs >= 55 ? ACCENT.amber : ACCENT.red, fontFamily: "'JetBrains Mono', monospace" }}>{genDvs}</strong></span>
             <span style={{
               padding: "2px 7px", borderRadius: 999, fontSize: 9, fontWeight: 800, letterSpacing: "0.08em",
-              background: (liveWeather?.source === "live-device" || liveWeather?.source === "live-dhaka") ? "rgba(16,185,129,0.15)" : "rgba(245,158,11,0.15)",
-              color: (liveWeather?.source === "live-device" || liveWeather?.source === "live-dhaka") ? ACCENT.green : ACCENT.amber,
-              border: `1px solid ${(liveWeather?.source === "live-device" || liveWeather?.source === "live-dhaka") ? ACCENT.green : ACCENT.amber}`,
+              background: (liveWeather?.source === "live-device" || liveWeather?.source === "live-zone") ? "rgba(16,185,129,0.15)" : "rgba(245,158,11,0.15)",
+              color: (liveWeather?.source === "live-device" || liveWeather?.source === "live-zone") ? ACCENT.green : ACCENT.amber,
+              border: `1px solid ${(liveWeather?.source === "live-device" || liveWeather?.source === "live-zone") ? ACCENT.green : ACCENT.amber}`,
             }}>
               {liveWeather?.source === "live-device" ? "● LIVE · GPS"
-                : liveWeather?.source === "live-dhaka" ? "● LIVE · DHAKA"
+                : liveWeather?.source === "live-zone" ? "● LIVE · ZONE"
                 : liveWeather?.source === "fetching" ? "… SYNC"
                 : "◌ EST"}
             </span>
@@ -8672,7 +8733,15 @@ function CLimaLogixApp() {
           <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
             <SectionLabel icon="🌡️" text="Delivery Viability Simulator" />
             <Card>
-              <MicroclimateSimulator trustScore={trustScore} dvs={dvs} setDvs={setDvs} />
+              <MicroclimateSimulator
+                trustScore={trustScore}
+                dvs={dvs}
+                setDvs={setDvs}
+                activeZone={activeZone}
+                setActiveZone={setActiveZone}
+                liveWeather={liveWeather}
+                onDetectGps={detectGpsLocation}
+              />
             </Card>
           </div>
         )}

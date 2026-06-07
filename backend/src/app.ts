@@ -436,6 +436,10 @@ app.get('/api/geocode', async (req: Request, res: Response) => {
       // Fallback for Dhaka zones if not found by API
       const fallbackZones: Record<string, {lat: number, lon: number}> = {
         'mirpur': { lat: 23.8041, lon: 90.3625 },
+        'mirpur 10': { lat: 23.8069, lon: 90.3687 },
+        'mirpur 12': { lat: 23.8247, lon: 90.3644 },
+        'karwan bazar': { lat: 23.7516, lon: 90.3934 },
+        'shahbagh': { lat: 23.7389, lon: 90.3956 },
         'gulshan': { lat: 23.7925, lon: 90.4078 },
         'dhanmondi': { lat: 23.7461, lon: 90.3742 },
         'banani': { lat: 23.7940, lon: 90.4043 },

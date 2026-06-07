@@ -38,6 +38,9 @@ export const DHAKA_ZONES: Readonly<Record<string, DhakaZoneProfile>> = {
 
   // ── Dense Residential / Mixed (HIGH UHI) ──
   'Mirpur':        { uhiOffset: 2.1, hazardClass: 'HIGH', solarCoefficient: 1.15 },
+  'Mirpur 10':     { uhiOffset: 2.2, hazardClass: 'HIGH', solarCoefficient: 1.15 },
+  'Mirpur 12':     { uhiOffset: 2.0, hazardClass: 'HIGH', solarCoefficient: 1.14 },
+  'Karwan Bazar':  { uhiOffset: 3.3, hazardClass: 'CRITICAL', solarCoefficient: 1.21 },
   'Mohammadpur':   { uhiOffset: 2.3, hazardClass: 'HIGH', solarCoefficient: 1.16 },
   'Badda':         { uhiOffset: 2.5, hazardClass: 'HIGH', solarCoefficient: 1.17 },
   'Rampura':       { uhiOffset: 2.6, hazardClass: 'HIGH', solarCoefficient: 1.17 },
