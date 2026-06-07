@@ -48,7 +48,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
               onClick={() => setIsOpen(!isOpen)}
               className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-green-700 hover:bg-green-600 rounded-md shadow-sm transition-colors"
             >
-              <span className="material-icons text-[18px]">language</span>
+              <span className="text-[18px]">🌐</span>
               <span className="uppercase">{currentLang}</span>
             </button>
 
@@ -8017,9 +8017,7 @@ function LandingView({ onGetStarted }) {
               </p>
             </div>
             <div style={{ background: "rgba(17, 24, 39, 0.4)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "14px", padding: "24px" }}>
-              <div style={{ width: "100%", height: "130px", background: "linear-gradient(135deg, rgba(52,211,153,0.1), rgba(16,185,129,0.2))", borderRadius: "10px", marginBottom: "16px", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(16,185,129,0.2)" }}>
-                <span style={{ fontSize: "40px" }}>🏭</span>
-              </div>
+              <img src="./industrial_processors.png" alt="Industrial Processors" style={{ width: "100%", height: "130px", objectFit: "cover", borderRadius: "10px", marginBottom: "16px", border: "1px solid rgba(255,255,255,0.04)" }} />
               <div style={{ fontSize: "28px", marginBottom: "8px", display: "none" }}>🏭</div>
               <h3 style={{ fontSize: "17px", fontWeight: 700, color: "#FFFFFF", marginBottom: "10px" }}>Industrial Processors</h3>
               <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>

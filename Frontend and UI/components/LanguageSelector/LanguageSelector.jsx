@@ -50,7 +50,7 @@ function LanguageSelector() {
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-green-700 hover:bg-green-600 rounded-md shadow-sm transition-colors"
       >
-        <span className="material-icons text-[18px]">language</span>
+        <span className="text-[18px]">🌐</span>
         <span className="uppercase">{currentLang}</span>
       </button>
 
