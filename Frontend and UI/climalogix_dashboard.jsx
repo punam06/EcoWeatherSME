@@ -1,5 +1,653 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 
+// Inline LanguageSelector Component
+      function LanguageSelector() {
+        const [isOpen, setIsOpen] = useState(false);
+        const [currentLang, setCurrentLang] = useState('en');
+        const [supportedLangs, setSupportedLangs] = useState({});
+        const dropdownRef = useRef(null);
+
+        useEffect(() => {
+          if (window.EcoLang) {
+            setCurrentLang(window.EcoLang.getCurrentLanguage());
+            setSupportedLangs(window.EcoLang.getSupportedLanguages());
+            
+            const unsubscribe = window.EcoLang.onLanguageChange((newLang) => {
+              setCurrentLang(newLang);
+              const dict = window.EcoLang.getSupportedLanguages() || {};
+              let label = dict[newLang];
+              if (typeof label !== 'string' || label.toLowerCase().startsWith('language')) {
+                label = (newLang || 'en').toUpperCase();
+              }
+              showToast(`Language updated to ${label}`);
+            });
+            return unsubscribe;
+          }
+        }, []);
+
+        useEffect(() => {
+          const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+              setIsOpen(false);
+            }
+          };
+          document.addEventListener('mousedown', handleClickOutside);
+          return () => document.removeEventListener('mousedown', handleClickOutside);
+        }, []);
+
+        const handleSelect = (code) => {
+          if (window.EcoLang) {
+            window.EcoLang.setLanguage(code);
+          }
+          setIsOpen(false);
+        };
+
+        return (
+          <div className="relative inline-block text-left" ref={dropdownRef}>
+            <button
+              onClick={() => setIsOpen(!isOpen)}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-green-700 hover:bg-green-600 rounded-md shadow-sm transition-colors"
+            >
+              <span className="material-icons text-[18px]">language</span>
+              <span className="uppercase">{currentLang}</span>
+            </button>
+
+            {isOpen && (
+              <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-[#112211] ring-1 ring-black ring-opacity-5 z-50 overflow-hidden border border-green-800/50">
+                <div className="py-1 max-h-60 overflow-y-auto custom-scrollbar">
+                  {Object.entries(supportedLangs).map(([code, name]) => (
+                    <button
+                      key={code}
+                      onClick={() => handleSelect(code)}
+                      className={`block w-full text-left px-4 py-2 text-sm transition-colors ${
+                        currentLang === code 
+                          ? 'bg-green-800 text-white font-bold' 
+                          : 'text-gray-300 hover:bg-green-900/50 hover:text-white'
+                      }`}
+                    >
+                      <span className="inline-block w-8 text-gray-500 uppercase text-xs">{code}</span>
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      window.LanguageSelector = LanguageSelector;
+
+      // Inline AuthPanel Component
+      function AuthPanel({ onClose, onAuthSuccess }) {
+        const [mode, setMode] = useState("login");
+        const [email, setEmail] = useState("");
+        const [password, setPassword] = useState("");
+        const [confirmPassword, setConfirmPassword] = useState("");
+        const [name, setName] = useState("");
+        const [uiRole, setUiRole] = useState("producer"); 
+        const [isLoading, setIsLoading] = useState(false);
+        const [error, setError] = useState("");
+        const [showPass, setShowPass] = useState(false);
+        const [isSuccess, setIsSuccess] = useState(false);
+        const [successMsg, setSuccessMsg] = useState("");
+        
+        const canvasRef = useRef(null);
+        const reqRef = useRef(null);
+
+        useEffect(() => {
+          if (!canvasRef.current || !window.THREE) return;
+          
+          const THREE = window.THREE;
+          const scene = new THREE.Scene();
+          const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+          camera.position.z = 10;
+          
+          const renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current, alpha: true, antialias: true });
+          renderer.setSize(window.innerWidth, window.innerHeight);
+          renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+          
+          const particleCount = 1200;
+          const geometry = new THREE.BufferGeometry();
+          const positions = new Float32Array(particleCount * 3);
+          const colors = new Float32Array(particleCount * 3);
+          
+          const colorGreen = new THREE.Color("#10B981");
+          const colorBlue = new THREE.Color("#3B82F6");
+          
+          for (let i = 0; i < particleCount; i++) {
+            const u = Math.random();
+            const v = Math.random();
+            const theta = 2 * Math.PI * u;
+            const phi = Math.acos(2 * v - 1);
+            const r = 8 * Math.cbrt(Math.random());
+            
+            positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+            positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+            positions[i * 3 + 2] = r * Math.cos(phi);
+            
+            const c = Math.random() < 0.15 ? colorBlue : colorGreen;
+            colors[i * 3] = c.r;
+            colors[i * 3 + 1] = c.g;
+            colors[i * 3 + 2] = c.b;
+          }
+          
+          geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+          geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+          
+          const material = new THREE.PointsMaterial({
+            size: 0.05,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.4
+          });
+          
+          const particles = new THREE.Points(geometry, material);
+          scene.add(particles);
+          
+          const ringGeo = new THREE.TorusGeometry(3, 0.015, 16, 100);
+          const ringMat = new THREE.LineBasicMaterial({ color: 0x10B981, transparent: true, opacity: 0.25 });
+          const edges = new THREE.EdgesGeometry(ringGeo);
+          const ring = new THREE.LineSegments(edges, ringMat);
+          ring.rotation.x = Math.PI / 2.5;
+          scene.add(ring);
+          
+          const greenLight = new THREE.PointLight(0x10B981, 0.4);
+          greenLight.position.set(5, 5, 5);
+          scene.add(greenLight);
+          
+          const blueLight = new THREE.PointLight(0x3B82F6, 0.2);
+          blueLight.position.set(-5, -3, 2);
+          scene.add(blueLight);
+          
+          scene.add(new THREE.AmbientLight(0xffffff, 0.1));
+          
+          let mouseX = 0;
+          let mouseY = 0;
+          const onMouseMove = (e) => {
+            mouseX = (e.clientX - window.innerWidth / 2);
+            mouseY = (e.clientY - window.innerHeight / 2);
+          };
+          window.addEventListener('mousemove', onMouseMove);
+          
+          const onResize = () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+          };
+          window.addEventListener('resize', onResize);
+          
+          let time = 0;
+          let lastFrame = performance.now();
+          const animate = (now) => {
+            reqRef.current = requestAnimationFrame(animate);
+            if (document.hidden) return;
+            
+            const delta = now - lastFrame;
+            if (delta < 16) return;
+            lastFrame = now - (delta % 16);
+            
+            time += 0.01;
+            
+            const posAttr = geometry.attributes.position;
+            for (let i = 0; i < particleCount; i++) {
+              const y = posAttr.getY(i);
+              posAttr.setY(i, y + Math.sin(time + i) * 0.001);
+            }
+            posAttr.needsUpdate = true;
+            
+            ring.rotation.z += 0.001;
+            
+            const targetX = (mouseY / window.innerHeight) * 0.3;
+            const targetY = (mouseX / window.innerWidth) * 0.3;
+            particles.rotation.x += (targetX - particles.rotation.x) * 0.05;
+            particles.rotation.y += (targetY - particles.rotation.y) * 0.05;
+            
+            renderer.render(scene, camera);
+          };
+          reqRef.current = requestAnimationFrame(animate);
+          
+          return () => {
+            cancelAnimationFrame(reqRef.current);
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('resize', onResize);
+            renderer.dispose();
+            geometry.dispose();
+            material.dispose();
+            ringGeo.dispose();
+            ringMat.dispose();
+            edges.dispose();
+          };
+        }, []);
+
+        const entropy = useMemo(() => {
+          let strength = 0;
+          if (password.length >= 8) strength++;
+          if (/[A-Z]/.test(password)) strength++;
+          if (/[0-9]/.test(password)) strength++;
+          if (/[^A-Za-z0-9]/.test(password)) strength++;
+          return strength;
+        }, [password]);
+
+        const handleSubmit = async (e) => {
+          e.preventDefault();
+          setError("");
+          setIsLoading(true);
+          setIsSuccess(false);
+
+          if (!window.navigator.onLine) {
+            setError("Connection error — check your network");
+            setIsLoading(false);
+            return;
+          }
+
+          if (mode === "register" && password !== confirmPassword) {
+            setError("Passwords do not match");
+            setIsLoading(false);
+            return;
+          }
+
+          try {
+            const sb = window.supabaseClient;
+            if (!sb) throw new Error("Supabase client not initialized");
+
+            const backendRole = uiRole === "producer" ? "processor" : "buyer";
+
+            let result;
+            if (mode === "login") {
+              result = await sb.auth.signInWithPassword({ email, password });
+            } else {
+              result = await sb.auth.signUp({
+                email,
+                password,
+                options: {
+                  data: { name, role: backendRole }
+                }
+              });
+            }
+
+            if (result.error) {
+              throw new Error(result.error.message || "Authentication failed");
+            }
+
+            if (mode === "register") {
+              setIsSuccess(true);
+              setSuccessMsg("Account created — please sign in");
+              setTimeout(() => {
+                setMode("login");
+                setIsSuccess(false);
+                setPassword("");
+                setConfirmPassword("");
+              }, 2000);
+            } else {
+              setIsSuccess(true);
+              setTimeout(() => {
+                if (onAuthSuccess) {
+                  if (result.data.session) {
+                    onAuthSuccess(result.data.user, result.data.session.access_token);
+                  } else if (result.data.user) {
+                    onAuthSuccess(result.data.user, null);
+                  }
+                }
+                if (onClose) onClose();
+              }, 800);
+            }
+          } catch (err) {
+            setError(err.message || "Connection failed. Please try again.");
+          } finally {
+            setIsLoading(false);
+          }
+        };
+
+        const formStyles = {
+          inputGroup: { position: "relative", marginBottom: "18px" },
+          label: {
+            position: "absolute", left: "16px", top: "16px",
+            fontSize: "13px", color: "#4B5563", fontFamily: "Inter",
+            pointerEvents: "none", transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)",
+            background: "transparent", padding: "0 4px"
+          },
+          labelActive: {
+            top: "-8px", left: "12px", fontSize: "11px", color: "#10B981",
+            background: "#0d131f",
+          },
+          input: {
+            width: "100%", padding: "14px 16px", background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px",
+            color: "#F9FAFB", fontFamily: "'JetBrains Mono', monospace", fontSize: "14px",
+            outline: "none", transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)",
+            boxSizing: "border-box"
+          }
+        };
+
+        return (
+          <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "#0B0F19", overflow: "hidden" }}>
+            <style>{`
+              .auth-card {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                box-sizing: border-box;
+                opacity: 0;
+                pointer-events: none;
+                transform: translateY(-16px);
+                transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1), transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+                background: rgba(17, 24, 39, 0.75);
+                backdrop-filter: blur(20px);
+                -webkit-backdrop-filter: blur(20px);
+                border-radius: 20px;
+                border: 1px solid rgba(16, 185, 129, 0.18);
+                box-shadow: 0 0 0 1px rgba(0,0,0,0.3), 0 20px 60px rgba(0,0,0,0.55), 0 0 40px rgba(16,185,129,0.07), inset 0 1px 0 rgba(255,255,255,0.04);
+                padding: 48px 44px;
+              }
+              @media (max-width: 480px) {
+                .auth-card {
+                  padding: 32px 24px;
+                }
+              }
+              .auth-card.card--visible {
+                position: relative;
+                opacity: 1;
+                pointer-events: all;
+                transform: translateY(0);
+                animation: slideInUp 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+              }
+              @keyframes slideInUp {
+                from {
+                  opacity: 0;
+                  transform: translateY(16px);
+                }
+                to {
+                  opacity: 1;
+                  transform: translateY(0);
+                }
+              }
+              .auth-error-shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; border-color: #EF4444 !important; }
+              .auth-input-focus:focus {
+                border-color: rgba(16,185,129,0.55) !important;
+                box-shadow: 0 0 0 3px rgba(16,185,129,0.1) !important;
+                background: rgba(16,185,129,0.04) !important;
+              }
+              .segment-tabs {
+                display: flex;
+                gap: 6px;
+                margin-bottom: 28px;
+                background: rgba(255,255,255,0.04);
+                padding: 4px;
+                border-radius: 10px;
+              }
+              .segment-btn {
+                flex: 1;
+                padding: 8px 0;
+                border: none;
+                border-radius: 8px;
+                fontSize: 12px;
+                font-family: "Inter", sans-serif;
+                cursor: pointer;
+                transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+                background: transparent;
+                color: #6B7280;
+              }
+              .segment-btn.active {
+                background: #10B981;
+                color: #0B0F19;
+                font-weight: 600;
+                box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+              }
+              .auth-btn {
+                width: 100%;
+                height: 52px;
+                border-radius: 10px;
+                border: none;
+                cursor: pointer;
+                background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+                color: #0B0F19;
+                font-family: "Inter", sans-serif;
+                font-size: 15px;
+                font-weight: 600;
+                letter-spacing: 0.02em;
+                transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              }
+              .auth-btn:hover:not(:disabled) {
+                filter: brightness(1.1);
+                box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
+                transform: translateY(-2px);
+              }
+              .auth-btn:active:not(:disabled) {
+                transform: translateY(0);
+                filter: brightness(0.95);
+              }
+              .auth-btn:disabled {
+                cursor: not-allowed;
+                opacity: 0.7;
+              }
+              @keyframes teleBlink {
+                0%, 100% { opacity: 0.2; }
+                50% { opacity: 0.5; }
+              }
+              .tele-blink {
+                animation: teleBlink 2s infinite;
+              }
+            `}</style>
+
+            <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 0 }} />
+
+            <div style={{
+              position: "absolute", inset: 0, zIndex: 5, pointerEvents: "none",
+              background: "repeating-linear-gradient(rgba(16, 185, 129, 0.03) 0, rgba(16, 185, 129, 0.03) 1px, transparent 1px, transparent 4px)",
+              backgroundSize: "100% 4px"
+            }}></div>
+            <div style={{
+              position: "absolute", inset: 0, zIndex: 5, pointerEvents: "none",
+              background: "radial-gradient(circle at center, transparent 30%, rgba(0,0,0,0.6) 100%)"
+            }}></div>
+
+            <div style={{ position: "absolute", top: 20, left: 20, zIndex: 5, color: "#10B981", opacity: 0.2, fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>DHK_ZONE_04 | UHI: +3.2°C</div>
+            <div style={{ position: "absolute", top: 20, right: 20, zIndex: 5, color: "#10B981", fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>
+              <span style={{ color: "#10B981", opacity: 0.2 }}>BATCH_SYNC: </span>
+              <span className="tele-blink" style={{ color: "#10B981", fontWeight: "bold" }}>LIVE</span>
+            </div>
+            <div style={{ position: "absolute", bottom: 20, left: 20, zIndex: 5, color: "#10B981", fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>
+              <span style={{ color: "#10B981", opacity: 0.2 }}>NODE: </span>
+              <span className="tele-blink" style={{ color: "#10B981", fontWeight: "bold" }}>ACTIVE_SECURE</span>
+            </div>
+            <div style={{ position: "absolute", bottom: 20, right: 20, zIndex: 5, color: "#10B981", opacity: 0.2, fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>SYS_OPS: NOMINAL</div>
+
+            <button onClick={onClose} style={{
+              position: "absolute", top: 20, right: 20, zIndex: 20,
+              background: "rgba(255,255,255,0.1)", border: "none", borderRadius: "50%",
+              width: 32, height: 32, color: "#fff", cursor: "pointer", fontSize: "18px",
+              display: "flex", alignItems: "center", justifyContent: "center"
+            }}>×</button>
+
+            <div style={{
+              position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+              width: "calc(100% - 32px)", maxWidth: 460, zIndex: 10
+            }}>
+              {isSuccess && mode === "register" && (
+                <div style={{
+                  position: "absolute", top: -50, left: 0, right: 0, textAlign: "center",
+                  background: "rgba(16, 185, 129, 0.2)", border: "1px solid rgba(16, 185, 129, 0.4)",
+                  color: "#10B981", padding: "10px", borderRadius: "8px", fontSize: "13px",
+                  animation: "fadeSlideIn 0.3s cubic-bezier(0.4,0,0.2,1)", zIndex: 30
+                }}>
+                  {successMsg}
+                </div>
+              )}
+
+              <div className={`auth-card ${mode === "login" ? "card--visible" : "card--hidden"}`}>
+                <div className={error && mode === "login" ? "auth-error-shake" : ""}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", marginBottom: "30px" }}>
+                    <div style={{
+                      width: "56px", height: "56px", background: "rgba(16, 185, 129, 0.1)",
+                      borderRadius: "14px", border: "1px solid rgba(16, 185, 129, 0.2)",
+                      display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px"
+                    }}>
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "pulseGlow 2s ease-in-out infinite" }}>
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                        <path d="M12 12v10"/>
+                      </svg>
+                    </div>
+                    <h1 style={{ fontFamily: "Inter", fontSize: "22px", color: "#F9FAFB", fontWeight: 700, margin: "0 0 6px" }}>ClimaLogix AI</h1>
+                    <p style={{ fontFamily: "Inter", fontSize: "13px", color: "#9CA3AF" }}>Climate-Resilient Commerce Platform</p>
+                  </div>
+
+                  <div className="segment-tabs">
+                    {["producer", "consumer", "sme owner"].map(r => (
+                      <button key={r} type="button" className={`segment-btn ${uiRole === r ? "active" : ""}`} onClick={() => setUiRole(r)}>
+                        {r.charAt(0).toUpperCase() + r.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+
+                  <form onSubmit={handleSubmit}>
+                    <div style={formStyles.inputGroup}>
+                      <input required type="email" className="auth-input-focus" style={formStyles.input} placeholder=" " value={email} onChange={e=>setEmail(e.target.value)} />
+                      <label style={{...formStyles.label, ...(email ? formStyles.labelActive : {})}}>Email Address</label>
+                    </div>
+
+                    <div style={formStyles.inputGroup}>
+                      <input required type={showPass ? "text" : "password"} className="auth-input-focus" style={{...formStyles.input, paddingRight: "40px"}} placeholder=" " value={password} onChange={e=>setPassword(e.target.value)} />
+                      <label style={{...formStyles.label, ...(password ? formStyles.labelActive : {})}}>Password</label>
+                      <button type="button" onClick={()=>setShowPass(!showPass)} style={{ position:"absolute", right:"12px", top:"16px", background:"transparent", border:"none", cursor:"pointer" }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                      </button>
+                      {password.length > 0 && (
+                        <div style={{ display: "flex", gap: "4px", marginTop: "8px", height: "4px" }}>
+                          {[1,2,3,4].map(s => (
+                            <div key={s} style={{
+                              flex: 1, borderRadius: "2px", transition: "all 0.3s",
+                              background: s <= entropy ? (entropy < 2 ? "#EF4444" : entropy < 4 ? "#F59E0B" : "#10B981") : "rgba(255,255,255,0.1)"
+                            }}/>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13px", color: "#9CA3AF", fontFamily: "Inter" }}>
+                        <div style={{ width: "16px", height: "16px", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.05)" }}>
+                          <input type="checkbox" style={{ opacity: 0, position: "absolute", cursor: "pointer" }} onChange={(e) => {
+                            e.target.parentElement.style.background = e.target.checked ? "#10B981" : "rgba(255,255,255,0.05)";
+                            e.target.nextSibling.style.opacity = e.target.checked ? 1 : 0;
+                          }}/>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0B0F19" strokeWidth="3" style={{ opacity: 0, transition: "opacity 0.2s" }}><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        </div>
+                        Remember me
+                      </label>
+                      <a href="#" style={{ color: "#10B981", fontSize: "13px", textDecoration: "none", fontFamily: "Inter" }}>Forgot password?</a>
+                    </div>
+
+                    {error && mode === "login" && <div style={{ color: "#EF4444", fontSize: "13px", marginBottom: "16px", textAlign: "center", fontFamily: "Inter" }}>{error}</div>}
+
+                    <button type="submit" className="auth-btn" disabled={isLoading}>
+                      {isLoading ? (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+                      ) : isSuccess ? (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                      ) : "Sign In"}
+                    </button>
+
+                    <div style={{ margin: "24px 0", display: "flex", alignItems: "center", textAlign: "center", color: "#4B5563" }}>
+                      <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.1)" }}></div>
+                      <span style={{ padding: "0 10px", fontSize: "12px", fontFamily: "Inter" }}>New to ClimaLogix?</span>
+                      <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.1)" }}></div>
+                    </div>
+
+                    <div style={{ textAlign: "center" }}>
+                      <button type="button" onClick={() => { setMode("register"); setError(""); }} style={{ background: "transparent", border: "none", color: "#10B981", fontSize: "14px", fontFamily: "Inter", cursor: "pointer" }}>
+                        Create an account
+                      </button>
+                    </div>
+                    
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", color: "#4B5563", fontSize: "11px", fontFamily: "Inter", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: "20px", marginTop: "20px" }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0110 0v4"></path></svg>
+                      Secured with Argon2 + JWT · End-to-end encrypted
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              <div className={`auth-card ${mode === "register" ? "card--visible" : "card--hidden"}`}>
+                <div className={error && mode === "register" ? "auth-error-shake" : ""}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", marginBottom: "30px" }}>
+                    <div style={{
+                      width: "56px", height: "56px", background: "rgba(16, 185, 129, 0.1)",
+                      borderRadius: "14px", border: "1px solid rgba(16, 185, 129, 0.2)",
+                      display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px"
+                    }}>
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "pulseGlow 2s ease-in-out infinite" }}>
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                        <path d="M12 12v10"/>
+                      </svg>
+                    </div>
+                    <h2 style={{ fontFamily: "Inter", fontSize: "20px", color: "#F9FAFB", fontWeight: 700, margin: 0 }}>Create Account</h2>
+                  </div>
+
+                  <div className="segment-tabs">
+                    {["producer", "consumer", "sme owner"].map(r => (
+                      <button key={r} type="button" className={`segment-btn ${uiRole === r ? "active" : ""}`} onClick={() => setUiRole(r)}>
+                        {r.charAt(0).toUpperCase() + r.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+
+                  <form onSubmit={handleSubmit}>
+                    <div style={formStyles.inputGroup}>
+                      <input required type="text" className="auth-input-focus" style={formStyles.input} placeholder=" " value={name} onChange={e=>setName(e.target.value)} />
+                      <label style={{...formStyles.label, ...(name ? formStyles.labelActive : {})}}>Full Name</label>
+                    </div>
+                    <div style={formStyles.inputGroup}>
+                      <input required type="email" className="auth-input-focus" style={formStyles.input} placeholder=" " value={email} onChange={e=>setEmail(e.target.value)} />
+                      <label style={{...formStyles.label, ...(email ? formStyles.labelActive : {})}}>Email Address</label>
+                    </div>
+                    <div style={formStyles.inputGroup}>
+                      <input required type="password" className="auth-input-focus" style={formStyles.input} placeholder=" " value={password} onChange={e=>setPassword(e.target.value)} />
+                      <label style={{...formStyles.label, ...(password ? formStyles.labelActive : {})}}>Password</label>
+                      {password.length > 0 && (
+                        <div style={{ display: "flex", gap: "4px", marginTop: "8px", height: "4px" }}>
+                          {[1,2,3,4].map(s => (
+                            <div key={s} style={{
+                              flex: 1, borderRadius: "2px", transition: "all 0.3s",
+                              background: s <= entropy ? (entropy < 2 ? "#EF4444" : entropy < 4 ? "#F59E0B" : "#10B981") : "rgba(255,255,255,0.1)"
+                            }}/>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div style={formStyles.inputGroup}>
+                      <input required type="password" className="auth-input-focus" style={formStyles.input} placeholder=" " value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} />
+                      <label style={{...formStyles.label, ...(confirmPassword ? formStyles.labelActive : {})}}>Confirm Password</label>
+                    </div>
+
+                    {error && mode === "register" && <div style={{ color: "#EF4444", fontSize: "13px", marginBottom: "16px", textAlign: "center", fontFamily: "Inter" }}>{error}</div>}
+
+                    <button type="submit" className="auth-btn" disabled={isLoading}>
+                      Create Account
+                    </button>
+
+                    <div style={{ textAlign: "center", marginTop: "24px" }}>
+                      <span style={{ color: "#9CA3AF", fontSize: "13px", fontFamily: "Inter" }}>Already have an account? </span>
+                      <button type="button" onClick={() => { setMode("login"); setError(""); }} style={{ background: "transparent", border: "none", color: "#10B981", fontSize: "13px", fontFamily: "Inter", cursor: "pointer" }}>
+                        Sign in
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      window.AuthPanel = AuthPanel;
+
+
+
 const IS_STATIC_FILE_HTML = window.location.protocol === 'file:';
 // Backend API base URL. The production backend that the live dashboard talks
 // to is https://backsme.onrender.com (the previous value of '' resolved to a
@@ -6685,6 +7333,10 @@ function SystemDocsView({ productsList, liveWeather }) {
                         <div style={{ fontSize: 11.5, color: "var(--text-dim)" }}>📧 {m.email}</div>
                       </>
                     )}
+                  </div>
+                </Card>
+              ))}
+            </div>
             <Card hover={false} style={{ border: `1px solid var(--border-primary)` }}>
               <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 16 }}>
                 {"Add New Team Member"}
@@ -6936,6 +7588,42 @@ const TABS = [
 ];
 
 function CLimaLogixApp() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    if (!window.supabaseClient) {
+      // Fallback developer session if Supabase is not running/configured
+      setCurrentUser({ email: "developer@climalogix.internal", user_metadata: { name: "Developer", role: "processor" } });
+      setAuthLoading(false);
+      return;
+    }
+    window.supabaseClient.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setCurrentUser(session.user);
+        window.SUPABASE_SESSION_TOKEN = session.access_token;
+      }
+      setAuthLoading(false);
+    }).catch(() => {
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = window.supabaseClient.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        setCurrentUser(session.user);
+        window.SUPABASE_SESSION_TOKEN = session.access_token;
+      } else {
+        setCurrentUser(null);
+        window.SUPABASE_SESSION_TOKEN = null;
+      }
+      setAuthLoading(false);
+    });
+
+    return () => {
+      if (subscription) subscription.unsubscribe();
+    };
+  }, []);
+
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [trustScore, setTrustScore] = useState(84);
@@ -7148,6 +7836,30 @@ function CLimaLogixApp() {
     }
   }, [activeTabs.length]);
 
+  if (authLoading) {
+    return (
+      <div style={{
+        background: "#0B0F19",
+        color: "#10B981",
+        height: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: "14px",
+        gap: "16px"
+      }}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+        <span>LOADING SECURE NODE...</span>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return <AuthPanel onAuthSuccess={(user) => setCurrentUser(user)} />;
+  }
+
   return (
     <div style={{
       ...themeVars,
@@ -7306,6 +8018,44 @@ function CLimaLogixApp() {
                 </button>
               );
             })}
+          </div>
+
+          {/* Drawer Footer / Sign Out */}
+          <div style={{
+            padding: "16px",
+            borderTop: "1px solid var(--border-primary)",
+            background: "rgba(0,0,0,0.1)"
+          }}>
+            <button
+              onClick={async () => {
+                if (window.supabaseClient) {
+                  await window.supabaseClient.auth.signOut();
+                } else {
+                  setCurrentUser(null);
+                }
+                setIsDrawerOpen(false);
+              }}
+              style={{
+                width: "100%",
+                padding: "10px 16px",
+                border: "none",
+                background: "rgba(239, 68, 68, 0.1)",
+                color: "#EF4444",
+                borderRadius: "8px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                fontSize: "13px",
+                fontWeight: 600,
+                transition: "all 0.2s"
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(239, 68, 68, 0.2)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)"; }}
+            >
+              <span>🚪</span>
+              <span>Sign Out</span>
+            </button>
           </div>
         </div>
       </div>
@@ -7613,5 +8363,32 @@ function CLimaLogixApp() {
 
 window.CLimaLogixApp = CLimaLogixApp;
 
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<CLimaLogixApp />);
+const initializeAndMount = async () => {
+  try {
+    const IS_STATIC_FILE_HTML = window.location.protocol === 'file:';
+    const API_BASE = (IS_STATIC_FILE_HTML || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? 'http://localhost:5001'
+      : 'https://backsme.onrender.com';
+      
+    const configRes = await fetch(`${API_BASE}/api/config`).then(r => r.json());
+    if (configRes && configRes.success && configRes.data) {
+      window.SUPABASE_URL = configRes.data.supabaseUrl;
+      window.SUPABASE_ANON_KEY = configRes.data.supabaseAnonKey;
+      
+      // Initialize Supabase Client dynamically
+      if (window.supabase && !window.supabaseClient) {
+        window.supabaseClient = window.supabase.createClient(
+          window.SUPABASE_URL,
+          window.SUPABASE_ANON_KEY
+        );
+      }
+    }
+  } catch (err) {
+    console.error("Failed to load dynamic Supabase config from backend:", err);
+  } finally {
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<CLimaLogixApp />);
+  }
+};
+
+initializeAndMount();
