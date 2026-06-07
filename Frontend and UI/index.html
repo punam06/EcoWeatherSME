@@ -8175,28 +8175,101 @@ function LandingView({ onGetStarted }) {
   };
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#0B0F19",
-      backgroundImage: "radial-gradient(circle at top right, rgba(16, 185, 129, 0.08), transparent 40%), radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.05), transparent 45%)",
-      color: "#F9FAFB",
-      fontFamily: "'Inter', sans-serif",
-      display: "flex",
-      flexDirection: "column",
-      justifyContent: "space-between"
-    }}>
-      <header style={{
-        padding: "20px 40px",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
-        background: "rgba(11, 15, 25, 0.6)",
-        position: "sticky",
-        top: 0,
-        zIndex: 100
+    <div style={{ background: "#0B0F19", color: "#F9FAFB", fontFamily: "'Inter', sans-serif", minHeight: "100vh", overflowX: "hidden" }}>
+      <style>{`
+        .scroll-animate {
+          opacity: 0;
+          transform: translateY(30px);
+          transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .scroll-animate.visible {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        .delay-100 { transition-delay: 100ms; }
+        .delay-200 { transition-delay: 200ms; }
+        .delay-300 { transition-delay: 300ms; }
+        .delay-400 { transition-delay: 400ms; }
+        .delay-500 { transition-delay: 500ms; }
+
+        .hero-title span {
+          background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
+
+        .cta-primary {
+          background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+          box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+          transition: all 0.25s ease;
+        }
+        .cta-primary:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+          filter: brightness(1.1);
+        }
+
+        .cta-secondary {
+          border: 1px solid rgba(52, 211, 153, 0.65);
+          background: rgba(255, 255, 255, 0.05);
+          color: #34D399;
+          transition: all 0.25s ease;
+        }
+        .cta-secondary:hover {
+          background: rgba(52, 211, 153, 0.15);
+          border-color: #34D399;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 14px rgba(52, 211, 153, 0.25);
+        }
+
+        .glass-panel {
+          background: rgba(17, 24, 39, 0.75);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          border: 1px solid rgba(16, 185, 129, 0.18);
+          border-radius: 16px;
+        }
+
+        .problem-card {
+          border-left: 4px solid #10B981;
+        }
+
+        .feature-num {
+          font-family: 'JetBrains Mono', monospace;
+          color: #10B981;
+          text-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+        }
+
+        .map-zone {
+          transition: fill 0.5s ease;
+        }
+
+        .logo-badge {
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 9999px;
+          padding: 8px 18px;
+          font-size: 13px;
+          font-family: 'JetBrains Mono', monospace;
+          color: #94A3B8;
+        }
+
+        .mobile-drawer {
+          transform: translateX(100%);
+          transition: transform 0.3s ease-in-out;
+        }
+        .mobile-drawer.open {
+          transform: translateX(0);
+        }
+      `}</style>
+
+      {/* NAVIGATION BAR */}
+      <nav style={{
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 50,
+        background: "rgba(11, 15, 25, 0.85)", backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)", borderBottom: "1px solid rgba(16, 185, 129, 0.15)",
+        height: "64px", display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "0 24px"
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <span style={{ fontSize: "24px" }}>🌱</span>
@@ -8254,14 +8327,9 @@ function LandingView({ onGetStarted }) {
           }}>
             Predictive Climate-Resilient Agricultural Supply Chains
           </h1>
-          <p style={{
-            fontSize: "17px",
-            color: "#9CA3AF",
-            maxWidth: "750px",
-            margin: "0 auto 36px auto",
-            lineHeight: 1.6
-          }}>
-            Synchronizing hardware IoT microclimate telemetry, AI-driven thermal hazard routing, and cryptographic ledger verification to assure crop provenance and combat dynamic transit degradation.
+
+          <p className="scroll-animate delay-200" style={{ fontSize: "17px", color: "#D1D5DB", lineHeight: "1.6", maxWidth: "600px" }}>
+            ClimaLogix AI monitors real-time thermal conditions, optimizes heat-safe routes, and shields SME logistics in climate-vulnerable regions like Bangladesh.
           </p>
           <div style={{ display: "flex", justifyContent: "center", gap: "16px" }}>
             <button
@@ -8305,11 +8373,20 @@ function LandingView({ onGetStarted }) {
             </a>
           </div>
 
-          <div style={{ marginTop: "48px", position: "relative", borderRadius: "16px", overflow: "hidden", border: "1px solid rgba(255, 255, 255, 0.08)", boxShadow: "0 20px 40px rgba(0, 0, 0, 0.4)" }}>
-            <img src="./farm_banner.png" alt="Sustainable Agricultural Logistics Hub" style={{ width: "100%", height: "auto", maxHeight: "400px", objectFit: "cover", display: "block" }} />
-            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(to top, rgba(11, 15, 25, 0.9) 0%, rgba(11, 15, 25, 0) 100%)", padding: "24px 32px", textAlign: "left" }}>
-              <div style={{ fontSize: "11px", fontWeight: 700, color: "#10B981", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>Active Staging & Operations</div>
-              <div style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF" }}>ClimaLogix-Enabled Farm Cooperatives</div>
+          <div className="scroll-animate delay-400" style={{ display: "flex", gap: "24px", flexWrap: "wrap", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "28px", marginTop: "16px" }}>
+            <div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", color: "#10B981", fontSize: "24px", fontWeight: "700" }}>2,400+</div>
+              <div style={{ color: "#CBD5E1", fontSize: "12px", marginTop: "2px" }}>SMEs Protected</div>
+            </div>
+            <div style={{ width: "1px", background: "rgba(255,255,255,0.1)" }}></div>
+            <div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", color: "#10B981", fontSize: "24px", fontWeight: "700" }}>98.7%</div>
+              <div style={{ color: "#CBD5E1", fontSize: "12px", marginTop: "2px" }}>Route Accuracy</div>
+            </div>
+            <div style={{ width: "1px", background: "rgba(255,255,255,0.1)" }}></div>
+            <div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", color: "#10B981", fontSize: "24px", fontWeight: "700" }}>12+</div>
+              <div style={{ color: "#CBD5E1", fontSize: "12px", marginTop: "2px" }}>Districts Active</div>
             </div>
           </div>
         </div>
