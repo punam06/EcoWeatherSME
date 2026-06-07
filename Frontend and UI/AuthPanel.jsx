@@ -208,8 +208,8 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
     }
 
     // Password Validation
-    if (!password || password.length < 6) {
-      setPasswordError("Password must be at least 6 characters long");
+    if (!password || password.length < 8 || !/[0-9]/.test(password)) {
+      setPasswordError("Password must be at least 8 characters with 1 number");
       hasError = true;
     }
 
@@ -295,7 +295,7 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
     inputGroup: { position: "relative", marginBottom: "18px" },
     label: {
       position: "absolute", left: "16px", top: "16px",
-      fontSize: "13px", color: "#4B5563", fontFamily: "Inter",
+      fontSize: "13px", color: "#9CA3AF", fontFamily: "Inter",
       pointerEvents: "none", transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)",
       background: "transparent", padding: "0 4px"
     },
@@ -304,8 +304,8 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
       background: "#0d131f",
     },
     input: {
-      width: "100%", padding: "14px 16px", background: "rgba(255,255,255,0.04)",
-      border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px",
+      width: "100%", padding: "14px 16px", background: "rgba(255,255,255,0.07)",
+      border: "1px solid rgba(255,255,255,0.18)", borderRadius: "10px",
       color: "#F9FAFB", fontFamily: "'JetBrains Mono', monospace", fontSize: "14px",
       outline: "none", transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)",
       boxSizing: "border-box"
@@ -380,7 +380,7 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
           cursor: pointer;
           transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
           background: transparent;
-          color: #6B7280;
+          color: #A0AAB2;
         }
         .segment-btn.active {
           background: #10B981;
@@ -444,11 +444,11 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
       {/* Decorative Corners */}
       <button onClick={onClose} style={{
         position: "absolute", top: 20, left: 20, zIndex: 20,
-        background: "rgba(255,255,255,0.05)", border: "1px solid rgba(16, 185, 129, 0.2)",
-        borderRadius: "8px", padding: "6px 12px", color: "#10B981", cursor: "pointer",
+        background: "rgba(52, 211, 153, 0.1)", border: "1px solid rgba(52, 211, 153, 0.45)",
+        borderRadius: "8px", padding: "6px 12px", color: "#34D399", cursor: "pointer",
         fontSize: "12px", fontFamily: "Inter", display: "flex", alignItems: "center", gap: "6px",
         transition: "all 0.2s"
-      }} onMouseOver={e => e.currentTarget.style.background = "rgba(16, 185, 129, 0.1)"} onMouseOut={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}>
+      }} onMouseOver={e => { e.currentTarget.style.background = "rgba(52, 211, 153, 0.2)"; e.currentTarget.style.borderColor = "#34D399"; }} onMouseOut={e => { e.currentTarget.style.background = "rgba(52, 211, 153, 0.1)"; e.currentTarget.style.borderColor = "rgba(52, 211, 153, 0.45)"; }}>
         ← Back to Home
       </button>
 
@@ -504,25 +504,24 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
               <p style={{ fontFamily: "Inter", fontSize: "13px", color: "#9CA3AF" }}>Climate-Resilient Commerce Platform</p>
             </div>
 
-            {/* Segmented Control for Roles */}
             <div className="segment-tabs">
               {["producer", "consumer", "sme owner"].map(r => (
                 <button key={r} type="button" className={`segment-btn ${uiRole === r ? "active" : ""}`} onClick={() => setUiRole(r)}>
-                  {r.charAt(0).toUpperCase() + r.slice(1)}
+                  {r === "sme owner" ? "SME Owner" : r.charAt(0).toUpperCase() + r.slice(1)}
                 </button>
               ))}
             </div>
 
             <form onSubmit={handleSubmit}>
               <div style={formStyles.inputGroup}>
-                <input required type="email" className="auth-input-focus" style={{...formStyles.input, borderColor: emailError ? "#EF4444" : "rgba(255,255,255,0.08)"}} placeholder=" " value={email} onChange={e => { setEmail(e.target.value); setEmailError(""); setError(""); }} />
-                <label style={{...formStyles.label, ...(email ? formStyles.labelActive : {}), color: emailError ? "#EF4444" : "#4B5563"}}>Email Address</label>
+                <input required type="email" className="auth-input-focus" style={{...formStyles.input, borderColor: emailError ? "#EF4444" : "rgba(255,255,255,0.18)"}} placeholder=" " value={email} onChange={e => { setEmail(e.target.value); setEmailError(""); setError(""); }} />
+                <label style={{...formStyles.label, ...(email ? formStyles.labelActive : {}), color: emailError ? "#EF4444" : "#9CA3AF"}}>Email Address</label>
                 {emailError && <div style={{ color: "#EF4444", fontSize: "11px", marginTop: "4px", fontFamily: "Inter" }}>{emailError}</div>}
               </div>
 
               <div style={formStyles.inputGroup}>
-                <input required type={showPass ? "text" : "password"} className="auth-input-focus" style={{...formStyles.input, paddingRight: "40px", borderColor: passwordError ? "#EF4444" : "rgba(255,255,255,0.08)"}} placeholder=" " value={password} onChange={e => { setPassword(e.target.value); setPasswordError(""); setError(""); }} />
-                <label style={{...formStyles.label, ...(password ? formStyles.labelActive : {}), color: passwordError ? "#EF4444" : "#4B5563"}}>Password</label>
+                <input required type={showPass ? "text" : "password"} className="auth-input-focus" style={{...formStyles.input, paddingRight: "40px", borderColor: passwordError ? "#EF4444" : "rgba(255,255,255,0.18)"}} placeholder=" " value={password} onChange={e => { setPassword(e.target.value); setPasswordError(""); setError(""); }} />
+                <label style={{...formStyles.label, ...(password ? formStyles.labelActive : {}), color: passwordError ? "#EF4444" : "#9CA3AF"}}>Password</label>
                 <button type="button" onClick={()=>setShowPass(!showPass)} style={{ position:"absolute", right:"12px", top:"16px", background:"transparent", border:"none", cursor:"pointer" }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                 </button>
@@ -567,10 +566,10 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
                 ) : "Sign In"}
               </button>
 
-              <div style={{ margin: "24px 0", display: "flex", alignItems: "center", textAlign: "center", color: "#4B5563" }}>
-                <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.1)" }}></div>
+              <div style={{ margin: "24px 0", display: "flex", alignItems: "center", textAlign: "center", color: "#8F9CAE" }}>
+                <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.15)" }}></div>
                 <span style={{ padding: "0 10px", fontSize: "12px", fontFamily: "Inter" }}>New to ClimaLogix?</span>
-                <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.1)" }}></div>
+                <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.15)" }}></div>
               </div>
 
               <div style={{ textAlign: "center" }}>
@@ -615,7 +614,7 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
             <div className="segment-tabs">
               {["producer", "consumer", "sme owner"].map(r => (
                 <button key={r} type="button" className={`segment-btn ${uiRole === r ? "active" : ""}`} onClick={() => setUiRole(r)}>
-                  {r.charAt(0).toUpperCase() + r.slice(1)}
+                  {r === "sme owner" ? "SME Owner" : r.charAt(0).toUpperCase() + r.slice(1)}
                 </button>
               ))}
             </div>
@@ -626,14 +625,20 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
                 <label style={{...formStyles.label, ...(name ? formStyles.labelActive : {})}}>Full Name</label>
               </div>
               <div style={formStyles.inputGroup}>
-                <input required type="email" className="auth-input-focus" style={{...formStyles.input, borderColor: emailError ? "#EF4444" : "rgba(255,255,255,0.08)"}} placeholder=" " value={email} onChange={e => { setEmail(e.target.value); setEmailError(""); setError(""); }} />
-                <label style={{...formStyles.label, ...(email ? formStyles.labelActive : {}), color: emailError ? "#EF4444" : "#4B5563"}}>Email Address</label>
+                <input required type="email" className="auth-input-focus" style={{...formStyles.input, borderColor: emailError ? "#EF4444" : "rgba(255,255,255,0.18)"}} placeholder=" " value={email} onChange={e => { setEmail(e.target.value); setEmailError(""); setError(""); }} />
+                <label style={{...formStyles.label, ...(email ? formStyles.labelActive : {}), color: emailError ? "#EF4444" : "#9CA3AF"}}>Email Address</label>
                 {emailError && <div style={{ color: "#EF4444", fontSize: "11px", marginTop: "4px", fontFamily: "Inter" }}>{emailError}</div>}
               </div>
               <div style={formStyles.inputGroup}>
-                <input required type="password" className="auth-input-focus" style={{...formStyles.input, borderColor: passwordError ? "#EF4444" : "rgba(255,255,255,0.08)"}} placeholder=" " value={password} onChange={e => { setPassword(e.target.value); setPasswordError(""); setError(""); }} />
-                <label style={{...formStyles.label, ...(password ? formStyles.labelActive : {}), color: passwordError ? "#EF4444" : "#4B5563"}}>Password</label>
-                {passwordError && <div style={{ color: "#EF4444", fontSize: "11px", marginTop: "4px", fontFamily: "Inter" }}>{passwordError}</div>}
+                <input required type="password" className="auth-input-focus" style={{...formStyles.input, borderColor: passwordError ? "#EF4444" : "rgba(255,255,255,0.18)"}} placeholder=" " value={password} onChange={e => { setPassword(e.target.value); setPasswordError(""); setError(""); }} />
+                <label style={{...formStyles.label, ...(password ? formStyles.labelActive : {}), color: passwordError ? "#EF4444" : "#9CA3AF"}}>Password</label>
+                {passwordError ? (
+                  <div style={{ color: "#EF4444", fontSize: "11px", marginTop: "4px", fontFamily: "Inter" }}>{passwordError}</div>
+                ) : (
+                  <div style={{ color: "#9CA3AF", fontSize: "11px", marginTop: "4px", fontFamily: "Inter" }}>
+                    Must be at least 8 characters with 1 number
+                  </div>
+                )}
                 {/* Strength bar */}
                 {password.length > 0 && !passwordError && (
                   <div style={{ display: "flex", gap: "4px", marginTop: "8px", height: "4px" }}>
@@ -647,8 +652,8 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
                 )}
               </div>
               <div style={formStyles.inputGroup}>
-                <input required type="password" className="auth-input-focus" style={{...formStyles.input, borderColor: confirmPasswordError ? "#EF4444" : "rgba(255,255,255,0.08)"}} placeholder=" " value={confirmPassword} onChange={e => { setConfirmPassword(e.target.value); setConfirmPasswordError(""); setError(""); }} />
-                <label style={{...formStyles.label, ...(confirmPassword ? formStyles.labelActive : {}), color: confirmPasswordError ? "#EF4444" : "#4B5563"}}>Confirm Password</label>
+                <input required type="password" className="auth-input-focus" style={{...formStyles.input, borderColor: confirmPasswordError ? "#EF4444" : "rgba(255,255,255,0.18)"}} placeholder=" " value={confirmPassword} onChange={e => { setConfirmPassword(e.target.value); setConfirmPasswordError(""); setError(""); }} />
+                <label style={{...formStyles.label, ...(confirmPassword ? formStyles.labelActive : {}), color: confirmPasswordError ? "#EF4444" : "#9CA3AF"}}>Confirm Password</label>
                 {confirmPasswordError && <div style={{ color: "#EF4444", fontSize: "11px", marginTop: "4px", fontFamily: "Inter" }}>{confirmPasswordError}</div>}
               </div>
 
