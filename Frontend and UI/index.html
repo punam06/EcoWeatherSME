@@ -8304,6 +8304,14 @@ function LandingView({ onGetStarted }) {
               Instant Provenance Tracer
             </a>
           </div>
+
+          <div style={{ marginTop: "48px", position: "relative", borderRadius: "16px", overflow: "hidden", border: "1px solid rgba(255, 255, 255, 0.08)", boxShadow: "0 20px 40px rgba(0, 0, 0, 0.4)" }}>
+            <img src="./farm_banner.png" alt="Sustainable Agricultural Logistics Hub" style={{ width: "100%", height: "auto", maxHeight: "400px", objectFit: "cover", display: "block" }} />
+            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(to top, rgba(11, 15, 25, 0.9) 0%, rgba(11, 15, 25, 0) 100%)", padding: "24px 32px", textAlign: "left" }}>
+              <div style={{ fontSize: "11px", fontWeight: 700, color: "#10B981", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>Active Staging & Operations</div>
+              <div style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF" }}>ClimaLogix-Enabled Farm Cooperatives</div>
+            </div>
+          </div>
         </div>
 
         {/* PROVENANCE LOOKUP TOOL */}
@@ -8377,28 +8385,34 @@ function LandingView({ onGetStarted }) {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "24px" }}>
             <div style={{ background: "rgba(17, 24, 39, 0.4)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "14px", padding: "24px" }}>
-              <div style={{ fontSize: "28px", marginBottom: "16px" }}>👩‍🌾</div>
+              <img src="./harvest.png" alt="Harvest Operations" style={{ width: "100%", height: "130px", objectFit: "cover", borderRadius: "10px", marginBottom: "16px", border: "1px solid rgba(255,255,255,0.04)" }} />
+              <div style={{ fontSize: "28px", marginBottom: "8px", display: "none" }}>👩‍🌾</div>
               <h3 style={{ fontSize: "17px", fontWeight: 700, color: "#FFFFFF", marginBottom: "10px" }}>Primary Producers</h3>
               <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
                 Agricultural cooperatives and local farms log immediate crop specifications, microclimate data, and GPS signatures directly at harvest origin.
               </p>
             </div>
             <div style={{ background: "rgba(17, 24, 39, 0.4)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "14px", padding: "24px" }}>
-              <div style={{ fontSize: "28px", marginBottom: "16px" }}>🚛</div>
+              <img src="./logistics_driver.png" alt="Logistics Tracking" style={{ width: "100%", height: "130px", objectFit: "cover", borderRadius: "10px", marginBottom: "16px", border: "1px solid rgba(255,255,255,0.04)" }} />
+              <div style={{ fontSize: "28px", marginBottom: "8px", display: "none" }}>🚛</div>
               <h3 style={{ fontSize: "17px", fontWeight: 700, color: "#FFFFFF", marginBottom: "10px" }}>Fleet Operators</h3>
               <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
                 Logistics managers monitor transit corridors, receiving heatwave alerts and dynamic routing suggestions to avoid severe urban heat hazard vectors.
               </p>
             </div>
             <div style={{ background: "rgba(17, 24, 39, 0.4)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "14px", padding: "24px" }}>
-              <div style={{ fontSize: "28px", marginBottom: "16px" }}>🏭</div>
+              <div style={{ width: "100%", height: "130px", background: "linear-gradient(135deg, rgba(52,211,153,0.1), rgba(16,185,129,0.2))", borderRadius: "10px", marginBottom: "16px", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(16,185,129,0.2)" }}>
+                <span style={{ fontSize: "40px" }}>🏭</span>
+              </div>
+              <div style={{ fontSize: "28px", marginBottom: "8px", display: "none" }}>🏭</div>
               <h3 style={{ fontSize: "17px", fontWeight: 700, color: "#FFFFFF", marginBottom: "10px" }}>Industrial Processors</h3>
               <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
                 Food and biochemical manufacturers retrieve complete temperature preservation logs and chemical metrics to guarantee feedstock integrity.
               </p>
             </div>
             <div style={{ background: "rgba(17, 24, 39, 0.4)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "14px", padding: "24px" }}>
-              <div style={{ fontSize: "28px", marginBottom: "16px" }}>🕵️‍♂️</div>
+              <img src="./inspector.png" alt="Quality Inspection" style={{ width: "100%", height: "130px", objectFit: "cover", borderRadius: "10px", marginBottom: "16px", border: "1px solid rgba(255,255,255,0.04)" }} />
+              <div style={{ fontSize: "28px", marginBottom: "8px", display: "none" }}>🕵️‍♂️</div>
               <h3 style={{ fontSize: "17px", fontWeight: 700, color: "#FFFFFF", marginBottom: "10px" }}>Quality Inspectors</h3>
               <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
                 Regulatory officers and certification agencies inspect IoT ledgers to grant BARI-compliant quality seals and approve compliance certifications.
