@@ -8140,12 +8140,38 @@ const TABS = [
 function LandingView({ onGetStarted }) {
   const [searchId, setSearchId] = useState("");
   const [activeSearchId, setActiveSearchId] = useState("");
+  
+  // Contact Form State
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactOrg, setContactOrg] = useState("");
+  const [contactMessage, setContactMessage] = useState("");
+  const [contactSubmitted, setContactSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     if (searchId.trim()) {
       setActiveSearchId(searchId.trim());
     }
+  };
+
+  const handleContactSubmit = (e) => {
+    e.preventDefault();
+    if (!contactName || !contactEmail || !contactMessage) {
+      alert("Please fill in all required fields.");
+      return;
+    }
+    setSubmitting(true);
+    setTimeout(() => {
+      setSubmitting(false);
+      setContactSubmitted(true);
+      // Reset form
+      setContactName("");
+      setContactEmail("");
+      setContactOrg("");
+      setContactMessage("");
+    }, 1200);
   };
 
   return (
@@ -8198,27 +8224,44 @@ function LandingView({ onGetStarted }) {
       </header>
 
       <main style={{ flex: 1, padding: "60px 20px", maxWidth: "1200px", margin: "0 auto", width: "100%" }}>
-        <div style={{ textAlign: "center", marginBottom: "60px" }}>
+        {/* HERO SECTION */}
+        <div style={{ textAlign: "center", marginBottom: "80px" }}>
+          <div style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "8px",
+            background: "rgba(16, 185, 129, 0.08)",
+            border: "1px solid rgba(16, 185, 129, 0.25)",
+            padding: "6px 16px",
+            borderRadius: "999px",
+            fontSize: "12px",
+            fontWeight: 600,
+            color: "#10B981",
+            marginBottom: "24px",
+            letterSpacing: "0.05em"
+          }}>
+            <span>🔒</span> CRYPTOGRAPHICALLY VERIFIED COLD CHAIN & LOGISTICS
+          </div>
           <h1 style={{
-            fontSize: "42px",
+            fontSize: "48px",
             fontWeight: 800,
-            lineHeight: 1.2,
-            marginBottom: "20px",
-            letterSpacing: "-0.02em",
-            background: "linear-gradient(135deg, #FFFFFF 30%, #34D399 100%)",
+            lineHeight: 1.15,
+            marginBottom: "24px",
+            letterSpacing: "-0.03em",
+            background: "linear-gradient(135deg, #FFFFFF 40%, #34D399 100%)",
             WebkitBackgroundClip: "text",
             WebkitTextFillColor: "transparent"
           }}>
-            Climate-Resilient Agricultural Supply Chains
+            Predictive Climate-Resilient Agricultural Supply Chains
           </h1>
           <p style={{
-            fontSize: "16px",
+            fontSize: "17px",
             color: "#9CA3AF",
-            maxWidth: "700px",
-            margin: "0 auto 32px auto",
+            maxWidth: "750px",
+            margin: "0 auto 36px auto",
             lineHeight: 1.6
           }}>
-            Connecting IoT microclimate sensing, AI thermal hazard modeling, and cryptographic ledger verification to protect supply chain provenance.
+            Synchronizing hardware IoT microclimate telemetry, AI-driven thermal hazard routing, and cryptographic ledger verification to assure crop provenance and combat dynamic transit degradation.
           </p>
           <div style={{ display: "flex", justifyContent: "center", gap: "16px" }}>
             <button
@@ -8228,16 +8271,17 @@ function LandingView({ onGetStarted }) {
                 color: "#FFFFFF",
                 border: "none",
                 borderRadius: "10px",
-                padding: "14px 28px",
+                padding: "14px 32px",
                 fontSize: "14px",
                 fontWeight: 700,
                 cursor: "pointer",
-                transition: "all 0.2s"
+                transition: "all 0.2s",
+                boxShadow: "0 4px 20px rgba(16, 185, 129, 0.25)"
               }}
               onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; }}
               onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; }}
             >
-              Get Started Panel
+              Access Platform Portal
             </button>
             <a
               href="#trace"
@@ -8245,7 +8289,7 @@ function LandingView({ onGetStarted }) {
                 background: "rgba(255, 255, 255, 0.04)",
                 border: "1px solid rgba(255, 255, 255, 0.08)",
                 borderRadius: "10px",
-                padding: "14px 28px",
+                padding: "14px 32px",
                 fontSize: "14px",
                 fontWeight: 700,
                 color: "#F3F4F6",
@@ -8257,11 +8301,12 @@ function LandingView({ onGetStarted }) {
               onMouseEnter={e => { e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)"; }}
               onMouseLeave={e => { e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)"; }}
             >
-              Trace Feedstock
+              Instant Provenance Tracer
             </a>
           </div>
         </div>
 
+        {/* PROVENANCE LOOKUP TOOL */}
         <div id="trace" style={{
           background: "rgba(17, 24, 39, 0.65)",
           backdropFilter: "blur(20px)",
@@ -8269,13 +8314,13 @@ function LandingView({ onGetStarted }) {
           borderRadius: "16px",
           padding: "32px",
           boxShadow: "0 10px 40px rgba(0, 0, 0, 0.3)",
-          marginBottom: "60px"
+          marginBottom: "80px"
         }}>
           <h2 style={{ fontSize: "20px", fontWeight: 700, marginBottom: "12px", color: "#F9FAFB", display: "flex", alignItems: "center", gap: "8px" }}>
-            <span>🔍</span> Direct Provenance Lookup
+            <span>🔍</span> Global Provenance Verification
           </h2>
           <p style={{ fontSize: "13px", color: "#9CA3AF", marginBottom: "20px" }}>
-            Trace batch provenance, thermal preservation indexes, and BARI trust certificates instantly. No login required.
+            Query real-time batch telemetry, thermal preservation indicators, and BARI trust certs directly. Secure, immediate, and authorization-free.
           </p>
 
           <form onSubmit={handleSearchSubmit} style={{ display: "flex", gap: "10px", marginBottom: "24px" }}>
@@ -8283,7 +8328,7 @@ function LandingView({ onGetStarted }) {
               type="text"
               value={searchId}
               onChange={e => setSearchId(e.target.value)}
-              placeholder="Enter Batch ID (e.g. BCH-3180) or paste QR URL"
+              placeholder="Input Batch Signature (e.g. BCH-3180) or paste cryptographic hash..."
               style={{
                 flex: 1,
                 padding: "14px 16px",
@@ -8312,7 +8357,7 @@ function LandingView({ onGetStarted }) {
               onMouseEnter={e => { e.currentTarget.style.background = "rgba(59, 130, 246, 0.2)"; }}
               onMouseLeave={e => { e.currentTarget.style.background = "rgba(59, 130, 246, 0.12)"; }}
             >
-              TRACE BATCH
+              VERIFY BATCH
             </button>
           </form>
 
@@ -8323,56 +8368,231 @@ function LandingView({ onGetStarted }) {
           )}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "24px", marginBottom: "40px" }}>
-          <div style={{
-            background: "rgba(17, 24, 39, 0.5)",
-            border: "1px solid rgba(255, 255, 255, 0.06)",
-            borderRadius: "14px",
-            padding: "28px",
-            transition: "all 0.2s"
-          }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(16, 185, 129, 0.3)"; e.currentTarget.style.transform = "translateY(-4px)"; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.06)"; e.currentTarget.style.transform = "translateY(0)"; }}
-          >
-            <div style={{ fontSize: "11px", fontWeight: 700, color: "#10B981", letterSpacing: "0.1em", marginBottom: "12px" }}>LAYER 01 · SENSING & GENESIS</div>
-            <h3 style={{ fontSize: "18px", fontWeight: 700, marginBottom: "10px" }}>Microclimate IoT Registry</h3>
-            <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
-              On-farm IoT sensors log telemetry (pH, moisture, temperature) to register feedstock batches with immutable GPS location bindings.
-            </p>
+        {/* SECTION: INTEGRATED ECOSYSTEM COHORTS (Who are the users) */}
+        <div style={{ marginBottom: "80px" }}>
+          <div style={{ textAlign: "center", marginBottom: "40px" }}>
+            <span style={{ fontSize: "11px", fontWeight: 700, color: "#10B981", letterSpacing: "0.15em", textTransform: "uppercase" }}>Ecosystem Integration</span>
+            <h2 style={{ fontSize: "28px", fontWeight: 800, marginTop: "8px", color: "#FFFFFF" }}>Coordinated Supply Chain Stakeholders</h2>
+            <p style={{ fontSize: "14px", color: "#9CA3AF", marginTop: "10px" }}>Assuring quality and transparency for every role in the agricultural logistics cycle.</p>
           </div>
-
-          <div style={{
-            background: "rgba(17, 24, 39, 0.5)",
-            border: "1px solid rgba(255, 255, 255, 0.06)",
-            borderRadius: "14px",
-            padding: "28px",
-            transition: "all 0.2s"
-          }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.3)"; e.currentTarget.style.transform = "translateY(-4px)"; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.06)"; e.currentTarget.style.transform = "translateY(0)"; }}
-          >
-            <div style={{ fontSize: "11px", fontWeight: 700, color: "#3B82F6", letterSpacing: "0.1em", marginBottom: "12px" }}>LAYER 02 · INTELLIGENCE ENGINE</div>
-            <h3 style={{ fontSize: "18px", fontWeight: 700, marginBottom: "10px" }}>Thermal Hazard & DVS AI</h3>
-            <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
-              AI models evaluate urban heat island (UHI) exposure, dynamic decay risk, and generate optimized route planning to bypass thermal corridors.
-            </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "24px" }}>
+            <div style={{ background: "rgba(17, 24, 39, 0.4)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "14px", padding: "24px" }}>
+              <div style={{ fontSize: "28px", marginBottom: "16px" }}>👩‍🌾</div>
+              <h3 style={{ fontSize: "17px", fontWeight: 700, color: "#FFFFFF", marginBottom: "10px" }}>Primary Producers</h3>
+              <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
+                Agricultural cooperatives and local farms log immediate crop specifications, microclimate data, and GPS signatures directly at harvest origin.
+              </p>
+            </div>
+            <div style={{ background: "rgba(17, 24, 39, 0.4)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "14px", padding: "24px" }}>
+              <div style={{ fontSize: "28px", marginBottom: "16px" }}>🚛</div>
+              <h3 style={{ fontSize: "17px", fontWeight: 700, color: "#FFFFFF", marginBottom: "10px" }}>Fleet Operators</h3>
+              <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
+                Logistics managers monitor transit corridors, receiving heatwave alerts and dynamic routing suggestions to avoid severe urban heat hazard vectors.
+              </p>
+            </div>
+            <div style={{ background: "rgba(17, 24, 39, 0.4)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "14px", padding: "24px" }}>
+              <div style={{ fontSize: "28px", marginBottom: "16px" }}>🏭</div>
+              <h3 style={{ fontSize: "17px", fontWeight: 700, color: "#FFFFFF", marginBottom: "10px" }}>Industrial Processors</h3>
+              <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
+                Food and biochemical manufacturers retrieve complete temperature preservation logs and chemical metrics to guarantee feedstock integrity.
+              </p>
+            </div>
+            <div style={{ background: "rgba(17, 24, 39, 0.4)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "14px", padding: "24px" }}>
+              <div style={{ fontSize: "28px", marginBottom: "16px" }}>🕵️‍♂️</div>
+              <h3 style={{ fontSize: "17px", fontWeight: 700, color: "#FFFFFF", marginBottom: "10px" }}>Quality Inspectors</h3>
+              <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
+                Regulatory officers and certification agencies inspect IoT ledgers to grant BARI-compliant quality seals and approve compliance certifications.
+              </p>
+            </div>
           </div>
+        </div>
 
-          <div style={{
-            background: "rgba(17, 24, 39, 0.5)",
-            border: "1px solid rgba(255, 255, 255, 0.06)",
-            borderRadius: "14px",
-            padding: "28px",
-            transition: "all 0.2s"
-          }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(245, 158, 11, 0.3)"; e.currentTarget.style.transform = "translateY(-4px)"; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.06)"; e.currentTarget.style.transform = "translateY(0)"; }}
-          >
-            <div style={{ fontSize: "11px", fontWeight: 700, color: "#F59E0B", letterSpacing: "0.1em", marginBottom: "12px" }}>LAYER 03 · TRUST & ESG REPORTING</div>
-            <h3 style={{ fontSize: "18px", fontWeight: 700, marginBottom: "10px" }}>Ledger & BARI Verification</h3>
-            <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
-              Generates cryptographic batch trust certs and compiles real-time, audit-ready ESG impact reports on plastic savings and carbon offsets.
-            </p>
+        {/* SECTION: STRATEGIC OUTCOMES (What benefits will they get) */}
+        <div style={{ marginBottom: "80px" }}>
+          <div style={{ textAlign: "center", marginBottom: "40px" }}>
+            <span style={{ fontSize: "11px", fontWeight: 700, color: "#3B82F6", letterSpacing: "0.15em", textTransform: "uppercase" }}>Operational Excellence</span>
+            <h2 style={{ fontSize: "28px", fontWeight: 800, marginTop: "8px", color: "#FFFFFF" }}>Measurable Supply Chain Outcomes</h2>
+            <p style={{ fontSize: "14px", color: "#9CA3AF", marginTop: "10px" }}>Realizing tangible mitigation and trust indexes across high-value cold chains.</p>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "24px" }}>
+            <div style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.03), rgba(17,24,39,0.6))", border: "1px solid rgba(16,185,129,0.15)", borderRadius: "14px", padding: "28px" }}>
+              <div style={{ fontSize: "11px", fontWeight: 700, color: "#10B981", letterSpacing: "0.1em", marginBottom: "12px" }}>LOSS MINIMIZATION</div>
+              <h3 style={{ fontSize: "18px", fontWeight: 700, color: "#FFFFFF", marginBottom: "10px" }}>~35% Spoilage Reduction</h3>
+              <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
+                Bypassing microclimatic thermal pockets and urban heat islands ensures sensitive organic inputs remain inside safe temperature thresholds.
+              </p>
+            </div>
+            <div style={{ background: "linear-gradient(135deg, rgba(59,130,246,0.03), rgba(17,24,39,0.6))", border: "1px solid rgba(59,130,246,0.15)", borderRadius: "14px", padding: "28px" }}>
+              <div style={{ fontSize: "11px", fontWeight: 700, color: "#3B82F6", letterSpacing: "0.1em", marginBottom: "12px" }}>PREVENTATIVE ANALYTICS</div>
+              <h3 style={{ fontSize: "18px", fontWeight: 700, color: "#FFFFFF", marginBottom: "10px" }}>Dynamic Viability Scoring</h3>
+              <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
+                Continuous calculation of product decay velocities (DVS) enables real-time updates to delivery routes and inventory prioritize.
+              </p>
+            </div>
+            <div style={{ background: "linear-gradient(135deg, rgba(245,158,11,0.03), rgba(17,24,39,0.6))", border: "1px solid rgba(245,158,11,0.15)", borderRadius: "14px", padding: "28px" }}>
+              <div style={{ fontSize: "11px", fontWeight: 700, color: "#F59E0B", letterSpacing: "0.1em", marginBottom: "12px" }}>BRAND EQUITY</div>
+              <h3 style={{ fontSize: "18px", fontWeight: 700, color: "#FFFFFF", marginBottom: "10px" }}>Cryptographic Trust Validation</h3>
+              <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
+                Equipping products with verifiable public records of origin builds customer trust and matches requirements for organic certifications.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* SECTION: ARCHITECTURAL ADVANTAGES (Competitive advantages) */}
+        <div style={{ marginBottom: "80px" }}>
+          <div style={{ textAlign: "center", marginBottom: "40px" }}>
+            <span style={{ fontSize: "11px", fontWeight: 700, color: "#F59E0B", letterSpacing: "0.15em", textTransform: "uppercase" }}>Core Differentiation</span>
+            <h2 style={{ fontSize: "28px", fontWeight: 800, marginTop: "8px", color: "#FFFFFF" }}>Next-Generation Technology Integration</h2>
+            <p style={{ fontSize: "14px", color: "#9CA3AF", marginTop: "10px" }}>Why enterprise operators deploy ClimaLogix over traditional logistics systems.</p>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "24px" }} className="stack-mobile">
+            <div style={{ padding: "20px", borderLeft: "3px solid #10B981", background: "rgba(255,255,255,0.01)" }}>
+              <h4 style={{ fontSize: "15px", fontWeight: 700, color: "#FFFFFF", marginBottom: "8px" }}>Direct IoT Ledger Binding</h4>
+              <p style={{ fontSize: "12.5px", color: "#9CA3AF", lineHeight: 1.5 }}>
+                Sensor measurements are written directly from field modems into cryptographic records, preventing data alteration or manual spreadsheet errors.
+              </p>
+            </div>
+            <div style={{ padding: "20px", borderLeft: "3px solid #3B82F6", background: "rgba(255,255,255,0.01)" }}>
+              <h4 style={{ fontSize: "15px", fontWeight: 700, color: "#FFFFFF", marginBottom: "8px" }}>Urban Heat Island (UHI) Mapping</h4>
+              <p style={{ fontSize: "12.5px", color: "#9CA3AF", lineHeight: 1.5 }}>
+                Resolving micro-scale thermal pockets within built city environments, compared to standard regional atmospheric models.
+              </p>
+            </div>
+            <div style={{ padding: "20px", borderLeft: "3px solid #F59E0B", background: "rgba(255,255,255,0.01)" }}>
+              <h4 style={{ fontSize: "15px", fontWeight: 700, color: "#FFFFFF", marginBottom: "8px" }}>BARI-Calibrated Calculations</h4>
+              <p style={{ fontSize: "12.5px", color: "#9CA3AF", lineHeight: 1.5 }}>
+                Product expiration curves utilize mathematical formulations validated by regional scientific agricultural research institutes.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* SECTION: ENTERPRISE CONSULTATION PORTAL (Contact Us) */}
+        <div style={{
+          background: "linear-gradient(180deg, rgba(17, 24, 39, 0.4) 0%, rgba(17, 24, 39, 0.8) 100%)",
+          border: "1px solid rgba(255, 255, 255, 0.06)",
+          borderRadius: "20px",
+          padding: "40px",
+          boxShadow: "0 20px 50px rgba(0, 0, 0, 0.4)",
+          marginBottom: "40px"
+        }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "40px" }} className="stack-mobile">
+            <div>
+              <span style={{ fontSize: "11px", fontWeight: 700, color: "#10B981", letterSpacing: "0.1em", textTransform: "uppercase" }}>Pilot Programs & Partners</span>
+              <h2 style={{ fontSize: "26px", fontWeight: 800, marginTop: "8px", marginBottom: "16px", color: "#FFFFFF" }}>Initiate a Staging Trial</h2>
+              <p style={{ fontSize: "13.5px", color: "#9CA3AF", lineHeight: 1.6, marginBottom: "20px" }}>
+                Integrate ClimaLogix AI into your existing logistics platforms or register your cooperative farm clusters. Our solution architects will construct a custom dashboard mapping your thermal zones.
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontSize: "12.5px", color: "#CBD5E1" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span>📧</span> <span>solutions@climalogix.ai</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span>🏢</span> <span>Global Headquarters: Innovation Hub Tower, Dhaka</span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              {contactSubmitted ? (
+                <div style={{
+                  background: "rgba(16, 185, 129, 0.08)",
+                  border: "1px solid rgba(16, 185, 129, 0.25)",
+                  borderRadius: "12px",
+                  padding: "24px",
+                  textAlign: "center"
+                }}>
+                  <div style={{ fontSize: "32px", marginBottom: "12px" }}>✉️</div>
+                  <h3 style={{ fontSize: "18px", fontWeight: 700, color: "#FFFFFF", marginBottom: "8px" }}>Consultation Request Submitted</h3>
+                  <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
+                    Thank you. A logistics integration specialist will respond to your corporate email within 24 business hours to coordinate telemetry mapping.
+                  </p>
+                </div>
+              ) : (
+                <form onSubmit={handleContactSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }} className="stack-mobile">
+                    <div>
+                      <label style={{ display: "block", fontSize: "11px", color: "#9CA3AF", marginBottom: "6px", fontWeight: 600 }}>Full Name *</label>
+                      <input
+                        type="text"
+                        required
+                        value={contactName}
+                        onChange={e => setContactName(e.target.value)}
+                        placeholder="Sarah Jenkins"
+                        style={{
+                          width: "100%", padding: "10px 12px", fontSize: "13px",
+                          background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
+                          borderRadius: "8px", color: "#FFFFFF", outline: "none"
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: "block", fontSize: "11px", color: "#9CA3AF", marginBottom: "6px", fontWeight: 600 }}>Corporate Email *</label>
+                      <input
+                        type="email"
+                        required
+                        value={contactEmail}
+                        onChange={e => setContactEmail(e.target.value)}
+                        placeholder="s.jenkins@enterprise.com"
+                        style={{
+                          width: "100%", padding: "10px 12px", fontSize: "13px",
+                          background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
+                          borderRadius: "8px", color: "#FFFFFF", outline: "none"
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: "11px", color: "#9CA3AF", marginBottom: "6px", fontWeight: 600 }}>Organization Name</label>
+                    <input
+                      type="text"
+                      value={contactOrg}
+                      onChange={e => setContactOrg(e.target.value)}
+                      placeholder="BioFoods International Ltd"
+                      style={{
+                        width: "100%", padding: "10px 12px", fontSize: "13px",
+                        background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
+                        borderRadius: "8px", color: "#FFFFFF", outline: "none"
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: "11px", color: "#9CA3AF", marginBottom: "6px", fontWeight: 600 }}>Project Details & Fleet Requirements *</label>
+                    <textarea
+                      required
+                      value={contactMessage}
+                      onChange={e => setContactMessage(e.target.value)}
+                      placeholder="Outline your fleet zones, sensor configurations, or specific feedstock verification needs..."
+                      rows={3}
+                      style={{
+                        width: "100%", padding: "10px 12px", fontSize: "13px", fontFamily: "inherit",
+                        background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
+                        borderRadius: "8px", color: "#FFFFFF", outline: "none", resize: "vertical"
+                      }}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    style={{
+                      background: submitting ? "rgba(16, 185, 129, 0.4)" : "linear-gradient(135deg, #10B981, #059669)",
+                      color: "#0B0F19",
+                      border: "none",
+                      borderRadius: "8px",
+                      padding: "12px 24px",
+                      fontSize: "13px",
+                      fontWeight: 700,
+                      cursor: submitting ? "not-allowed" : "pointer",
+                      transition: "all 0.2s",
+                      textAlign: "center"
+                    }}
+                  >
+                    {submitting ? "PROCESSING REQUEST..." : "SUBMIT CONSULTATION REQUEST"}
+                  </button>
+                </form>
+              )}
+            </div>
           </div>
         </div>
       </main>
