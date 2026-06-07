@@ -381,6 +381,8 @@
     <div id="root"></div>
 
     <script src="./lang/languageManager.js"></script>
+    <script type="text/babel" src="./ThreeScene.js"></script>
+    <script type="text/babel" src="./AuthPanel.jsx"></script>
     <script type="text/babel">
     const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
@@ -461,574 +463,6 @@
       }
 
       window.LanguageSelector = LanguageSelector;
-
-      // Inline AuthPanel Component
-      function AuthPanel({ onClose, onAuthSuccess }) {
-        const [mode, setMode] = useState("login");
-        const [email, setEmail] = useState("");
-        const [password, setPassword] = useState("");
-        const [confirmPassword, setConfirmPassword] = useState("");
-        const [name, setName] = useState("");
-        const [uiRole, setUiRole] = useState("producer"); 
-        const [isLoading, setIsLoading] = useState(false);
-        const [error, setError] = useState("");
-        const [showPass, setShowPass] = useState(false);
-        const [isSuccess, setIsSuccess] = useState(false);
-        const [successMsg, setSuccessMsg] = useState("");
-        
-        const canvasRef = useRef(null);
-        const reqRef = useRef(null);
-
-        useEffect(() => {
-          if (!canvasRef.current || !window.THREE) return;
-          
-          const THREE = window.THREE;
-          const scene = new THREE.Scene();
-          const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-          camera.position.z = 10;
-          
-          const renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current, alpha: true, antialias: true });
-          renderer.setSize(window.innerWidth, window.innerHeight);
-          renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-          
-          const particleCount = 1200;
-          const geometry = new THREE.BufferGeometry();
-          const positions = new Float32Array(particleCount * 3);
-          const colors = new Float32Array(particleCount * 3);
-          
-          const colorGreen = new THREE.Color("#10B981");
-          const colorBlue = new THREE.Color("#3B82F6");
-          
-          for (let i = 0; i < particleCount; i++) {
-            const u = Math.random();
-            const v = Math.random();
-            const theta = 2 * Math.PI * u;
-            const phi = Math.acos(2 * v - 1);
-            const r = 8 * Math.cbrt(Math.random());
-            
-            positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-            positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-            positions[i * 3 + 2] = r * Math.cos(phi);
-            
-            const c = Math.random() < 0.15 ? colorBlue : colorGreen;
-            colors[i * 3] = c.r;
-            colors[i * 3 + 1] = c.g;
-            colors[i * 3 + 2] = c.b;
-          }
-          
-          geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-          geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-          
-          const material = new THREE.PointsMaterial({
-            size: 0.05,
-            vertexColors: true,
-            transparent: true,
-            opacity: 0.4
-          });
-          
-          const particles = new THREE.Points(geometry, material);
-          scene.add(particles);
-          
-          const ringGeo = new THREE.TorusGeometry(3, 0.015, 16, 100);
-          const ringMat = new THREE.LineBasicMaterial({ color: 0x10B981, transparent: true, opacity: 0.25 });
-          const edges = new THREE.EdgesGeometry(ringGeo);
-          const ring = new THREE.LineSegments(edges, ringMat);
-          ring.rotation.x = Math.PI / 2.5;
-          scene.add(ring);
-          
-          const greenLight = new THREE.PointLight(0x10B981, 0.4);
-          greenLight.position.set(5, 5, 5);
-          scene.add(greenLight);
-          
-          const blueLight = new THREE.PointLight(0x3B82F6, 0.2);
-          blueLight.position.set(-5, -3, 2);
-          scene.add(blueLight);
-          
-          scene.add(new THREE.AmbientLight(0xffffff, 0.1));
-          
-          let mouseX = 0;
-          let mouseY = 0;
-          const onMouseMove = (e) => {
-            mouseX = (e.clientX - window.innerWidth / 2);
-            mouseY = (e.clientY - window.innerHeight / 2);
-          };
-          window.addEventListener('mousemove', onMouseMove);
-          
-          const onResize = () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-          };
-          window.addEventListener('resize', onResize);
-          
-          let time = 0;
-          let lastFrame = performance.now();
-          const animate = (now) => {
-            reqRef.current = requestAnimationFrame(animate);
-            if (document.hidden) return;
-            
-            const delta = now - lastFrame;
-            if (delta < 16) return;
-            lastFrame = now - (delta % 16);
-            
-            time += 0.01;
-            
-            const posAttr = geometry.attributes.position;
-            for (let i = 0; i < particleCount; i++) {
-              const y = posAttr.getY(i);
-              posAttr.setY(i, y + Math.sin(time + i) * 0.001);
-            }
-            posAttr.needsUpdate = true;
-            
-            ring.rotation.z += 0.001;
-            
-            const targetX = (mouseY / window.innerHeight) * 0.3;
-            const targetY = (mouseX / window.innerWidth) * 0.3;
-            particles.rotation.x += (targetX - particles.rotation.x) * 0.05;
-            particles.rotation.y += (targetY - particles.rotation.y) * 0.05;
-            
-            renderer.render(scene, camera);
-          };
-          reqRef.current = requestAnimationFrame(animate);
-          
-          return () => {
-            cancelAnimationFrame(reqRef.current);
-            window.removeEventListener('mousemove', onMouseMove);
-            window.removeEventListener('resize', onResize);
-            renderer.dispose();
-            geometry.dispose();
-            material.dispose();
-            ringGeo.dispose();
-            ringMat.dispose();
-            edges.dispose();
-          };
-        }, []);
-
-        const entropy = useMemo(() => {
-          let strength = 0;
-          if (password.length >= 8) strength++;
-          if (/[A-Z]/.test(password)) strength++;
-          if (/[0-9]/.test(password)) strength++;
-          if (/[^A-Za-z0-9]/.test(password)) strength++;
-          return strength;
-        }, [password]);
-
-        const handleSubmit = async (e) => {
-          e.preventDefault();
-          setError("");
-          setIsLoading(true);
-          setIsSuccess(false);
-
-          if (!window.navigator.onLine) {
-            setError("Connection error — check your network");
-            setIsLoading(false);
-            return;
-          }
-
-          if (mode === "register" && password !== confirmPassword) {
-            setError("Passwords do not match");
-            setIsLoading(false);
-            return;
-          }
-
-          try {
-            const sb = window.supabaseClient;
-            if (!sb) throw new Error("Supabase client not initialized");
-
-            const backendRole = uiRole === "producer" ? "processor" : "buyer";
-
-            let result;
-            if (mode === "login") {
-              result = await sb.auth.signInWithPassword({ email, password });
-            } else {
-              result = await sb.auth.signUp({
-                email,
-                password,
-                options: {
-                  data: { name, role: backendRole }
-                }
-              });
-            }
-
-            if (result.error) {
-              throw new Error(result.error.message || "Authentication failed");
-            }
-
-            if (mode === "register") {
-              setIsSuccess(true);
-              setSuccessMsg("Account created — please sign in");
-              setTimeout(() => {
-                setMode("login");
-                setIsSuccess(false);
-                setPassword("");
-                setConfirmPassword("");
-              }, 2000);
-            } else {
-              setIsSuccess(true);
-              setTimeout(() => {
-                if (onAuthSuccess) {
-                  if (result.data.session) {
-                    onAuthSuccess(result.data.user, result.data.session.access_token);
-                  } else if (result.data.user) {
-                    onAuthSuccess(result.data.user, null);
-                  }
-                }
-                if (onClose) onClose();
-              }, 800);
-            }
-          } catch (err) {
-            setError(err.message || "Connection failed. Please try again.");
-          } finally {
-            setIsLoading(false);
-          }
-        };
-
-        const formStyles = {
-          inputGroup: { position: "relative", marginBottom: "18px" },
-          label: {
-            position: "absolute", left: "16px", top: "16px",
-            fontSize: "13px", color: "#4B5563", fontFamily: "Inter",
-            pointerEvents: "none", transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)",
-            background: "transparent", padding: "0 4px"
-          },
-          labelActive: {
-            top: "-8px", left: "12px", fontSize: "11px", color: "#10B981",
-            background: "#0d131f",
-          },
-          input: {
-            width: "100%", padding: "14px 16px", background: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px",
-            color: "#F9FAFB", fontFamily: "'JetBrains Mono', monospace", fontSize: "14px",
-            outline: "none", transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)",
-            boxSizing: "border-box"
-          }
-        };
-
-        return (
-          <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "#0B0F19", overflow: "hidden" }}>
-            <style>{`
-              .auth-card {
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                box-sizing: border-box;
-                opacity: 0;
-                pointer-events: none;
-                transform: translateY(-16px);
-                transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1), transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-                background: rgba(17, 24, 39, 0.75);
-                backdrop-filter: blur(20px);
-                -webkit-backdrop-filter: blur(20px);
-                border-radius: 20px;
-                border: 1px solid rgba(16, 185, 129, 0.18);
-                box-shadow: 0 0 0 1px rgba(0,0,0,0.3), 0 20px 60px rgba(0,0,0,0.55), 0 0 40px rgba(16,185,129,0.07), inset 0 1px 0 rgba(255,255,255,0.04);
-                padding: 48px 44px;
-              }
-              @media (max-width: 480px) {
-                .auth-card {
-                  padding: 32px 24px;
-                }
-              }
-              .auth-card.card--visible {
-                position: relative;
-                opacity: 1;
-                pointer-events: all;
-                transform: translateY(0);
-                animation: slideInUp 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-              }
-              @keyframes slideInUp {
-                from {
-                  opacity: 0;
-                  transform: translateY(16px);
-                }
-                to {
-                  opacity: 1;
-                  transform: translateY(0);
-                }
-              }
-              .auth-error-shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; border-color: #EF4444 !important; }
-              .auth-input-focus:focus {
-                border-color: rgba(16,185,129,0.55) !important;
-                box-shadow: 0 0 0 3px rgba(16,185,129,0.1) !important;
-                background: rgba(16,185,129,0.04) !important;
-              }
-              .segment-tabs {
-                display: flex;
-                gap: 6px;
-                margin-bottom: 28px;
-                background: rgba(255,255,255,0.04);
-                padding: 4px;
-                border-radius: 10px;
-              }
-              .segment-btn {
-                flex: 1;
-                padding: 8px 0;
-                border: none;
-                border-radius: 8px;
-                fontSize: 12px;
-                font-family: "Inter", sans-serif;
-                cursor: pointer;
-                transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
-                background: transparent;
-                color: #6B7280;
-              }
-              .segment-btn.active {
-                background: #10B981;
-                color: #0B0F19;
-                font-weight: 600;
-                box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
-              }
-              .auth-btn {
-                width: 100%;
-                height: 52px;
-                border-radius: 10px;
-                border: none;
-                cursor: pointer;
-                background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-                color: #0B0F19;
-                font-family: "Inter", sans-serif;
-                font-size: 15px;
-                font-weight: 600;
-                letter-spacing: 0.02em;
-                transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-              }
-              .auth-btn:hover:not(:disabled) {
-                filter: brightness(1.1);
-                box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
-                transform: translateY(-2px);
-              }
-              .auth-btn:active:not(:disabled) {
-                transform: translateY(0);
-                filter: brightness(0.95);
-              }
-              .auth-btn:disabled {
-                cursor: not-allowed;
-                opacity: 0.7;
-              }
-              @keyframes teleBlink {
-                0%, 100% { opacity: 0.2; }
-                50% { opacity: 0.5; }
-              }
-              .tele-blink {
-                animation: teleBlink 2s infinite;
-              }
-            `}</style>
-
-            <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 0 }} />
-
-            <div style={{
-              position: "absolute", inset: 0, zIndex: 5, pointerEvents: "none",
-              background: "repeating-linear-gradient(rgba(16, 185, 129, 0.03) 0, rgba(16, 185, 129, 0.03) 1px, transparent 1px, transparent 4px)",
-              backgroundSize: "100% 4px"
-            }}></div>
-            <div style={{
-              position: "absolute", inset: 0, zIndex: 5, pointerEvents: "none",
-              background: "radial-gradient(circle at center, transparent 30%, rgba(0,0,0,0.6) 100%)"
-            }}></div>
-
-            <div style={{ position: "absolute", top: 20, left: 20, zIndex: 5, color: "#10B981", opacity: 0.2, fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>DHK_ZONE_04 | UHI: +3.2°C</div>
-            <div style={{ position: "absolute", top: 20, right: 20, zIndex: 5, color: "#10B981", fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>
-              <span style={{ color: "#10B981", opacity: 0.2 }}>BATCH_SYNC: </span>
-              <span className="tele-blink" style={{ color: "#10B981", fontWeight: "bold" }}>LIVE</span>
-            </div>
-            <div style={{ position: "absolute", bottom: 20, left: 20, zIndex: 5, color: "#10B981", fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>
-              <span style={{ color: "#10B981", opacity: 0.2 }}>NODE: </span>
-              <span className="tele-blink" style={{ color: "#10B981", fontWeight: "bold" }}>ACTIVE_SECURE</span>
-            </div>
-            <div style={{ position: "absolute", bottom: 20, right: 20, zIndex: 5, color: "#10B981", opacity: 0.2, fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>SYS_OPS: NOMINAL</div>
-
-            <button onClick={onClose} style={{
-              position: "absolute", top: 20, right: 20, zIndex: 20,
-              background: "rgba(255,255,255,0.1)", border: "none", borderRadius: "50%",
-              width: 32, height: 32, color: "#fff", cursor: "pointer", fontSize: "18px",
-              display: "flex", alignItems: "center", justifyContent: "center"
-            }}>×</button>
-
-            <div style={{
-              position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-              width: "calc(100% - 32px)", maxWidth: 460, zIndex: 10
-            }}>
-              {isSuccess && mode === "register" && (
-                <div style={{
-                  position: "absolute", top: -50, left: 0, right: 0, textAlign: "center",
-                  background: "rgba(16, 185, 129, 0.2)", border: "1px solid rgba(16, 185, 129, 0.4)",
-                  color: "#10B981", padding: "10px", borderRadius: "8px", fontSize: "13px",
-                  animation: "fadeSlideIn 0.3s cubic-bezier(0.4,0,0.2,1)", zIndex: 30
-                }}>
-                  {successMsg}
-                </div>
-              )}
-
-              <div className={`auth-card ${mode === "login" ? "card--visible" : "card--hidden"}`}>
-                <div className={error && mode === "login" ? "auth-error-shake" : ""}>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", marginBottom: "30px" }}>
-                    <div style={{
-                      width: "56px", height: "56px", background: "rgba(16, 185, 129, 0.1)",
-                      borderRadius: "14px", border: "1px solid rgba(16, 185, 129, 0.2)",
-                      display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px"
-                    }}>
-                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "pulseGlow 2s ease-in-out infinite" }}>
-                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-                        <path d="M12 12v10"/>
-                      </svg>
-                    </div>
-                    <h1 style={{ fontFamily: "Inter", fontSize: "22px", color: "#F9FAFB", fontWeight: 700, margin: "0 0 6px" }}>ClimaLogix AI</h1>
-                    <p style={{ fontFamily: "Inter", fontSize: "13px", color: "#9CA3AF" }}>Climate-Resilient Commerce Platform</p>
-                  </div>
-
-                  <div className="segment-tabs">
-                    {["producer", "consumer", "sme owner"].map(r => (
-                      <button key={r} type="button" className={`segment-btn ${uiRole === r ? "active" : ""}`} onClick={() => setUiRole(r)}>
-                        {r.charAt(0).toUpperCase() + r.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-
-                  <form onSubmit={handleSubmit}>
-                    <div style={formStyles.inputGroup}>
-                      <input required type="email" className="auth-input-focus" style={formStyles.input} placeholder=" " value={email} onChange={e=>setEmail(e.target.value)} />
-                      <label style={{...formStyles.label, ...(email ? formStyles.labelActive : {})}}>Email Address</label>
-                    </div>
-
-                    <div style={formStyles.inputGroup}>
-                      <input required type={showPass ? "text" : "password"} className="auth-input-focus" style={{...formStyles.input, paddingRight: "40px"}} placeholder=" " value={password} onChange={e=>setPassword(e.target.value)} />
-                      <label style={{...formStyles.label, ...(password ? formStyles.labelActive : {})}}>Password</label>
-                      <button type="button" onClick={()=>setShowPass(!showPass)} style={{ position:"absolute", right:"12px", top:"16px", background:"transparent", border:"none", cursor:"pointer" }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                      </button>
-                      {password.length > 0 && (
-                        <div style={{ display: "flex", gap: "4px", marginTop: "8px", height: "4px" }}>
-                          {[1,2,3,4].map(s => (
-                            <div key={s} style={{
-                              flex: 1, borderRadius: "2px", transition: "all 0.3s",
-                              background: s <= entropy ? (entropy < 2 ? "#EF4444" : entropy < 4 ? "#F59E0B" : "#10B981") : "rgba(255,255,255,0.1)"
-                            }}/>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-                      <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13px", color: "#9CA3AF", fontFamily: "Inter" }}>
-                        <div style={{ width: "16px", height: "16px", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.05)" }}>
-                          <input type="checkbox" style={{ opacity: 0, position: "absolute", cursor: "pointer" }} onChange={(e) => {
-                            e.target.parentElement.style.background = e.target.checked ? "#10B981" : "rgba(255,255,255,0.05)";
-                            e.target.nextSibling.style.opacity = e.target.checked ? 1 : 0;
-                          }}/>
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0B0F19" strokeWidth="3" style={{ opacity: 0, transition: "opacity 0.2s" }}><polyline points="20 6 9 17 4 12"></polyline></svg>
-                        </div>
-                        Remember me
-                      </label>
-                      <a href="#" style={{ color: "#10B981", fontSize: "13px", textDecoration: "none", fontFamily: "Inter" }}>Forgot password?</a>
-                    </div>
-
-                    {error && mode === "login" && <div style={{ color: "#EF4444", fontSize: "13px", marginBottom: "16px", textAlign: "center", fontFamily: "Inter" }}>{error}</div>}
-
-                    <button type="submit" className="auth-btn" disabled={isLoading}>
-                      {isLoading ? (
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
-                      ) : isSuccess ? (
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                      ) : "Sign In"}
-                    </button>
-
-                    <div style={{ margin: "24px 0", display: "flex", alignItems: "center", textAlign: "center", color: "#4B5563" }}>
-                      <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.1)" }}></div>
-                      <span style={{ padding: "0 10px", fontSize: "12px", fontFamily: "Inter" }}>New to ClimaLogix?</span>
-                      <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.1)" }}></div>
-                    </div>
-
-                    <div style={{ textAlign: "center" }}>
-                      <button type="button" onClick={() => { setMode("register"); setError(""); }} style={{ background: "transparent", border: "none", color: "#10B981", fontSize: "14px", fontFamily: "Inter", cursor: "pointer" }}>
-                        Create an account
-                      </button>
-                    </div>
-                    
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", color: "#4B5563", fontSize: "11px", fontFamily: "Inter", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: "20px", marginTop: "20px" }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0110 0v4"></path></svg>
-                      Secured with Argon2 + JWT · End-to-end encrypted
-                    </div>
-                  </form>
-                </div>
-              </div>
-
-              <div className={`auth-card ${mode === "register" ? "card--visible" : "card--hidden"}`}>
-                <div className={error && mode === "register" ? "auth-error-shake" : ""}>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", marginBottom: "30px" }}>
-                    <div style={{
-                      width: "56px", height: "56px", background: "rgba(16, 185, 129, 0.1)",
-                      borderRadius: "14px", border: "1px solid rgba(16, 185, 129, 0.2)",
-                      display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px"
-                    }}>
-                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "pulseGlow 2s ease-in-out infinite" }}>
-                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-                        <path d="M12 12v10"/>
-                      </svg>
-                    </div>
-                    <h2 style={{ fontFamily: "Inter", fontSize: "20px", color: "#F9FAFB", fontWeight: 700, margin: 0 }}>Create Account</h2>
-                  </div>
-
-                  <div className="segment-tabs">
-                    {["producer", "consumer", "sme owner"].map(r => (
-                      <button key={r} type="button" className={`segment-btn ${uiRole === r ? "active" : ""}`} onClick={() => setUiRole(r)}>
-                        {r.charAt(0).toUpperCase() + r.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-
-                  <form onSubmit={handleSubmit}>
-                    <div style={formStyles.inputGroup}>
-                      <input required type="text" className="auth-input-focus" style={formStyles.input} placeholder=" " value={name} onChange={e=>setName(e.target.value)} />
-                      <label style={{...formStyles.label, ...(name ? formStyles.labelActive : {})}}>Full Name</label>
-                    </div>
-                    <div style={formStyles.inputGroup}>
-                      <input required type="email" className="auth-input-focus" style={formStyles.input} placeholder=" " value={email} onChange={e=>setEmail(e.target.value)} />
-                      <label style={{...formStyles.label, ...(email ? formStyles.labelActive : {})}}>Email Address</label>
-                    </div>
-                    <div style={formStyles.inputGroup}>
-                      <input required type="password" className="auth-input-focus" style={formStyles.input} placeholder=" " value={password} onChange={e=>setPassword(e.target.value)} />
-                      <label style={{...formStyles.label, ...(password ? formStyles.labelActive : {})}}>Password</label>
-                      {password.length > 0 && (
-                        <div style={{ display: "flex", gap: "4px", marginTop: "8px", height: "4px" }}>
-                          {[1,2,3,4].map(s => (
-                            <div key={s} style={{
-                              flex: 1, borderRadius: "2px", transition: "all 0.3s",
-                              background: s <= entropy ? (entropy < 2 ? "#EF4444" : entropy < 4 ? "#F59E0B" : "#10B981") : "rgba(255,255,255,0.1)"
-                            }}/>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div style={formStyles.inputGroup}>
-                      <input required type="password" className="auth-input-focus" style={formStyles.input} placeholder=" " value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} />
-                      <label style={{...formStyles.label, ...(confirmPassword ? formStyles.labelActive : {})}}>Confirm Password</label>
-                    </div>
-
-                    {error && mode === "register" && <div style={{ color: "#EF4444", fontSize: "13px", marginBottom: "16px", textAlign: "center", fontFamily: "Inter" }}>{error}</div>}
-
-                    <button type="submit" className="auth-btn" disabled={isLoading}>
-                      Create Account
-                    </button>
-
-                    <div style={{ textAlign: "center", marginTop: "24px" }}>
-                      <span style={{ color: "#9CA3AF", fontSize: "13px", fontFamily: "Inter" }}>Already have an account? </span>
-                      <button type="button" onClick={() => { setMode("login"); setError(""); }} style={{ background: "transparent", border: "none", color: "#10B981", fontSize: "13px", fontFamily: "Inter", cursor: "pointer" }}>
-                        Sign in
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      }
-
-      window.AuthPanel = AuthPanel;
 
 
 
@@ -8083,9 +7517,510 @@ const TABS = [
   { id: "marketplace",  label: "Marketplace",             icon: "🛒", layer: "L3" }
 ];
 
+function HeroLandingPage({ onLogin, onRegister }) {
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [temp, setTemp] = React.useState(32);
+
+  React.useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+        }
+      });
+    }, { threshold: 0.08 });
+
+    document.querySelectorAll('.scroll-animate').forEach(el => {
+      observer.observe(el);
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Live Demo Math
+  const routeRisk = temp >= 40 ? "CRITICAL" : temp >= 33 ? "MODERATE" : "LOW";
+  const riskColor = temp >= 40 ? "#EF4444" : temp >= 33 ? "#F59E0B" : "#10B981";
+  
+  // TST Calculation: TST (minutes) = Math.max(10, Math.round((Trust Score * Packaging Factor * Base Survival Multiplier) / (Hazard Multiplier * Solar Hour Multiplier) * 60))
+  // For demo: Trust Score=85, Insulated Packaging=2.0, Base Survival=1.0. Hazard rises with temp.
+  const hazardFactor = temp >= 40 ? 1.8 : temp >= 33 ? 1.3 : 0.8;
+  const calculatedTst = Math.max(10, Math.round(((85 * 2.0 * 1.0) / (hazardFactor * 1.2)) * 60));
+
+  return (
+    <div style={{ background: "#0B0F19", color: "#F9FAFB", fontFamily: "'Inter', sans-serif", minHeight: "100vh", overflowX: "hidden" }}>
+      <style>{`
+        .scroll-animate {
+          opacity: 0;
+          transform: translateY(30px);
+          transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .scroll-animate.visible {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        .delay-100 { transition-delay: 100ms; }
+        .delay-200 { transition-delay: 200ms; }
+        .delay-300 { transition-delay: 300ms; }
+        .delay-400 { transition-delay: 400ms; }
+        .delay-500 { transition-delay: 500ms; }
+
+        .hero-title span {
+          background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
+
+        .cta-primary {
+          background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+          box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+          transition: all 0.25s ease;
+        }
+        .cta-primary:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+          filter: brightness(1.1);
+        }
+
+        .cta-secondary {
+          border: 1px solid rgba(16, 185, 129, 0.4);
+          color: #10B981;
+          transition: all 0.25s ease;
+        }
+        .cta-secondary:hover {
+          background: rgba(16, 185, 129, 0.08);
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+        }
+
+        .glass-panel {
+          background: rgba(17, 24, 39, 0.75);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          border: 1px solid rgba(16, 185, 129, 0.18);
+          border-radius: 16px;
+        }
+
+        .problem-card {
+          border-left: 4px solid #10B981;
+        }
+
+        .feature-num {
+          font-family: 'JetBrains Mono', monospace;
+          color: #10B981;
+          text-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+        }
+
+        .map-zone {
+          transition: fill 0.5s ease;
+        }
+
+        .logo-badge {
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 9999px;
+          padding: 8px 18px;
+          font-size: 13px;
+          font-family: 'JetBrains Mono', monospace;
+          color: #94A3B8;
+        }
+
+        .mobile-drawer {
+          transform: translateX(100%);
+          transition: transform 0.3s ease-in-out;
+        }
+        .mobile-drawer.open {
+          transform: translateX(0);
+        }
+      `}</style>
+
+      {/* NAVIGATION BAR */}
+      <nav style={{
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 50,
+        background: "rgba(11, 15, 25, 0.85)", backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)", borderBottom: "1px solid rgba(16, 185, 129, 0.15)",
+        height: "64px", display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "0 24px"
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+          <span style={{ fontSize: "22px" }}>🌍</span>
+          <span style={{ fontFamily: "Inter", fontWeight: "800", fontSize: "19px", letterSpacing: "-0.02em", color: "#F9FAFB" }}>
+            ClimaLogix<span style={{ color: "#10B981" }}>.ai</span>
+          </span>
+        </div>
+
+        {/* Desktop Nav Links */}
+        <div className="hidden-mobile" style={{ display: "flex", alignItems: "center", gap: "28px" }}>
+          <a href="#features" style={{ color: "#94A3B8", textDecoration: "none", fontSize: "14px", fontWeight: "500", transition: "color 0.2s" }} onMouseOver={e=>e.target.style.color="#10B981"} onMouseOut={e=>e.target.style.color="#94A3B8"}>Features</a>
+          <a href="#demo" style={{ color: "#94A3B8", textDecoration: "none", fontSize: "14px", fontWeight: "500", transition: "color 0.2s" }} onMouseOver={e=>e.target.style.color="#10B981"} onMouseOut={e=>e.target.style.color="#94A3B8"}>Demo</a>
+          <a href="#testimonials" style={{ color: "#94A3B8", textDecoration: "none", fontSize: "14px", fontWeight: "500", transition: "color 0.2s" }} onMouseOver={e=>e.target.style.color="#10B981"} onMouseOut={e=>e.target.style.color="#94A3B8"}>Pricing</a>
+          <a href="#docs" style={{ color: "#94A3B8", textDecoration: "none", fontSize: "14px", fontWeight: "500", transition: "color 0.2s" }} onMouseOver={e=>e.target.style.color="#10B981"} onMouseOut={e=>e.target.style.color="#94A3B8"}>Docs</a>
+          
+          <button onClick={onLogin} style={{
+            background: "transparent", border: "1px solid #10B981", borderRadius: "8px",
+            color: "#10B981", padding: "8px 16px", cursor: "pointer", fontSize: "14px", fontWeight: "600",
+            transition: "all 0.2s"
+          }} onMouseOver={e=>{e.target.style.background="rgba(16, 185, 129, 0.1)"}} onMouseOut={e=>e.target.style.background="transparent"}>
+            Login
+          </button>
+          
+          <button onClick={onRegister} className="cta-primary" style={{
+            border: "none", borderRadius: "8px", color: "#0B0F19", padding: "8px 18px",
+            cursor: "pointer", fontSize: "14px", fontWeight: "700"
+          }}>
+            Get Started
+          </button>
+        </div>
+
+        {/* Mobile Hamburger Button */}
+        <button 
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className="visible-mobile-only"
+          style={{ background: "transparent", border: "none", color: "#F9FAFB", cursor: "pointer", fontSize: "24px" }}
+        >
+          {mobileMenuOpen ? "✕" : "☰"}
+        </button>
+
+        {/* Mobile Drawer */}
+        <div className={`mobile-drawer ${mobileMenuOpen ? 'open' : ''}`} style={{
+          position: "fixed", top: "64px", right: 0, bottom: 0, width: "260px",
+          background: "#0B0F19", borderLeft: "1px solid rgba(16, 185, 129, 0.15)",
+          display: "flex", flexDirection: "column", padding: "24px", gap: "20px", zIndex: 49,
+          boxShadow: "-10px 0 30px rgba(0,0,0,0.5)"
+        }}>
+          <a href="#features" onClick={()=>setMobileMenuOpen(false)} style={{ color: "#F9FAFB", textDecoration: "none", fontSize: "16px", fontWeight: "600" }}>Features</a>
+          <a href="#demo" onClick={()=>setMobileMenuOpen(false)} style={{ color: "#F9FAFB", textDecoration: "none", fontSize: "16px", fontWeight: "600" }}>Demo</a>
+          <a href="#testimonials" onClick={()=>setMobileMenuOpen(false)} style={{ color: "#F9FAFB", textDecoration: "none", fontSize: "16px", fontWeight: "600" }}>Pricing</a>
+          <a href="#docs" onClick={()=>setMobileMenuOpen(false)} style={{ color: "#F9FAFB", textDecoration: "none", fontSize: "16px", fontWeight: "600" }}>Docs</a>
+          <hr style={{ border: "none", borderTop: "1px solid rgba(255,255,255,0.08)" }} />
+          <button onClick={() => { setMobileMenuOpen(false); onLogin(); }} style={{
+            background: "transparent", border: "1px solid #10B981", borderRadius: "8px",
+            color: "#10B981", padding: "12px", cursor: "pointer", fontSize: "15px", fontWeight: "600"
+          }}>
+            Login
+          </button>
+          <button onClick={() => { setMobileMenuOpen(false); onRegister(); }} className="cta-primary" style={{
+            border: "none", borderRadius: "8px", color: "#0B0F19", padding: "12px",
+            cursor: "pointer", fontSize: "15px", fontWeight: "700"
+          }}>
+            Get Started
+          </button>
+        </div>
+      </nav>
+
+      {/* SECTION 1 — HERO SECTION */}
+      <section style={{
+        minHeight: "100vh", display: "grid", gridTemplateColumns: "1.2fr 1fr",
+        padding: "100px 40px 40px", gap: "40px", alignItems: "center",
+        maxWidth: "1400px", margin: "0 auto", boxSizing: "border-box"
+      }} className="stack-mobile">
+        {/* Left Column */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+          <div className="scroll-animate" style={{ alignSelf: "flex-start" }}>
+            <span style={{
+              background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.3)",
+              borderRadius: "9999px", padding: "6px 14px", fontSize: "11px", fontWeight: "700",
+              color: "#10B981", letterSpacing: "0.05em", textTransform: "uppercase"
+            }}>
+              📡 AI-Powered Climate Logistics
+            </span>
+          </div>
+
+          <h1 className="hero-title scroll-animate delay-100" style={{ fontSize: "clamp(32px, 5vw, 52px)", fontWeight: "800", lineHeight: "1.1", letterSpacing: "-0.03em" }}>
+            Protect Your Supply Chain from the <span>Heat</span>
+          </h1>
+
+          <p className="scroll-animate delay-200" style={{ fontSize: "17px", color: "#94A3B8", lineHeight: "1.6", maxWidth: "600px" }}>
+            ClimaLogix AI monitors real-time thermal conditions, optimizes heat-safe routes, and shields SME logistics in climate-vulnerable regions like Bangladesh.
+          </p>
+
+          <div className="scroll-animate delay-300" style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginTop: "8px" }}>
+            <button onClick={onRegister} className="cta-primary" style={{
+              border: "none", borderRadius: "10px", color: "#0B0F19", padding: "14px 28px",
+              cursor: "pointer", fontSize: "15px", fontWeight: "700"
+            }}>
+              Get Started Free
+            </button>
+            <a href="#demo" className="cta-secondary" style={{
+              borderRadius: "10px", padding: "14px 28px", textDecoration: "none",
+              textAlign: "center", fontSize: "15px", fontWeight: "700", display: "inline-block"
+            }}>
+              Watch Demo
+            </a>
+          </div>
+
+          <div className="scroll-animate delay-400" style={{ display: "flex", gap: "24px", flexWrap: "wrap", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "28px", marginTop: "16px" }}>
+            <div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", color: "#10B981", fontSize: "24px", fontWeight: "700" }}>2,400+</div>
+              <div style={{ color: "#94A3B8", fontSize: "12px", marginTop: "2px" }}>SMEs Protected</div>
+            </div>
+            <div style={{ width: "1px", background: "rgba(255,255,255,0.1)" }}></div>
+            <div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", color: "#10B981", fontSize: "24px", fontWeight: "700" }}>98.7%</div>
+              <div style={{ color: "#94A3B8", fontSize: "12px", marginTop: "2px" }}>Route Accuracy</div>
+            </div>
+            <div style={{ width: "1px", background: "rgba(255,255,255,0.1)" }}></div>
+            <div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", color: "#10B981", fontSize: "24px", fontWeight: "700" }}>12+</div>
+              <div style={{ color: "#94A3B8", fontSize: "12px", marginTop: "2px" }}>Districts Active</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column (3D Interactive Canvas) */}
+        <div className="scroll-animate delay-300" style={{ height: "100%", minHeight: "450px", position: "relative" }}>
+          {window.ThreeScene ? <window.ThreeScene /> : <div style={{ color: "#10B981" }}>Loading 3D Atmosphere Scene...</div>}
+        </div>
+      </section>
+
+      {/* SECTION 2 — PROBLEM STATEMENT */}
+      <section id="features" style={{ background: "#111827", padding: "100px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+        <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
+          <div className="scroll-animate" style={{ textAlign: "center", marginBottom: "64px" }}>
+            <h2 style={{ fontSize: "clamp(26px, 4vw, 36px)", fontWeight: "800", maxWidth: "800px", margin: "0 auto 18px", lineHeight: "1.2" }}>
+              Bangladesh Loses Billions to Heat-Damaged Goods Every Year
+            </h2>
+            <p style={{ color: "#94A3B8", fontSize: "16px", maxWidth: "600px", margin: "0 auto" }}>
+              Traditional shipping models fail to protect delicate assets during seasonal heat spikes in urban logistics paths.
+            </p>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "28px" }} className="stack-mobile">
+            {/* Card 1 */}
+            <div className="glass-panel problem-card scroll-animate" style={{ padding: "32px" }}>
+              <div style={{ fontSize: "32px", marginBottom: "16px" }}>🌡️</div>
+              <h3 style={{ fontSize: "18px", fontWeight: "700", marginBottom: "12px" }}>Extreme Heat Events</h3>
+              <p style={{ color: "#94A3B8", fontSize: "14px", lineHeight: "1.6" }}>
+                Temperature spikes above 42°C devastate perishable agricultural and biological goods without real-time microclimate monitoring.
+              </p>
+            </div>
+
+            {/* Card 2 */}
+            <div className="glass-panel problem-card scroll-animate delay-150" style={{ padding: "32px" }}>
+              <div style={{ fontSize: "32px", marginBottom: "16px" }}>🚛</div>
+              <h3 style={{ fontSize: "18px", fontWeight: "700", marginBottom: "12px" }}>Blind Route Planning</h3>
+              <p style={{ color: "#94A3B8", fontSize: "14px", lineHeight: "1.6" }}>
+                Drivers navigate without corridor-specific thermal risk data, exposing high-value shipments to critical temperature zones.
+              </p>
+            </div>
+
+            {/* Card 3 */}
+            <div className="glass-panel problem-card scroll-animate delay-300" style={{ padding: "32px" }}>
+              <div style={{ fontSize: "32px", marginBottom: "16px" }}>📦</div>
+              <h3 style={{ fontSize: "18px", fontWeight: "700", marginBottom: "12px" }}>No Cold-Chain Visibility</h3>
+              <p style={{ color: "#94A3B8", fontSize: "14px", lineHeight: "1.6" }}>
+                SMEs lack affordable IoT analytics to track batch quality degradation, insulation metrics, and precise spoilage risk.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 3 — SOLUTIONS / FEATURES */}
+      <section style={{ padding: "100px 40px", maxWidth: "1200px", margin: "0 auto" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "60px" }} className="stack-mobile">
+          {/* Left Column (Sticky Title) */}
+          <div style={{ position: "sticky", top: "100px", height: "fit-content" }}>
+            <div className="scroll-animate">
+              <span style={{ color: "#10B981", fontSize: "11px", fontWeight: "700", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                Proven Protection
+              </span>
+              <h2 style={{ fontSize: "clamp(26px, 4vw, 36px)", fontWeight: "800", margin: "12px 0 18px", lineHeight: "1.2" }}>
+                How ClimaLogix Protects You
+              </h2>
+              <p style={{ color: "#94A3B8", fontSize: "15px", lineHeight: "1.6" }}>
+                ClimaLogix AI equips local merchants and transport networks with the exact computational tools needed to bypass urban heat islands and log certified batch health.
+              </p>
+            </div>
+          </div>
+
+          {/* Right Column (Feature List) */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "36px" }}>
+            {[
+              { num: "01", icon: "🛰️", title: "Real-Time Heat Monitoring", desc: "OpenWeather + local IoT integration delivers live microclimate telemetry across your entire transit route." },
+              { num: "02", icon: "🧭", title: "AI Route Optimization", desc: "Dynamic heat-risk scores predict UHI hotspots and automatically redirect drivers before thermal damage occurs." },
+              { num: "03", icon: "📊", title: "TST Analytics Engine", desc: "Our proprietary Thermal Survival Time algorithm models packaging ratings to forecast shipment stability windows." },
+              { num: "04", icon: "🔔", title: "Instant Smart Alerts", desc: "Push notifications trigger when temperature parameters cross set safety thresholds. Never risk a cargo blindly." },
+              { num: "05", icon: "🗣", title: "Multilingual Voice Assistant", desc: "Fully integrated voice portal translates spoken Bangla and English commands for local drivers in transit." }
+            ].map((f, i) => (
+              <div key={i} className="glass-panel scroll-animate" style={{ padding: "24px", display: "flex", gap: "20px", alignItems: "flex-start" }}>
+                <div className="feature-num" style={{ fontSize: "22px", fontWeight: "700" }}>{f.num}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <h3 style={{ fontSize: "17px", fontWeight: "700", display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span>{f.icon}</span> {f.title}
+                  </h3>
+                  <p style={{ color: "#94A3B8", fontSize: "14px", lineHeight: "1.6" }}>{f.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 4 — LIVE DEMO SIMULATION */}
+      <section id="demo" style={{ background: "#111827", padding: "100px 40px", borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+        <div style={{ maxWidth: "1000px", margin: "0 auto" }}>
+          <div className="scroll-animate" style={{ textAlign: "center", marginBottom: "50px" }}>
+            <h2 style={{ fontSize: "clamp(26px, 4vw, 36px)", fontWeight: "800", marginBottom: "14px" }}>See It in Action</h2>
+            <p style={{ color: "#94A3B8", fontSize: "15px" }}>Drag the slider to adjust outside temperature and watch ClimaLogix model route hazards in real-time.</p>
+          </div>
+
+          <div className="glass-panel scroll-animate" style={{ padding: "36px", display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "40px" }} className="stack-mobile">
+            {/* Controls */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
+                  <span style={{ fontSize: "14px", fontWeight: "600", color: "#94A3B8" }}>Outside Ambient Temperature:</span>
+                  <span style={{ fontFamily: "monospace", fontSize: "18px", fontWeight: "700", color: riskColor }}>{temp}°C</span>
+                </div>
+                <input 
+                  type="range" min="20" max="50" value={temp} 
+                  onChange={e => setTemp(parseInt(e.target.value))}
+                  style={{ width: "100%", accentColor: "#10B981" }} 
+                />
+              </div>
+
+              <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "12px", padding: "20px" }}>
+                <div style={{ fontSize: "12px", color: "#64748B", textTransform: "uppercase", fontWeight: "600", letterSpacing: "0.05em" }}>Analysis Result</div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "12px" }}>
+                  <span style={{ fontSize: "14px", color: "#94A3B8" }}>Hazard Risk Level:</span>
+                  <span style={{ color: riskColor, fontWeight: "800", fontSize: "14px", background: `${riskColor}15`, border: `1px solid ${riskColor}30`, borderRadius: "9999px", padding: "4px 14px", letterSpacing: "0.05em" }}>
+                    {routeRisk}
+                  </span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "16px" }}>
+                  <span style={{ fontSize: "14px", color: "#94A3B8" }}>Calculated TST:</span>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: "700", color: "#F9FAFB", fontSize: "17px" }}>
+                    {calculatedTst} minutes
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Map Placeholder */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px" }}>
+              <div style={{ fontSize: "12px", color: "#64748B", textTransform: "uppercase", fontWeight: "600" }}>Bangladesh Route Hazard Map</div>
+              <svg width="180" height="240" viewBox="0 0 200 280" style={{ filter: "drop-shadow(0 10px 20px rgba(0,0,0,0.5))" }}>
+                {/* Simplified outline of Bangladesh Map */}
+                <path d="M 60 20 L 100 10 L 140 30 L 150 70 L 170 120 L 190 180 L 160 220 L 170 270 L 120 270 L 100 240 L 90 260 L 50 240 L 30 200 L 20 150 L 40 100 L 30 70 Z" fill="rgba(16, 185, 129, 0.05)" stroke="rgba(16, 185, 129, 0.2)" strokeWidth="2" />
+                
+                {/* Zone 1: Dhaka (North) */}
+                <circle cx="95" cy="110" r="14" className="map-zone" fill={temp >= 40 ? "#EF444455" : temp >= 33 ? "#F59E0B55" : "#10B98155"} stroke={temp >= 40 ? "#EF4444" : temp >= 33 ? "#F59E0B" : "#10B981"} strokeWidth="2" />
+                <text x="95" y="114" fill="#FFF" fontSize="9" fontWeight="700" textAnchor="middle">Zone A</text>
+
+                {/* Zone 2: Chittagong (South-East) */}
+                <circle cx="145" cy="200" r="14" className="map-zone" fill={temp >= 44 ? "#EF444455" : temp >= 35 ? "#F59E0B55" : "#10B98155"} stroke={temp >= 44 ? "#EF4444" : temp >= 35 ? "#F59E0B" : "#10B981"} strokeWidth="2" />
+                <text x="145" y="204" fill="#FFF" fontSize="9" fontWeight="700" textAnchor="middle">Zone B</text>
+
+                {/* Zone 3: Khulna (South-West) */}
+                <circle cx="55" cy="210" r="14" className="map-zone" fill={temp >= 38 ? "#EF444455" : temp >= 30 ? "#F59E0B55" : "#10B98155"} stroke={temp >= 38 ? "#EF4444" : temp >= 30 ? "#F59E0B" : "#10B981"} strokeWidth="2" />
+                <text x="55" y="214" fill="#FFF" fontSize="9" fontWeight="700" textAnchor="middle">Zone C</text>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 5 — SOCIAL PROOF & TESTIMONIALS */}
+      <section id="testimonials" style={{ padding: "100px 40px", maxWidth: "1200px", margin: "0 auto" }}>
+        <div className="scroll-animate" style={{ textAlign: "center", marginBottom: "64px" }}>
+          <span style={{ color: "#10B981", fontSize: "11px", fontWeight: "700", letterSpacing: "0.1em", textTransform: "uppercase" }}>Testimonials</span>
+          <h2 style={{ fontSize: "clamp(26px, 4vw, 36px)", fontWeight: "800", marginTop: "12px" }}>Trusted by SMEs Across Bangladesh</h2>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "28px" }} className="stack-mobile">
+          {/* Card 1 */}
+          <div className="glass-panel scroll-animate" style={{ padding: "30px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "#1E293B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>🧔</div>
+              <div>
+                <div style={{ fontWeight: "700", fontSize: "14px" }}>Anwar Hossain</div>
+                <div style={{ fontSize: "11px", color: "#64748B" }}>Agro-Biologicals Supplier, Savar</div>
+              </div>
+            </div>
+            <div style={{ color: "#10B981", fontSize: "12px" }}>★★★★★</div>
+            <p style={{ color: "#CBD5E1", fontSize: "13.5px", lineHeight: "1.6", fontStyle: "italic" }}>
+              "Before ClimaLogix, we lost up to 30% of organic fertilizer active bio-cultures during Dhaka midday heat spikes. Now we route dispatch based on live TST projections."
+            </p>
+          </div>
+
+          {/* Card 2 */}
+          <div className="glass-panel scroll-animate delay-150" style={{ padding: "30px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "#1E293B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>👩</div>
+              <div>
+                <div style={{ fontWeight: "700", fontSize: "14px" }}>Fariha Rahman</div>
+                <div style={{ fontSize: "11px", color: "#64748B" }}>Perishable Retail Merchant</div>
+              </div>
+            </div>
+            <div style={{ color: "#10B981", fontSize: "12px" }}>★★★★★</div>
+            <p style={{ color: "#CBD5E1", fontSize: "13.5px", lineHeight: "1.6", fontStyle: "italic" }}>
+              "The dynamic heat route calculations are highly precise. We haven't had a single batch cargo spoil since transitioning our delivery maps."
+            </p>
+          </div>
+
+          {/* Card 3 */}
+          <div className="glass-panel scroll-animate delay-300" style={{ padding: "30px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "#1E293B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>👨</div>
+              <div>
+                <div style={{ fontWeight: "700", fontSize: "14px" }}>Sabbir Ahmed</div>
+                <div style={{ fontSize: "11px", color: "#64748B" }}>Chemical Distribution Manager</div>
+              </div>
+            </div>
+            <div style={{ color: "#10B981", fontSize: "12px" }}>★★★★★</div>
+            <p style={{ color: "#CBD5E1", fontSize: "13.5px", lineHeight: "1.6", fontStyle: "italic" }}>
+              "The voice command integration in local Bangla makes it easy for drivers to fetch live weather warnings. Highly recommend ClimaLogix."
+            </p>
+          </div>
+        </div>
+
+        {/* Company Logos Strip */}
+        <div className="scroll-animate" style={{ display: "flex", justifyContent: "center", gap: "16px", flexWrap: "wrap", marginTop: "64px" }}>
+          <span className="logo-badge">SAVAR_AGRO_LTD</span>
+          <span className="logo-badge">BENGAL_CHEM</span>
+          <span className="logo-badge">DHAKA_DISTRIB</span>
+          <span className="logo-badge">GREEN_MERCHANTS</span>
+        </div>
+      </section>
+
+      {/* SECTION 6 — CTA FOOTER BAND */}
+      <section style={{ background: "linear-gradient(135deg, #10B981 0%, #059669 100%)", padding: "80px 40px", textAlign: "center" }}>
+        <div style={{ maxWidth: "800px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "20px" }}>
+          <h2 style={{ fontSize: "clamp(26px, 5vw, 42px)", fontWeight: "800", color: "#0B0F19", lineHeight: "1.1", letterSpacing: "-0.02em" }}>
+            Start Protecting Your Shipments Today
+          </h2>
+          <p style={{ color: "rgba(11, 15, 25, 0.8)", fontSize: "16px", fontWeight: "500", maxWidth: "600px", margin: "0 auto" }}>
+            Free tier available. No credit card required. Deploy in minutes.
+          </p>
+          <div style={{ marginTop: "16px" }}>
+            <button onClick={onRegister} style={{
+              background: "#0B0F19", border: "none", borderRadius: "10px", color: "#10B981",
+              padding: "16px 36px", cursor: "pointer", fontSize: "16px", fontWeight: "800",
+              boxShadow: "0 10px 25px rgba(0,0,0,0.25)", transition: "transform 0.2s"
+            }} onMouseOver={e=>e.target.style.transform="scale(1.05)"} onMouseOut={e=>e.target.style.transform="scale(1)"}>
+              Create Free Account
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer style={{ background: "#0B0F19", borderTop: "1px solid rgba(255,255,255,0.04)", padding: "24px", textAlign: "center" }}>
+        <p style={{ color: "#475569", fontSize: "12px" }}>
+          © {new Date().getFullYear()} ClimaLogix AI. All rights reserved. Dhaka, Bangladesh.
+        </p>
+      </footer>
+    </div>
+  );
+}
+
+window.HeroLandingPage = HeroLandingPage;
+
 function CLimaLogixApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [showAuthOverlay, setShowAuthOverlay] = useState(false);
+  const [authOverlayMode, setAuthOverlayMode] = useState("login");
 
   useEffect(() => {
     if (!window.supabaseClient) {
@@ -8371,7 +8306,21 @@ function CLimaLogixApp() {
   }
 
   if (!currentUser) {
-    return <AuthPanel onAuthSuccess={(user) => setCurrentUser(user)} />;
+    return (
+      <>
+        <HeroLandingPage 
+          onLogin={() => { setAuthOverlayMode("login"); setShowAuthOverlay(true); }}
+          onRegister={() => { setAuthOverlayMode("register"); setShowAuthOverlay(true); }} 
+        />
+        {showAuthOverlay && (
+          <AuthPanel 
+            initialMode={authOverlayMode}
+            onClose={() => setShowAuthOverlay(false)} 
+            onAuthSuccess={(user) => { setCurrentUser(user); setShowAuthOverlay(false); }} 
+          />
+        )}
+      </>
+    );
   }
 
   return (
