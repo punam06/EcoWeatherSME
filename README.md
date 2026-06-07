@@ -1,6 +1,10 @@
 # 🌍 ClimaLogix AI (ClimateShield)
 > **Enterprise-Grade PaaS for Climate-Resilient Circular Commerce & Heat-Sensitive SME Logistics**
 
+***
+🚀 **Live Demo:** **[https://ecoweathersme.onrender.com/](https://ecoweathersme.onrender.com/)**
+***
+
 ClimaLogix AI (ClimateShield) is a high-maturity, production-ready circular commerce marketplace and decision-intelligence platform engineered to protect and optimize Bangladesh's heat-sensitive SME product sectors (including Agro-biologicals, temperature-sensitive Retail goods, and specialized chemical/biological Manufacturing compounds). By combining real-time IoT fermentation and parameter analytics, neighborhood-specific microclimate modeling (MERM), and a voice-first Bangla RAG assistant, the platform bridges the trust deficit in supply chains and secures delicate physical assets against heat-induced transit spoilage in extreme urban environments.
 
 ---
