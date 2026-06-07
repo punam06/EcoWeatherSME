@@ -242,7 +242,7 @@ router.post('/certify', authenticateJWT, requireRole('processor'), async (req: R
     // which deep-links to the Tracking view via ?batch=<id>.
     const frontendBase = (process.env.FRONTEND_URL || 'https://ecoweathersme.onrender.com')
       .replace(/\/+$/, ''); // strip trailing slash
-    const verificationUrl = `${frontendBase}/verify/${displayBatchId}`;
+    const verificationUrl = `${frontendBase}/?batch=${displayBatchId}`;
     
     // Generate QR code data URL (Base64 image) securely on the backend
     const qrCodeDataUrl = await QRCode.toDataURL(verificationUrl, {
