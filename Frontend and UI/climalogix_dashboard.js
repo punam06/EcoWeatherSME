@@ -2622,7 +2622,7 @@ function BatchVerificationForm({
     value: "inspector"
   }, "\uD83D\uDC6E Certified Inspector"), /*#__PURE__*/React.createElement("option", {
     value: "manufacturer"
-  }, "\uD83C\uDFED Manufacturer Declaration")))), conf.ph ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SliderRow, {
+  }, "\uD83C\uDFED Manufacturer Declaration")))), qaSource === 'iot' && /*#__PURE__*/React.createElement(React.Fragment, null, conf.ph ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SliderRow, {
     label: conf.ph.label,
     min: conf.ph.min,
     max: conf.ph.max,
@@ -2709,7 +2709,42 @@ function BatchVerificationForm({
       fontSize: 10,
       color: "var(--text-dim)"
     }
-  }, "Optimal: ", conf.days.optimal)), /*#__PURE__*/React.createElement("div", {
+  }, "Optimal: ", conf.days.optimal))), qaSource === 'manufacturer' && /*#__PURE__*/React.createElement("div", {
+    style: {
+      gridColumn: "1 / -1",
+      display: "flex",
+      flexDirection: "column",
+      gap: 10,
+      background: "rgba(255,255,255,0.02)",
+      padding: 16,
+      borderRadius: 8,
+      border: "1px solid var(--border-primary)",
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: ACCENT.green,
+      fontWeight: 600,
+      marginBottom: 4
+    }
+  }, "\uD83D\uDCCB Manufacturer Self-Declaration Checklist"), ["Feedstock has been inspected for dynamic hazards and contamination.", "Processing conditions (curing/fermentation) strictly adhere to BARI standards.", "Lot packaging has been sealed and checked for shipment transit suitability.", "SOP compliance checklist has been fully archived."].map((text, idx) => /*#__PURE__*/React.createElement("label", {
+    key: idx,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      fontSize: 12,
+      color: "var(--text-secondary)",
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    defaultChecked: true,
+    style: {
+      accentColor: ACCENT.green
+    }
+  }), text))), /*#__PURE__*/React.createElement("div", {
     style: {
       gridColumn: "1 / -1",
       display: "grid",

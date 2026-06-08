@@ -1372,47 +1372,68 @@ function BatchVerificationForm({ onResult, onResultDetail, prefilledBatchId, pre
           </div>
         </div>
 
-        {conf.ph ? (
-          <div>
-            <SliderRow label={conf.ph.label} min={conf.ph.min} max={conf.ph.max} step={conf.ph.step} value={pH} onChange={setPH} color={ACCENT.green} />
-            <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: {conf.ph.optimal}</div>
-          </div>
-        ) : null}
-        <div>
-          <SliderRow label={conf.ec.label} min={conf.ec.min} max={conf.ec.max} step={conf.ec.step} value={EC} onChange={setEC} unit={conf.ec.unit} color={ACCENT.green} />
-          <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: {conf.ec.optimal}</div>
-        </div>
-        <div>
-          <SliderRow label={conf.temp.label} min={conf.temp.min} max={conf.temp.max} step={conf.temp.step} value={temp} onChange={setTemp} unit={conf.temp.unit} color={temp > conf.tempRange[1] ? ACCENT.red : ACCENT.amber} />
-          <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: {conf.temp.optimal}</div>
-        </div>
-        
-        {conf.hasRatio ? (
-          <div>
-            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>Treatment Ratio</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-              {["1:1:10", "1:1:20", "1:1:30", "1:1:40"].map(v => (
-                <button key={v} onClick={() => setRatio(v)}
-                  style={{
-                    padding: "7px 4px", borderRadius: 8,
-                    border: `1px solid ${ratio === v ? ACCENT.green : "var(--border-primary)"}`,
-                    background: ratio === v ? ACCENT.greenBg : "var(--bg-input)",
-                    color: ratio === v ? ACCENT.green : "var(--text-muted)",
-                    fontSize: 11, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace",
-                    fontWeight: ratio === v ? 600 : 400,
-                    transition: "all 0.25s ease",
-                  }}>
-                  {v}
-                </button>
-              ))}
+        {qaSource === 'iot' && (
+          <>
+            {conf.ph ? (
+              <div>
+                <SliderRow label={conf.ph.label} min={conf.ph.min} max={conf.ph.max} step={conf.ph.step} value={pH} onChange={setPH} color={ACCENT.green} />
+                <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: {conf.ph.optimal}</div>
+              </div>
+            ) : null}
+            <div>
+              <SliderRow label={conf.ec.label} min={conf.ec.min} max={conf.ec.max} step={conf.ec.step} value={EC} onChange={setEC} unit={conf.ec.unit} color={ACCENT.green} />
+              <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: {conf.ec.optimal}</div>
             </div>
-          </div>
-        ) : null}
+            <div>
+              <SliderRow label={conf.temp.label} min={conf.temp.min} max={conf.temp.max} step={conf.temp.step} value={temp} onChange={setTemp} unit={conf.temp.unit} color={temp > conf.tempRange[1] ? ACCENT.red : ACCENT.amber} />
+              <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: {conf.temp.optimal}</div>
+            </div>
+            
+            {conf.hasRatio ? (
+              <div>
+                <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>Treatment Ratio</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                  {["1:1:10", "1:1:20", "1:1:30", "1:1:40"].map(v => (
+                    <button key={v} onClick={() => setRatio(v)}
+                      style={{
+                        padding: "7px 4px", borderRadius: 8,
+                        border: `1px solid ${ratio === v ? ACCENT.green : "var(--border-primary)"}`,
+                        background: ratio === v ? ACCENT.greenBg : "var(--bg-input)",
+                        color: ratio === v ? ACCENT.green : "var(--text-muted)",
+                        fontSize: 11, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace",
+                        fontWeight: ratio === v ? 600 : 400,
+                        transition: "all 0.25s ease",
+                      }}>
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
-        <div style={{ gridColumn: conf.ph ? "1 / -1" : "auto" }}>
-          <SliderRow label={conf.days.label} min={conf.days.min} max={conf.days.max} step={conf.days.step} value={days} onChange={setDays} unit={conf.days.unit} color={ACCENT.green} />
-          <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: {conf.days.optimal}</div>
-        </div>
+            <div style={{ gridColumn: conf.ph ? "1 / -1" : "auto" }}>
+              <SliderRow label={conf.days.label} min={conf.days.min} max={conf.days.max} step={conf.days.step} value={days} onChange={setDays} unit={conf.days.unit} color={ACCENT.green} />
+              <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: {conf.days.optimal}</div>
+            </div>
+          </>
+        )}
+
+        {qaSource === 'manufacturer' && (
+          <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 10, background: "rgba(255,255,255,0.02)", padding: 16, borderRadius: 8, border: "1px solid var(--border-primary)", marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: ACCENT.green, fontWeight: 600, marginBottom: 4 }}>📋 Manufacturer Self-Declaration Checklist</div>
+            {[
+              "Feedstock has been inspected for dynamic hazards and contamination.",
+              "Processing conditions (curing/fermentation) strictly adhere to BARI standards.",
+              "Lot packaging has been sealed and checked for shipment transit suitability.",
+              "SOP compliance checklist has been fully archived."
+            ].map((text, idx) => (
+              <label key={idx} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12, color: "var(--text-secondary)", cursor: "pointer" }}>
+                <input type="checkbox" defaultChecked style={{ accentColor: ACCENT.green }} />
+                {text}
+              </label>
+            ))}
+          </div>
+        )}
 
         {/* Dynamic Multi-Source Inputs */}
         <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, borderTop: "1px solid var(--border-primary)", paddingTop: 14, marginTop: 6 }}>
