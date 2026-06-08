@@ -8030,6 +8030,27 @@ function CLimaLogixApp() {
   const [authLoading, setAuthLoading] = useState(true);
   const [showAuthOverlay, setShowAuthOverlay] = useState(false);
   const [authOverlayMode, setAuthOverlayMode] = useState("login");
+  const [loginWelcome, setLoginWelcome] = useState(null); // { name, role, label }
+
+  // Returns the first (default) tab id for a given role
+  const getDefaultTabForRole = (role) => {
+    if (role === "admin" || role === "inspector") return "notifications";
+    if (role === "processor" || role === "manufacturer") return "batches";
+    return "dashboard"; // buyer / sme / default
+  };
+
+  // Returns a human-friendly role label
+  const getRoleLabel = (role) => {
+    const labels = {
+      admin: "Administrator",
+      inspector: "Quality Inspector",
+      processor: "Producer / Processor",
+      manufacturer: "Manufacturer",
+      buyer: "SME Buyer",
+      sme: "SME Owner",
+    };
+    return labels[role] || "Member";
+  };
 
   useEffect(() => {
     if (!window.supabaseClient) {
@@ -8054,6 +8075,7 @@ function CLimaLogixApp() {
       } else {
         setCurrentUser(null);
         window.SUPABASE_SESSION_TOKEN = null;
+        setLoginWelcome(null);
       }
       setAuthLoading(false);
     });
@@ -8318,10 +8340,23 @@ function CLimaLogixApp() {
 
   useEffect(() => {
     if (currentUser) {
-      const allowed = getTabsForRole(currentUser.user_metadata?.role || currentUser.role);
-      if (allowed.length > 0 && !allowed.find(t => t.id === activeTab)) {
+      const role = currentUser.user_metadata?.role || currentUser.role || "buyer";
+      const defaultTab = getDefaultTabForRole(role);
+      const allowed = getTabsForRole(role);
+      // Always route to the role-specific default tab on (re)login
+      if (allowed.find(t => t.id === defaultTab)) {
+        setActiveTab(defaultTab);
+      } else if (allowed.length > 0) {
         setActiveTab(allowed[0].id);
       }
+      // Show a welcome toast with the user's name and role
+      const name = currentUser.user_metadata?.name ||
+                   currentUser.user_metadata?.full_name ||
+                   (currentUser.email ? currentUser.email.split("@")[0] : "User");
+      setLoginWelcome({ name, role, label: getRoleLabel(role) });
+      // Auto-dismiss welcome toast after 6 seconds
+      const timer = setTimeout(() => setLoginWelcome(null), 6000);
+      return () => clearTimeout(timer);
     }
   }, [currentUser]);
 
@@ -8368,7 +8403,14 @@ function CLimaLogixApp() {
           <AuthPanel 
             initialMode={authOverlayMode}
             onClose={() => setShowAuthOverlay(false)} 
-            onAuthSuccess={(user) => { setCurrentUser(user); setShowAuthOverlay(false); }} 
+            onAuthSuccess={(user, token) => {
+              // Route to role-specific dashboard immediately
+              const role = user?.user_metadata?.role || user?.role || "buyer";
+              const defaultTab = getDefaultTabForRole(role);
+              setActiveTab(defaultTab);
+              setCurrentUser(user);
+              setShowAuthOverlay(false);
+            }}
           />
         )}
       </>
@@ -8419,7 +8461,72 @@ function CLimaLogixApp() {
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::selection { background: rgba(16,185,129,0.3); }
+        @keyframes welcomeSlideIn {
+          from { opacity: 0; transform: translateX(110%); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes welcomeSlideOut {
+          from { opacity: 1; transform: translateX(0); }
+          to   { opacity: 0; transform: translateX(110%); }
+        }
+        .welcome-toast {
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          z-index: 9999;
+          min-width: 280px;
+          max-width: 360px;
+          background: rgba(11, 15, 25, 0.95);
+          border: 1px solid rgba(16, 185, 129, 0.4);
+          border-radius: 14px;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(16,185,129,0.08), 0 0 30px rgba(16,185,129,0.1);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          padding: 16px 18px;
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          animation: welcomeSlideIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .welcome-toast-dismiss {
+          background: transparent;
+          border: none;
+          color: #6B7280;
+          cursor: pointer;
+          font-size: 16px;
+          padding: 0;
+          line-height: 1;
+          flex-shrink: 0;
+          transition: color 0.2s;
+        }
+        .welcome-toast-dismiss:hover { color: #EF4444; }
       `}</style>
+
+      {/* ── ROLE-BASED WELCOME TOAST ───────────────────────── */}
+      {loginWelcome && (
+        <div className="welcome-toast">
+          <div style={{
+            width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+            background: "rgba(16,185,129,0.12)",
+            border: "1px solid rgba(16,185,129,0.25)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 18
+          }}>
+            {loginWelcome.role === "admin" || loginWelcome.role === "inspector" ? "🔍" :
+             loginWelcome.role === "processor" || loginWelcome.role === "manufacturer" ? "📦" : "🌿"}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: "Inter", fontSize: 13, fontWeight: 600, color: "#10B981", marginBottom: 3 }}>
+              Welcome back, {loginWelcome.name}!
+            </div>
+            <div style={{ fontFamily: "Inter", fontSize: 12, color: "#9CA3AF", lineHeight: 1.4 }}>
+              Signed in as <span style={{ color: "#F9FAFB", fontWeight: 500 }}>{loginWelcome.label}</span>.
+              Routed to your personalized dashboard.
+            </div>
+          </div>
+          <button className="welcome-toast-dismiss" onClick={() => setLoginWelcome(null)} aria-label="Dismiss">×</button>
+        </div>
+      )}
 
       {/* ── LEFT SLIDING DRAWER NAVBAR ───────────────────────── */}
       <div style={{
@@ -8547,6 +8654,7 @@ function CLimaLogixApp() {
                   await window.supabaseClient.auth.signOut();
                 } else {
                   setCurrentUser(null);
+                  setLoginWelcome(null);
                 }
                 setIsDrawerOpen(false);
               }}
