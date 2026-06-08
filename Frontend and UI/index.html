@@ -118,6 +118,7 @@
 
     <!-- API Integration Layer -->
     <script src="./api-integration.js"></script>
+    <script src="./api-client.js"></script>
     <script src="./toast.js"></script>
 
     <!-- Supabase -->
@@ -8053,7 +8054,7 @@ function CLimaLogixApp() {
   const [isRegisteringBatch, setIsRegisteringBatch] = useState(false);
   const [theme, setTheme] = useState("dark");
   const [dvs, setDvs] = useState(72);
-  const [productsList, setProductsList] = useState([]); const [isLoadingProducts, setIsLoadingProducts] = useState(true); useEffect(() => { const fetchProducts = async () => { try { const res = await fetch(`${BACKEND_URL}/api/products`); const json = await res.json(); if (json.success && json.data) { setProductsList(json.data); } else { setProductsList([]); } } catch (err) { console.error("Failed to fetch products:", err); } finally { setIsLoadingProducts(false); } }; fetchProducts(); }, []);
+  const [productsList, setProductsList] = useState([]); const [isLoadingProducts, setIsLoadingProducts] = useState(true); useEffect(() => { const fetchProducts = async () => { try { const json = await window.apiCall(`/api/products`); if (json.success && json.data) { setProductsList(json.data); } else { setProductsList([]); } } catch (err) { console.error("Failed to fetch products:", err); } finally { setIsLoadingProducts(false); } }; fetchProducts(); }, []);
   const [selectedSme, setSelectedSme] = useState("green_refineries");
   const [customSmeName, setCustomSmeName] = useState("My Custom SME");
   const [verificationBatchId, setVerificationBatchId] = useState("");
@@ -8992,7 +8993,8 @@ const initializeAndMount = async () => {
       );
     }
     const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(<CLimaLogixApp />);
+    const AppWithRouter = window.ReactRouterDOM ? <window.ReactRouterDOM.BrowserRouter><window.ErrorBoundary><CLimaLogixApp /></window.ErrorBoundary></window.ReactRouterDOM.BrowserRouter> : <window.ErrorBoundary><CLimaLogixApp /></window.ErrorBoundary>;
+      root.render(AppWithRouter);
   }
 };
 

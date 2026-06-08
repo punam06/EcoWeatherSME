@@ -1,0 +1,41 @@
+class ErrorBoundary extends window.React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    // Update state so the next render will show the fallback UI.
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    this.setState({ error, errorInfo });
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: "40px", color: "var(--text-primary)", fontFamily: "Inter, sans-serif" }}>
+          <h2 style={{ color: "#EF4444" }}>Something went wrong.</h2>
+          <details style={{ whiteSpace: "pre-wrap", background: "var(--bg-input)", padding: "16px", borderRadius: "8px", marginTop: "16px" }}>
+            {this.state.error && this.state.error.toString()}
+            <br />
+            {this.state.errorInfo && this.state.errorInfo.componentStack}
+          </details>
+          <button 
+            onClick={() => window.location.reload()} 
+            style={{ marginTop: "24px", padding: "10px 16px", background: "#10B981", color: "#0B0F19", border: "none", borderRadius: "8px", fontWeight: "bold", cursor: "pointer" }}
+          >
+            Reload Page
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children; 
+  }
+}
+
+window.ErrorBoundary = ErrorBoundary;

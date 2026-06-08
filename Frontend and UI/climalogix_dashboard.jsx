@@ -4674,6 +4674,15 @@ function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerific
   // ── Session memory: persists across all messages in this tab ──
   const [chatSessionId, setChatSessionId] = useState(null);
   const fileInputRef = useRef(null);
+  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const speak = (text) => {
+    if (!ttsEnabled || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = speechLang;
+    window.speechSynthesis.speak(utterance);
+  };
+
 
   // Initialize a backend session when the chatbot page mounts
   useEffect(() => {
@@ -4761,6 +4770,7 @@ function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerific
         });
         const voiceData = await voiceRes.json();
         if (voiceData.success && voiceData.data) {
+          if (ttsEnabled) speak(voiceData.data.message);
           setMessages(prev => [...prev, {
             role: "system",
             content: voiceData.data.message,
@@ -4805,6 +4815,7 @@ function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerific
           setChatSessionId(agentResponse.sessionId);
         }
 
+        if (ttsEnabled) speak(agentResponse.message);
         setMessages(prev => [...prev, {
           role: "system",
           content: agentResponse.message,
@@ -5181,6 +5192,28 @@ function MarketplaceView({ products = [], isLoading = false }) {
     const tempPenalty = Math.max(0, (simulatedTemp - 30) * 15);
     const zoneMultiplier = selectedZone.includes("north") || selectedZone.includes("south") ? 1.0 : 1.4;
     return Math.round((baseShipping + tempPenalty) * zoneMultiplier);
+  };
+
+  const generateDispatchSlip = (product, orderId) => {
+    if (typeof window.jspdf === 'undefined') return;
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    doc.setFontSize(22);
+    doc.setTextColor(16, 185, 129);
+    doc.text("CLimaLogix AI - Dispatch Slip", 20, 20);
+    
+    doc.setFontSize(12);
+    doc.setTextColor(50, 50, 50);
+    doc.text(`Order ID: ${orderId}`, 20, 40);
+    doc.text(`Product: ${product.name}`, 20, 50);
+    doc.text(`Seller: ${product.seller}`, 20, 60);
+    doc.text(`DVS Score: ${product.dvs}`, 20, 70);
+    doc.text(`Trust Score: ${product.trust_score || 'N/A'}`, 20, 80);
+    doc.text(`Date: ${new Date().toLocaleString()}`, 20, 90);
+    
+    doc.text("This batch has been certified viable for dispatch.", 20, 110);
+    
+    doc.save(`Dispatch_Slip_${orderId}_${product.id}.pdf`);
   };
 
   const handleCheckout = () => {
@@ -8300,11 +8333,7 @@ function SettingsView() {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const token = window.SUPABASE_SESSION_TOKEN || localStorage.getItem("sb-token");
-        const res = await fetch(`${BACKEND_URL}/api/profile`, {
-          headers: { "Authorization": `Bearer ${token}` }
-        });
-        const json = await res.json();
+        const json = await window.apiCall(`/api/profile`);
         if (json.success && json.data) {
           setName(json.data.full_name || "Demo User");
           setBadgeId(json.data.badge_id || "INS-8422-CLX");
@@ -8327,14 +8356,7 @@ function SettingsView() {
   const handleSave = async (e) => {
     e.preventDefault();
     try {
-      const token = window.SUPABASE_SESSION_TOKEN || localStorage.getItem("sb-token");
-      const res = await fetch(`${BACKEND_URL}/api/profile`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({
+      const json = await window.apiCall(`/api/profile`, { method: "PUT", body: JSON.stringify({
           full_name: name,
           badge_id: badgeId,
           pref_zone: prefZone,
@@ -8435,11 +8457,8 @@ function DeliveryView({ userRole, onUpdateTrustScore }) {
   useEffect(() => {
     const fetchDeliveries = async () => {
       try {
-        const token = window.SUPABASE_SESSION_TOKEN || localStorage.getItem("sb-token");
         const res = await fetch(`${BACKEND_URL}/api/deliveries`, {
-          headers: { "Authorization": `Bearer ${token}` }
-        });
-        const json = await res.json();
+          headers: { "Authorization": `Bearer ${token}` } });
         if (json.success && json.data) {
           setShipments(json.data);
         }
@@ -8461,11 +8480,7 @@ function DeliveryView({ userRole, onUpdateTrustScore }) {
     setOptLog(`[AI OPTIMIZATION] Re-routed shipment ${shipmentId} away from Hazaribagh thermal corridor (+3.5°C) to greenbelt bypass path. Dynamic decay risk reduced!`);
     
     try {
-      const token = window.SUPABASE_SESSION_TOKEN || localStorage.getItem("sb-token");
-      await fetch(`${BACKEND_URL}/api/deliveries/${shipmentId}/optimize`, {
-        method: "PUT",
-        headers: { "Authorization": `Bearer ${token}` }
-      });
+      await window.apiCall(`/api/deliveries/${shipmentId}/optimize`, { method: "PUT" });
     } catch (err) {
       console.error("Failed to optimize delivery:", err);
     }
@@ -8476,12 +8491,7 @@ function DeliveryView({ userRole, onUpdateTrustScore }) {
     if (onUpdateTrustScore) onUpdateTrustScore(prev => Math.min(100, prev + 4));
     
     try {
-      const token = window.SUPABASE_SESSION_TOKEN || localStorage.getItem("sb-token");
-      const res = await fetch(`${BACKEND_URL}/api/deliveries/${shipmentId}/acknowledge`, {
-        method: "PUT",
-        headers: { "Authorization": `Bearer ${token}` }
-      });
-      const json = await res.json();
+      const json = await window.apiCall(`/api/deliveries/${shipmentId}/acknowledge`, { method: "PUT" });
       if (json.success) {
         showToast(`Delivery acknowledged! BARI Trust Score increased due to chain-of-custody confirmation.`, "success");
       } else {
@@ -8641,7 +8651,12 @@ function CLimaLogixApp() {
     };
   }, []);
 
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const navigate = window.ReactRouterDOM ? useNavigate() : null;
+  const location = window.ReactRouterDOM ? useLocation() : null;
+  const activeTab = location ? (location.pathname.substring(1) || "dashboard") : "dashboard";
+  const setActiveTab = (tab) => {
+    if (navigate) navigate(`/${tab}`);
+  };
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [trustScore, setTrustScore] = useState(84);
   // Full deterministic trust score envelope from /api/batch/trust-score
@@ -8650,7 +8665,7 @@ function CLimaLogixApp() {
   const [isRegisteringBatch, setIsRegisteringBatch] = useState(false);
   const [theme, setTheme] = useState("dark");
   const [dvs, setDvs] = useState(72);
-  const [productsList, setProductsList] = useState([]); const [isLoadingProducts, setIsLoadingProducts] = useState(true); useEffect(() => { const fetchProducts = async () => { try { const res = await fetch(`${BACKEND_URL}/api/products`); const json = await res.json(); if (json.success && json.data) { setProductsList(json.data); } else { setProductsList([]); } } catch (err) { console.error("Failed to fetch products:", err); } finally { setIsLoadingProducts(false); } }; fetchProducts(); }, []);
+  const [productsList, setProductsList] = useState([]); const [isLoadingProducts, setIsLoadingProducts] = useState(true); useEffect(() => { const fetchProducts = async () => { try { const json = await window.apiCall(`/api/products`); if (json.success && json.data) { setProductsList(json.data); } else { setProductsList([]); } } catch (err) { console.error("Failed to fetch products:", err); } finally { setIsLoadingProducts(false); } }; fetchProducts(); }, []);
   const [selectedSme, setSelectedSme] = useState("green_refineries");
   const [customSmeName, setCustomSmeName] = useState("My Custom SME");
   const [verificationBatchId, setVerificationBatchId] = useState("");
