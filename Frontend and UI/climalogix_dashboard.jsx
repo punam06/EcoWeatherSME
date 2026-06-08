@@ -5132,6 +5132,7 @@ function MarketplaceView({ products = [], isLoading = false }) {
 
   // Checkout States
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [checkoutStage, setCheckoutStage] = useState(0);
   const [checkoutSuccess, setCheckoutSuccess] = useState(null);
 
   useEffect(() => {
@@ -14677,6 +14678,7 @@ function MarketplaceView({ products = [], isLoading = false }) {
 
   // Checkout States
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [checkoutStage, setCheckoutStage] = useState(0);
   const [checkoutSuccess, setCheckoutSuccess] = useState(null);
 
   useEffect(() => {
