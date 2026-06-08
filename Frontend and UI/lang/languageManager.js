@@ -75,3 +75,44 @@ const EcoLang = (function () {
 })();
 
 window.EcoLang = EcoLang;
+
+window.CLIMALOGIX_TRANSLATIONS = {
+  en: {
+    dashboard: "Overall Dashboard",
+    batches: "Batches",
+    verification: "Batch Verification",
+    tracking: "Consumer Tracking",
+    bi: "Business Intelligence",
+    chatbot: "Chatbot",
+    marketplace: "Marketplace",
+    logout: "Log Out",
+    language: "Language",
+    pending: "Pending",
+    active: "Active",
+    certified: "Certified",
+    dispatched: "Dispatched",
+    delivered: "Delivered",
+    dvsAlert: "⚠️ Decayed Risk Alert",
+    configurator: "SME Configurator",
+    docs: "System Docs"
+  },
+  bn: {
+    dashboard: "সামগ্রিক ড্যাশবোর্ড",
+    batches: "ব্যাচসমূহ",
+    verification: "ব্যাচ যাচাইকরণ",
+    tracking: "ভোক্তা ট্র্যাকিং",
+    bi: "ব্যবসায়িক বুদ্ধিমত্তা",
+    chatbot: "চ্যাটবট",
+    marketplace: "বাজারমুখী পণ্য",
+    logout: "লগ আউট",
+    language: "ভাষা",
+    pending: "অপেক্ষমান",
+    active: "সক্রিয়",
+    certified: "প্রত্যয়িত",
+    dispatched: "প্রেরিত",
+    delivered: "পৌঁছেছে",
+    dvsAlert: "⚠️ ক্ষয়প্রাপ্ত ঝুঁকির সতর্কতা",
+    configurator: "এসএমই কনফিগারেটর",
+    docs: "পদ্ধতিগত নথি"
+  }
+};
