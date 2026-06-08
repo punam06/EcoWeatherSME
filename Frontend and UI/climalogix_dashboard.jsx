@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
 // Inline LanguageSelector Component
       function LanguageSelector() {
