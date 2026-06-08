@@ -130,10 +130,8 @@ router.post('/voice-message', optionalJWT, aiRateLimiter, async (req: Request, r
  * POST /api/orders/voice (also mounted as /api/agent/orders/voice)
  * Direct transactional agent endpoint. Parses speech intent, queries catalog,
  * and submits orders with Zod validation, rate limiting, and dialect normalization.
- *
- * TODO: Add JWT authentication middleware before production launch
  */
-router.post('/orders/voice', aiRateLimiter, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+router.post('/orders/voice', authenticateJWT, aiRateLimiter, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const parsed = VoiceOrderSchema.safeParse(req.body);
     if (!parsed.success) {

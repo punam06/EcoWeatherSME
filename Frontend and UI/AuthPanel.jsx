@@ -271,7 +271,7 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
         setIsSuccess(true);
         
         // Save auth token/session correctly
-        const token = result.data.session?.access_token || "mock-dev-token";
+        const token = result.data.session?.access_token;
         localStorage.setItem("climaLogix_token", token);
         
         setTimeout(() => {

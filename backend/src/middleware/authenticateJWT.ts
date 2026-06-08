@@ -7,14 +7,7 @@ const supabase = createClient(
 );
 
 export async function authenticateJWT(req: Request, res: Response, next: NextFunction) {
-  if (process.env.NODE_ENV === 'development') {
-    // Inject mock user for local testing
-    (req as any).user = {
-      id: 'mock-dev-user-id',
-      user_metadata: { role: 'processor' }
-    };
-    return next();
-  }
+
 
   const authHeader = req.headers['authorization'];
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -43,9 +36,7 @@ export async function optionalJWT(req: Request, res: Response, next: NextFunctio
 
 export function requireRole(...roles: string[]) {
   return (req: Request, res: Response, next: NextFunction) => {
-    if (process.env.NODE_ENV === 'development') {
-      return next();
-    }
+
 
     const user = (req as any).user;
     const userRole: string | undefined =

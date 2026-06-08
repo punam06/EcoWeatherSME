@@ -111,7 +111,6 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // POST /api/batches
-// TODO: Add JWT authentication middleware before production launch
 router.post('/', authenticateJWT, requireRole('processor'), async (req: Request, res: Response) => {
   try {
     const parsed = CreateBatchSchema.safeParse(req.body);
@@ -185,7 +184,6 @@ router.post('/', authenticateJWT, requireRole('processor'), async (req: Request,
 });
 
 // PUT /api/batches/:id
-// TODO: Add JWT authentication middleware before production launch
 router.put('/:id', authenticateJWT, requireRole('processor'), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -223,7 +221,6 @@ router.put('/:id', authenticateJWT, requireRole('processor'), async (req: Reques
 });
 
 // POST /api/batches/certify
-// TODO: Add JWT authentication middleware before production launch
 router.post('/certify', authenticateJWT, requireRole('processor'), async (req: Request, res: Response) => {
   try {
     const parsed = CertifyBatchSchema.safeParse(req.body);
@@ -308,7 +305,6 @@ router.post('/certify', authenticateJWT, requireRole('processor'), async (req: R
 });
 
 // Readings stubs so they are handled cleanly inside batchRouter
-// TODO: Add JWT authentication middleware before production launch
 router.post('/:id/readings', authenticateJWT, requireRole('processor'), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -394,7 +390,6 @@ router.get('/:id/readings', async (req: Request, res: Response) => {
 });
 
 // DELETE /api/batches/:id
-// TODO: Add JWT authentication middleware before production launch
 router.delete('/:id', authenticateJWT, requireRole('processor'), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;

@@ -14,6 +14,7 @@ import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
 import { getBatchFromStore } from '../../lib/services/batchStore.service';
 import { getWeatherByCity } from '../../lib/services/weather.service';
 import { SpotPricingResponse } from '../../lib/types';
+import { authenticateJWT } from '../../middleware/authenticateJWT';
 
 const router = Router();
 
@@ -30,7 +31,7 @@ const SAFE_DISCOUNT = 0.00; // 0% OFF
  * GET /api/spot-pricing/:batchId
  * Resolves the batch record, invokes the MERM TST engine, and calculates clearance prices.
  */
-router.get('/:batchId', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+router.get('/:batchId', authenticateJWT, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { batchId } = req.params;
 
