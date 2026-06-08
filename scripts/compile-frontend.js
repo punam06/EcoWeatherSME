@@ -25,20 +25,13 @@ function main() {
 
   let html = fs.readFileSync(indexPath, 'utf8');
 
-  // 1. Extract the massive inline <script type="text/babel">
-  const inlineBabelRegex = /<script type="text\/babel">([\s\S]*?)<\/script>/;
-  const match = html.match(inlineBabelRegex);
-
-  if (match) {
-    const inlineCode = match[1];
-    const compiledInline = compileJSX(inlineCode, 'climalogix_dashboard.jsx');
-    
-    // Save compiled file
-    fs.writeFileSync(path.join(frontendDir, 'climalogix_dashboard.js'), compiledInline);
+  // Compile climalogix_dashboard.jsx -> climalogix_dashboard.js
+  const dashboardPath = path.join(frontendDir, 'climalogix_dashboard.jsx');
+  if (fs.existsSync(dashboardPath)) {
+    const dashboardCode = fs.readFileSync(dashboardPath, 'utf8');
+    const compiledDashboard = compileJSX(dashboardCode, 'climalogix_dashboard.jsx');
+    fs.writeFileSync(path.join(frontendDir, 'climalogix_dashboard.js'), compiledDashboard);
     console.log('Saved compiled dashboard to climalogix_dashboard.js');
-
-    // Replace in HTML
-    html = html.replace(inlineBabelRegex, '<script src="./climalogix_dashboard.js"></script>');
   }
 
   // 2. Compile external JSX files referenced in index.html
@@ -63,6 +56,12 @@ function main() {
   // 3. Update script tags in index.html
   html = html.replace('<script type="text/babel" src="./ThreeScene.js"></script>', '<script src="./ThreeScene.compiled.js"></script>');
   html = html.replace('<script type="text/babel" src="./AuthPanel.jsx"></script>', '<script src="./AuthPanel.js"></script>');
+  
+  // Also link climalogix_dashboard.js if not already linked
+  if (!html.includes('src="./climalogix_dashboard.js"')) {
+    html = html.replace('<script type="text/babel" src="./climalogix_dashboard.jsx"></script>', '<script src="./climalogix_dashboard.js"></script>');
+    // If it was inline, it might have been replaced already by the previous run, which is fine
+  }
 
   // 4. Remove Babel Standalone CDN script
   const babelCdnRegex = /<script [^>]*src="[^"]*babel\.min\.js"[^>]*><\/script>/i;

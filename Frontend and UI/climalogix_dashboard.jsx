@@ -3849,7 +3849,7 @@ function DashboardView({ onNewBatch }) {
       </Card>
 
       {/* ── STAT CARDS ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 32 }}>
+      <div className="grid-4col" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 32 }}>
         {isLoading
           ? Array.from({ length: 8 }).map((_, i) => (
               <Card key={i} style={{ padding: "20px 24px" }} hover={false}>
@@ -3871,7 +3871,7 @@ function DashboardView({ onNewBatch }) {
         }
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
+      <div className="grid-2fr-1fr" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
         {/* ── THERMAL HEATMAP ── */}
         <Card hover={false}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -7064,7 +7064,7 @@ function SystemDocsView({ productsList, liveWeather }) {
   });
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", gap: 32, animation: "fadeSlideIn 0.4s ease" }}>
+    <div className="grid-sidebar" style={{ display: "grid", gridTemplateColumns: "240px 1fr", gap: 32, animation: "fadeSlideIn 0.4s ease" }}>
       
       {/* ── LEFT SUB-NAV BAR ────────────────────────────────────── */}
       <aside style={{ display: "flex", flexDirection: "column", gap: 6 }}>

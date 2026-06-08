@@ -239,7 +239,7 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
       const sb = window.supabaseClient;
       if (!sb) throw new Error("Supabase client not initialized");
 
-      const backendRole = uiRole === "producer" ? "processor" : "buyer";
+      const backendRole = uiRole === "producer" ? "processor" : uiRole === "inspector" ? "admin" : "buyer";
 
       let result;
       if (mode === "login") {
@@ -313,7 +313,7 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "#0B0F19", overflow: "hidden" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "#0B0F19", overflowY: "auto" }}>
       {/* Styles Injection */}
       <style>{`
         .auth-card {
@@ -462,11 +462,24 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
       </div>
       <div style={{ position: "absolute", bottom: 20, right: 20, zIndex: 5, color: "#10B981", opacity: 0.2, fontSize: "10px", fontFamily: "'JetBrains Mono', monospace" }}>SYS_OPS: NOMINAL</div>
 
-      {/* Centered Overlay Container */}
+      {/* Scrollable Flex Wrapper for Centered Content */}
       <div style={{
-        position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-        width: "calc(100% - 32px)", maxWidth: 460, zIndex: 10
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "100%",
+        width: "100%",
+        padding: "60px 16px",
+        boxSizing: "border-box",
+        position: "relative",
+        zIndex: 10
       }}>
+        <div style={{
+          width: "100%",
+          maxWidth: 460,
+          position: "relative",
+          zIndex: 10
+        }}>
         {/* Success Toast */}
         {isSuccess && mode === "register" && (
           <div style={{
@@ -505,9 +518,9 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
             </div>
 
             <div className="segment-tabs">
-              {["producer", "consumer", "sme owner"].map(r => (
+              {["producer", "inspector", "sme owner"].map(r => (
                 <button key={r} type="button" className={`segment-btn ${uiRole === r ? "active" : ""}`} onClick={() => setUiRole(r)}>
-                  {r === "sme owner" ? "SME Owner" : r.charAt(0).toUpperCase() + r.slice(1)}
+                  {r === "sme owner" ? "SME Owner" : r === "inspector" ? "Inspector" : r.charAt(0).toUpperCase() + r.slice(1)}
                 </button>
               ))}
             </div>
@@ -612,9 +625,9 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
 
             {/* Segmented Control for Roles */}
             <div className="segment-tabs">
-              {["producer", "consumer", "sme owner"].map(r => (
+              {["producer", "inspector", "sme owner"].map(r => (
                 <button key={r} type="button" className={`segment-btn ${uiRole === r ? "active" : ""}`} onClick={() => setUiRole(r)}>
-                  {r === "sme owner" ? "SME Owner" : r.charAt(0).toUpperCase() + r.slice(1)}
+                  {r === "sme owner" ? "SME Owner" : r === "inspector" ? "Inspector" : r.charAt(0).toUpperCase() + r.slice(1)}
                 </button>
               ))}
             </div>
@@ -676,6 +689,7 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
               </div>
             </form>
           </div>
+        </div>
         </div>
       </div>
     </div>

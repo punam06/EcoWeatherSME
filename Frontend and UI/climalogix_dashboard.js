@@ -1,9 +1,4 @@
-const {
-  useState,
-  useEffect,
-  useRef,
-  useCallback
-} = React;
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 
 // Inline LanguageSelector Component
 function LanguageSelector() {
@@ -49,8 +44,8 @@ function LanguageSelector() {
     onClick: () => setIsOpen(!isOpen),
     className: "flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-green-700 hover:bg-green-600 rounded-md shadow-sm transition-colors"
   }, /*#__PURE__*/React.createElement("span", {
-    className: "material-icons text-[18px]"
-  }, "language"), /*#__PURE__*/React.createElement("span", {
+    className: "text-[18px]"
+  }, "\uD83C\uDF10"), /*#__PURE__*/React.createElement("span", {
     className: "uppercase"
   }, currentLang)), isOpen && /*#__PURE__*/React.createElement("div", {
     className: "absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-[#112211] ring-1 ring-black ring-opacity-5 z-50 overflow-hidden border border-green-800/50"
@@ -65,6 +60,1021 @@ function LanguageSelector() {
   }, code), name)))));
 }
 window.LanguageSelector = LanguageSelector;
+
+// Inline AuthPanel Component
+function AuthPanel({
+  onClose,
+  onAuthSuccess
+}) {
+  const [mode, setMode] = useState("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [name, setName] = useState("");
+  const [uiRole, setUiRole] = useState("sme");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [successMsg, setSuccessMsg] = useState("");
+  const canvasRef = useRef(null);
+  const reqRef = useRef(null);
+  useEffect(() => {
+    if (!canvasRef.current || !window.THREE) return;
+    const THREE = window.THREE;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.z = 10;
+    const renderer = new THREE.WebGLRenderer({
+      canvas: canvasRef.current,
+      alpha: true,
+      antialias: true
+    });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const particleCount = 1200;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    const colorGreen = new THREE.Color("#10B981");
+    const colorBlue = new THREE.Color("#3B82F6");
+    for (let i = 0; i < particleCount; i++) {
+      const u = Math.random();
+      const v = Math.random();
+      const theta = 2 * Math.PI * u;
+      const phi = Math.acos(2 * v - 1);
+      const r = 8 * Math.cbrt(Math.random());
+      positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      positions[i * 3 + 2] = r * Math.cos(phi);
+      const c = Math.random() < 0.15 ? colorBlue : colorGreen;
+      colors[i * 3] = c.r;
+      colors[i * 3 + 1] = c.g;
+      colors[i * 3 + 2] = c.b;
+    }
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const material = new THREE.PointsMaterial({
+      size: 0.05,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.4
+    });
+    const particles = new THREE.Points(geometry, material);
+    scene.add(particles);
+    const ringGeo = new THREE.TorusGeometry(3, 0.015, 16, 100);
+    const ringMat = new THREE.LineBasicMaterial({
+      color: 0x10B981,
+      transparent: true,
+      opacity: 0.25
+    });
+    const edges = new THREE.EdgesGeometry(ringGeo);
+    const ring = new THREE.LineSegments(edges, ringMat);
+    ring.rotation.x = Math.PI / 2.5;
+    scene.add(ring);
+    const greenLight = new THREE.PointLight(0x10B981, 0.4);
+    greenLight.position.set(5, 5, 5);
+    scene.add(greenLight);
+    const blueLight = new THREE.PointLight(0x3B82F6, 0.2);
+    blueLight.position.set(-5, -3, 2);
+    scene.add(blueLight);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.1));
+    let mouseX = 0;
+    let mouseY = 0;
+    const onMouseMove = e => {
+      mouseX = e.clientX - window.innerWidth / 2;
+      mouseY = e.clientY - window.innerHeight / 2;
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    const onResize = () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    };
+    window.addEventListener('resize', onResize);
+    let time = 0;
+    let lastFrame = performance.now();
+    const animate = now => {
+      reqRef.current = requestAnimationFrame(animate);
+      if (document.hidden) return;
+      const delta = now - lastFrame;
+      if (delta < 16) return;
+      lastFrame = now - delta % 16;
+      time += 0.01;
+      const posAttr = geometry.attributes.position;
+      for (let i = 0; i < particleCount; i++) {
+        const y = posAttr.getY(i);
+        posAttr.setY(i, y + Math.sin(time + i) * 0.001);
+      }
+      posAttr.needsUpdate = true;
+      ring.rotation.z += 0.001;
+      const targetX = mouseY / window.innerHeight * 0.3;
+      const targetY = mouseX / window.innerWidth * 0.3;
+      particles.rotation.x += (targetX - particles.rotation.x) * 0.05;
+      particles.rotation.y += (targetY - particles.rotation.y) * 0.05;
+      renderer.render(scene, camera);
+    };
+    reqRef.current = requestAnimationFrame(animate);
+    return () => {
+      cancelAnimationFrame(reqRef.current);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('resize', onResize);
+      renderer.dispose();
+      geometry.dispose();
+      material.dispose();
+      ringGeo.dispose();
+      ringMat.dispose();
+      edges.dispose();
+    };
+  }, []);
+  const entropy = useMemo(() => {
+    let strength = 0;
+    if (password.length >= 8) strength++;
+    if (/[A-Z]/.test(password)) strength++;
+    if (/[0-9]/.test(password)) strength++;
+    if (/[^A-Za-z0-9]/.test(password)) strength++;
+    return strength;
+  }, [password]);
+  const handleSubmit = async e => {
+    e.preventDefault();
+    setError("");
+    setIsLoading(true);
+    setIsSuccess(false);
+    if (!window.navigator.onLine) {
+      setError("Connection error — check your network");
+      setIsLoading(false);
+      return;
+    }
+    if (mode === "register" && password !== confirmPassword) {
+      setError("Passwords do not match");
+      setIsLoading(false);
+      return;
+    }
+    const backendRole = uiRole === "manufacturer" ? "processor" : uiRole === "inspector" ? "admin" : "buyer";
+    const sb = window.supabaseClient;
+    if (!sb) {
+      // Local developer bypass mode if database is unconfigured
+      setIsSuccess(true);
+      setTimeout(() => {
+        if (onAuthSuccess) {
+          onAuthSuccess({
+            email: email || "developer@climalogix.internal",
+            user_metadata: {
+              name: name || email.split('@')[0] || "Developer",
+              role: backendRole
+            }
+          });
+        }
+        if (onClose) onClose();
+      }, 800);
+      setIsLoading(false);
+      return;
+    }
+    try {
+      let result;
+      if (mode === "login") {
+        result = await sb.auth.signInWithPassword({
+          email,
+          password
+        });
+      } else {
+        result = await sb.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              name,
+              role: backendRole
+            }
+          }
+        });
+      }
+      if (result.error) {
+        throw new Error(result.error.message || "Authentication failed");
+      }
+      if (mode === "register") {
+        setIsSuccess(true);
+        setSuccessMsg("Account created — please sign in");
+        setTimeout(() => {
+          setMode("login");
+          setIsSuccess(false);
+          setPassword("");
+          setConfirmPassword("");
+        }, 2000);
+      } else {
+        setIsSuccess(true);
+        setTimeout(() => {
+          if (onAuthSuccess) {
+            if (result.data.session) {
+              onAuthSuccess(result.data.user, result.data.session.access_token);
+            } else if (result.data.user) {
+              onAuthSuccess(result.data.user, null);
+            }
+          }
+          if (onClose) onClose();
+        }, 800);
+      }
+    } catch (err) {
+      setError(err.message || "Connection failed. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  const formStyles = {
+    inputGroup: {
+      position: "relative",
+      marginBottom: "18px"
+    },
+    label: {
+      position: "absolute",
+      left: "16px",
+      top: "16px",
+      fontSize: "13px",
+      color: "#4B5563",
+      fontFamily: "Inter",
+      pointerEvents: "none",
+      transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)",
+      background: "transparent",
+      padding: "0 4px"
+    },
+    labelActive: {
+      top: "-8px",
+      left: "12px",
+      fontSize: "11px",
+      color: "#10B981",
+      background: "#0d131f"
+    },
+    input: {
+      width: "100%",
+      padding: "14px 16px",
+      background: "rgba(255,255,255,0.04)",
+      border: "1px solid rgba(255,255,255,0.08)",
+      borderRadius: "10px",
+      color: "#F9FAFB",
+      fontFamily: "'JetBrains Mono', monospace",
+      fontSize: "14px",
+      outline: "none",
+      transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)",
+      boxSizing: "border-box"
+    }
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      zIndex: 99999,
+      background: "#0B0F19",
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("style", null, `
+              .auth-card {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                box-sizing: border-box;
+                opacity: 0;
+                pointer-events: none;
+                transform: translateY(-16px);
+                transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1), transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+                background: rgba(17, 24, 39, 0.75);
+                backdrop-filter: blur(20px);
+                -webkit-backdrop-filter: blur(20px);
+                border-radius: 20px;
+                border: 1px solid rgba(16, 185, 129, 0.18);
+                box-shadow: 0 0 0 1px rgba(0,0,0,0.3), 0 20px 60px rgba(0,0,0,0.55), 0 0 40px rgba(16,185,129,0.07), inset 0 1px 0 rgba(255,255,255,0.04);
+                padding: 48px 44px;
+              }
+              @media (max-width: 480px) {
+                .auth-card {
+                  padding: 32px 24px;
+                }
+              }
+              .auth-card.card--visible {
+                position: relative;
+                opacity: 1;
+                pointer-events: all;
+                transform: translateY(0);
+                animation: slideInUp 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+              }
+              @keyframes slideInUp {
+                from {
+                  opacity: 0;
+                  transform: translateY(16px);
+                }
+                to {
+                  opacity: 1;
+                  transform: translateY(0);
+                }
+              }
+              .auth-error-shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; border-color: #EF4444 !important; }
+              .auth-input-focus:focus {
+                border-color: rgba(16,185,129,0.55) !important;
+                box-shadow: 0 0 0 3px rgba(16,185,129,0.1) !important;
+                background: rgba(16,185,129,0.04) !important;
+              }
+              .segment-tabs {
+                display: flex;
+                gap: 6px;
+                margin-bottom: 28px;
+                background: rgba(255,255,255,0.04);
+                padding: 4px;
+                border-radius: 10px;
+              }
+              .segment-btn {
+                flex: 1;
+                padding: 8px 0;
+                border: none;
+                border-radius: 8px;
+                fontSize: 12px;
+                font-family: "Inter", sans-serif;
+                cursor: pointer;
+                transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+                background: transparent;
+                color: #6B7280;
+              }
+              .segment-btn.active {
+                background: #10B981;
+                color: #0B0F19;
+                font-weight: 600;
+                box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+              }
+              .auth-btn {
+                width: 100%;
+                height: 52px;
+                border-radius: 10px;
+                border: none;
+                cursor: pointer;
+                background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+                color: #0B0F19;
+                font-family: "Inter", sans-serif;
+                font-size: 15px;
+                font-weight: 600;
+                letter-spacing: 0.02em;
+                transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+              }
+              .auth-btn:hover:not(:disabled) {
+                filter: brightness(1.1);
+                box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
+                transform: translateY(-2px);
+              }
+              .auth-btn:active:not(:disabled) {
+                transform: translateY(0);
+                filter: brightness(0.95);
+              }
+              .auth-btn:disabled {
+                cursor: not-allowed;
+                opacity: 0.7;
+              }
+              @keyframes teleBlink {
+                0%, 100% { opacity: 0.2; }
+                50% { opacity: 0.5; }
+              }
+              .tele-blink {
+                animation: teleBlink 2s infinite;
+              }
+            `), /*#__PURE__*/React.createElement("canvas", {
+    ref: canvasRef,
+    style: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      width: "100%",
+      height: "100%",
+      zIndex: 0
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      zIndex: 5,
+      pointerEvents: "none",
+      background: "repeating-linear-gradient(rgba(16, 185, 129, 0.03) 0, rgba(16, 185, 129, 0.03) 1px, transparent 1px, transparent 4px)",
+      backgroundSize: "100% 4px"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      inset: 0,
+      zIndex: 5,
+      pointerEvents: "none",
+      background: "radial-gradient(circle at center, transparent 30%, rgba(0,0,0,0.6) 100%)"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      top: 20,
+      left: 20,
+      zIndex: 5,
+      color: "#10B981",
+      opacity: 0.2,
+      fontSize: "10px",
+      fontFamily: "'JetBrains Mono', monospace"
+    }
+  }, "DHK_ZONE_04 | UHI: +3.2\xB0C"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      top: 20,
+      right: 20,
+      zIndex: 5,
+      color: "#10B981",
+      fontSize: "10px",
+      fontFamily: "'JetBrains Mono', monospace"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#10B981",
+      opacity: 0.2
+    }
+  }, "BATCH_SYNC: "), /*#__PURE__*/React.createElement("span", {
+    className: "tele-blink",
+    style: {
+      color: "#10B981",
+      fontWeight: "bold"
+    }
+  }, "LIVE")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      bottom: 20,
+      left: 20,
+      zIndex: 5,
+      color: "#10B981",
+      fontSize: "10px",
+      fontFamily: "'JetBrains Mono', monospace"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#10B981",
+      opacity: 0.2
+    }
+  }, "NODE: "), /*#__PURE__*/React.createElement("span", {
+    className: "tele-blink",
+    style: {
+      color: "#10B981",
+      fontWeight: "bold"
+    }
+  }, "ACTIVE_SECURE")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      bottom: 20,
+      right: 20,
+      zIndex: 5,
+      color: "#10B981",
+      opacity: 0.2,
+      fontSize: "10px",
+      fontFamily: "'JetBrains Mono', monospace"
+    }
+  }, "SYS_OPS: NOMINAL"), onClose && /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    style: {
+      position: "absolute",
+      top: 20,
+      right: 20,
+      zIndex: 20,
+      background: "rgba(255,255,255,0.1)",
+      border: "none",
+      borderRadius: "50%",
+      width: 32,
+      height: 32,
+      color: "#fff",
+      cursor: "pointer",
+      fontSize: "18px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    }
+  }, "\xD7"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      top: "50%",
+      left: "50%",
+      transform: "translate(-50%, -50%)",
+      width: "calc(100% - 32px)",
+      maxWidth: 460,
+      zIndex: 10
+    }
+  }, isSuccess && mode === "register" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      top: -50,
+      left: 0,
+      right: 0,
+      textAlign: "center",
+      background: "rgba(16, 185, 129, 0.2)",
+      border: "1px solid rgba(16, 185, 129, 0.4)",
+      color: "#10B981",
+      padding: "10px",
+      borderRadius: "8px",
+      fontSize: "13px",
+      animation: "fadeSlideIn 0.3s cubic-bezier(0.4,0,0.2,1)",
+      zIndex: 30
+    }
+  }, successMsg), /*#__PURE__*/React.createElement("div", {
+    className: `auth-card ${mode === "login" ? "card--visible" : "card--hidden"}`
+  }, /*#__PURE__*/React.createElement("div", {
+    className: error && mode === "login" ? "auth-error-shake" : ""
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      textAlign: "center",
+      marginBottom: "30px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "56px",
+      height: "56px",
+      background: "rgba(16, 185, 129, 0.1)",
+      borderRadius: "14px",
+      border: "1px solid rgba(16, 185, 129, 0.2)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: "16px"
+    }
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "28",
+    height: "28",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "#10B981",
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    style: {
+      animation: "pulseGlow 2s ease-in-out infinite"
+    }
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M12 12v10"
+  }))), /*#__PURE__*/React.createElement("h1", {
+    style: {
+      fontFamily: "Inter",
+      fontSize: "22px",
+      color: "#F9FAFB",
+      fontWeight: 700,
+      margin: "0 0 6px"
+    }
+  }, "ClimaLogix AI"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontFamily: "Inter",
+      fontSize: "13px",
+      color: "#9CA3AF"
+    }
+  }, "Climate-Resilient Commerce Platform")), /*#__PURE__*/React.createElement("div", {
+    className: "segment-tabs"
+  }, ["sme", "inspector", "manufacturer"].map(r => /*#__PURE__*/React.createElement("button", {
+    key: r,
+    type: "button",
+    className: `segment-btn ${uiRole === r ? "active" : ""}`,
+    onClick: () => setUiRole(r)
+  }, r.toUpperCase()))), /*#__PURE__*/React.createElement("form", {
+    onSubmit: handleSubmit
+  }, /*#__PURE__*/React.createElement("div", {
+    style: formStyles.inputGroup
+  }, /*#__PURE__*/React.createElement("input", {
+    required: true,
+    type: "email",
+    className: "auth-input-focus",
+    style: formStyles.input,
+    placeholder: " ",
+    value: email,
+    onChange: e => setEmail(e.target.value)
+  }), /*#__PURE__*/React.createElement("label", {
+    style: {
+      ...formStyles.label,
+      ...(email ? formStyles.labelActive : {})
+    }
+  }, "Email Address")), /*#__PURE__*/React.createElement("div", {
+    style: formStyles.inputGroup
+  }, /*#__PURE__*/React.createElement("input", {
+    required: true,
+    type: showPass ? "text" : "password",
+    className: "auth-input-focus",
+    style: {
+      ...formStyles.input,
+      paddingRight: "40px"
+    },
+    placeholder: " ",
+    value: password,
+    onChange: e => setPassword(e.target.value)
+  }), /*#__PURE__*/React.createElement("label", {
+    style: {
+      ...formStyles.label,
+      ...(password ? formStyles.labelActive : {})
+    }
+  }, "Password"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => setShowPass(!showPass),
+    style: {
+      position: "absolute",
+      right: "12px",
+      top: "16px",
+      background: "transparent",
+      border: "none",
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "18",
+    height: "18",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "#9CA3AF",
+    strokeWidth: "2"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "12",
+    cy: "12",
+    r: "3"
+  }))), password.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "4px",
+      marginTop: "8px",
+      height: "4px"
+    }
+  }, [1, 2, 3, 4].map(s => /*#__PURE__*/React.createElement("div", {
+    key: s,
+    style: {
+      flex: 1,
+      borderRadius: "2px",
+      transition: "all 0.3s",
+      background: s <= entropy ? entropy < 2 ? "#EF4444" : entropy < 4 ? "#F59E0B" : "#10B981" : "rgba(255,255,255,0.1)"
+    }
+  })))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: "24px"
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+      cursor: "pointer",
+      fontSize: "13px",
+      color: "#9CA3AF",
+      fontFamily: "Inter"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "16px",
+      height: "16px",
+      border: "1px solid rgba(255,255,255,0.2)",
+      borderRadius: "4px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: "rgba(255,255,255,0.05)"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    style: {
+      opacity: 0,
+      position: "absolute",
+      cursor: "pointer"
+    },
+    onChange: e => {
+      e.target.parentElement.style.background = e.target.checked ? "#10B981" : "rgba(255,255,255,0.05)";
+      e.target.nextSibling.style.opacity = e.target.checked ? 1 : 0;
+    }
+  }), /*#__PURE__*/React.createElement("svg", {
+    width: "10",
+    height: "10",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "#0B0F19",
+    strokeWidth: "3",
+    style: {
+      opacity: 0,
+      transition: "opacity 0.2s"
+    }
+  }, /*#__PURE__*/React.createElement("polyline", {
+    points: "20 6 9 17 4 12"
+  }))), "Remember me"), /*#__PURE__*/React.createElement("a", {
+    href: "#",
+    style: {
+      color: "#10B981",
+      fontSize: "13px",
+      textDecoration: "none",
+      fontFamily: "Inter"
+    }
+  }, "Forgot password?")), error && mode === "login" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: "#EF4444",
+      fontSize: "13px",
+      marginBottom: "16px",
+      textAlign: "center",
+      fontFamily: "Inter"
+    }
+  }, error), /*#__PURE__*/React.createElement("button", {
+    type: "submit",
+    className: "auth-btn",
+    disabled: isLoading
+  }, isLoading ? /*#__PURE__*/React.createElement("svg", {
+    width: "20",
+    height: "20",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    style: {
+      animation: "spin 1s linear infinite"
+    }
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M21 12a9 9 0 11-6.219-8.56"
+  })) : isSuccess ? /*#__PURE__*/React.createElement("svg", {
+    width: "20",
+    height: "20",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "3"
+  }, /*#__PURE__*/React.createElement("polyline", {
+    points: "20 6 9 17 4 12"
+  })) : "Sign In"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: "20px",
+      borderTop: "1px solid rgba(255,255,255,0.05)",
+      paddingTop: "16px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "11px",
+      color: "#64748B",
+      marginBottom: "8px",
+      fontFamily: "Inter",
+      textAlign: "center"
+    }
+  }, "DEMO SYSTEM ACCOUNTS:"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: "6px",
+      justifyContent: "center"
+    }
+  }, [{
+    label: "SME Owner",
+    email: "buyer.demo@climalogix.local",
+    role: "sme"
+  }, {
+    label: "Inspector",
+    email: "admin.demo@climalogix.local",
+    role: "inspector"
+  }, {
+    label: "Manufacturer",
+    email: "processor.demo@climalogix.local",
+    role: "manufacturer"
+  }].map(acc => /*#__PURE__*/React.createElement("button", {
+    key: acc.label,
+    type: "button",
+    onClick: () => {
+      setEmail(acc.email);
+      setPassword("DemoPass123!");
+      setUiRole(acc.role);
+    },
+    style: {
+      background: "rgba(16, 185, 129, 0.06)",
+      border: "1px solid rgba(16, 185, 129, 0.15)",
+      borderRadius: "6px",
+      padding: "6px 10px",
+      fontSize: "10px",
+      color: "#10B981",
+      cursor: "pointer",
+      fontFamily: "Inter",
+      transition: "all 0.2s"
+    },
+    onMouseEnter: e => {
+      e.currentTarget.style.background = "rgba(16, 185, 129, 0.15)";
+    },
+    onMouseLeave: e => {
+      e.currentTarget.style.background = "rgba(16, 185, 129, 0.06)";
+    }
+  }, acc.label)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      margin: "20px 0 10px 0",
+      display: "flex",
+      alignItems: "center",
+      textAlign: "center",
+      color: "#4B5563"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      height: "1px",
+      background: "rgba(255,255,255,0.1)"
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      padding: "0 10px",
+      fontSize: "12px",
+      fontFamily: "Inter"
+    }
+  }, "New to ClimaLogix?"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      height: "1px",
+      background: "rgba(255,255,255,0.1)"
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => {
+      setMode("register");
+      setError("");
+    },
+    style: {
+      background: "transparent",
+      border: "none",
+      color: "#10B981",
+      fontSize: "14px",
+      fontFamily: "Inter",
+      cursor: "pointer"
+    }
+  }, "Create an account"))))), /*#__PURE__*/React.createElement("div", {
+    className: `auth-card ${mode === "register" ? "card--visible" : "card--hidden"}`
+  }, /*#__PURE__*/React.createElement("div", {
+    className: error && mode === "register" ? "auth-error-shake" : ""
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      textAlign: "center",
+      marginBottom: "30px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "56px",
+      height: "56px",
+      background: "rgba(16, 185, 129, 0.1)",
+      borderRadius: "14px",
+      border: "1px solid rgba(16, 185, 129, 0.2)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: "16px"
+    }
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "28",
+    height: "28",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "#10B981",
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    style: {
+      animation: "pulseGlow 2s ease-in-out infinite"
+    }
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M12 12v10"
+  }))), /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontFamily: "Inter",
+      fontSize: "20px",
+      color: "#F9FAFB",
+      fontWeight: 700,
+      margin: 0
+    }
+  }, "Create Account")), /*#__PURE__*/React.createElement("div", {
+    className: "segment-tabs"
+  }, ["sme", "inspector", "manufacturer"].map(r => /*#__PURE__*/React.createElement("button", {
+    key: r,
+    type: "button",
+    className: `segment-btn ${uiRole === r ? "active" : ""}`,
+    onClick: () => setUiRole(r)
+  }, r.toUpperCase()))), /*#__PURE__*/React.createElement("form", {
+    onSubmit: handleSubmit
+  }, /*#__PURE__*/React.createElement("div", {
+    style: formStyles.inputGroup
+  }, /*#__PURE__*/React.createElement("input", {
+    required: true,
+    type: "text",
+    className: "auth-input-focus",
+    style: formStyles.input,
+    placeholder: " ",
+    value: name,
+    onChange: e => setName(e.target.value)
+  }), /*#__PURE__*/React.createElement("label", {
+    style: {
+      ...formStyles.label,
+      ...(name ? formStyles.labelActive : {})
+    }
+  }, "Full Name")), /*#__PURE__*/React.createElement("div", {
+    style: formStyles.inputGroup
+  }, /*#__PURE__*/React.createElement("input", {
+    required: true,
+    type: "email",
+    className: "auth-input-focus",
+    style: formStyles.input,
+    placeholder: " ",
+    value: email,
+    onChange: e => setEmail(e.target.value)
+  }), /*#__PURE__*/React.createElement("label", {
+    style: {
+      ...formStyles.label,
+      ...(email ? formStyles.labelActive : {})
+    }
+  }, "Email Address")), /*#__PURE__*/React.createElement("div", {
+    style: formStyles.inputGroup
+  }, /*#__PURE__*/React.createElement("input", {
+    required: true,
+    type: "password",
+    className: "auth-input-focus",
+    style: formStyles.input,
+    placeholder: " ",
+    value: password,
+    onChange: e => setPassword(e.target.value)
+  }), /*#__PURE__*/React.createElement("label", {
+    style: {
+      ...formStyles.label,
+      ...(password ? formStyles.labelActive : {})
+    }
+  }, "Password"), password.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "4px",
+      marginTop: "8px",
+      height: "4px"
+    }
+  }, [1, 2, 3, 4].map(s => /*#__PURE__*/React.createElement("div", {
+    key: s,
+    style: {
+      flex: 1,
+      borderRadius: "2px",
+      transition: "all 0.3s",
+      background: s <= entropy ? entropy < 2 ? "#EF4444" : entropy < 4 ? "#F59E0B" : "#10B981" : "rgba(255,255,255,0.1)"
+    }
+  })))), /*#__PURE__*/React.createElement("div", {
+    style: formStyles.inputGroup
+  }, /*#__PURE__*/React.createElement("input", {
+    required: true,
+    type: "password",
+    className: "auth-input-focus",
+    style: formStyles.input,
+    placeholder: " ",
+    value: confirmPassword,
+    onChange: e => setConfirmPassword(e.target.value)
+  }), /*#__PURE__*/React.createElement("label", {
+    style: {
+      ...formStyles.label,
+      ...(confirmPassword ? formStyles.labelActive : {})
+    }
+  }, "Confirm Password")), error && mode === "register" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: "#EF4444",
+      fontSize: "13px",
+      marginBottom: "16px",
+      textAlign: "center",
+      fontFamily: "Inter"
+    }
+  }, error), /*#__PURE__*/React.createElement("button", {
+    type: "submit",
+    className: "auth-btn",
+    disabled: isLoading
+  }, "Create Account"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "center",
+      marginTop: "24px"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#9CA3AF",
+      fontSize: "13px",
+      fontFamily: "Inter"
+    }
+  }, "Already have an account? "), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => {
+      setMode("login");
+      setError("");
+    },
+    style: {
+      background: "transparent",
+      border: "none",
+      color: "#10B981",
+      fontSize: "13px",
+      fontFamily: "Inter",
+      cursor: "pointer"
+    }
+  }, "Sign in")))))));
+}
+window.AuthPanel = AuthPanel;
 const IS_STATIC_FILE_HTML = window.location.protocol === 'file:';
 // Backend API base URL. The production backend that the live dashboard talks
 // to is https://backsme.onrender.com (the previous value of '' resolved to a
@@ -5812,6 +6822,7 @@ function DashboardView({
       marginLeft: 8
     }
   }, "\u25CF"), " AI Assistant (chatbot)")), /*#__PURE__*/React.createElement("div", {
+    className: "grid-4col",
     style: {
       display: "grid",
       gridTemplateColumns: "repeat(4, 1fr)",
@@ -5892,6 +6903,7 @@ function DashboardView({
       color: "var(--text-dim)"
     }
   }, s.sub)))), /*#__PURE__*/React.createElement("div", {
+    className: "grid-2fr-1fr",
     style: {
       display: "grid",
       gridTemplateColumns: "2fr 1fr",
@@ -10860,6 +11872,7 @@ function SystemDocsView({
     return true;
   });
   return /*#__PURE__*/React.createElement("div", {
+    className: "grid-sidebar",
     style: {
       display: "grid",
       gridTemplateColumns: "240px 1fr",
@@ -12476,1200 +13489,1434 @@ const TABS = [{
   icon: "🛒",
   layer: "L3"
 }];
-function HeroLandingPage({
-  onLogin,
-  onRegister
+function LandingView({
+  onGetStarted
 }) {
-  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
-  const [temp, setTemp] = React.useState(32);
-  React.useEffect(() => {
-    const observer = new IntersectionObserver(entries => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('visible');
-        }
-      });
-    }, {
-      threshold: 0.08
-    });
-    document.querySelectorAll('.scroll-animate').forEach(el => {
-      observer.observe(el);
-    });
-    return () => observer.disconnect();
-  }, []);
+  const [searchId, setSearchId] = useState("");
+  const [activeSearchId, setActiveSearchId] = useState("");
 
-  // Live Demo Math
-  const routeRisk = temp >= 40 ? "CRITICAL" : temp >= 33 ? "MODERATE" : "LOW";
-  const riskColor = temp >= 40 ? "#EF4444" : temp >= 33 ? "#F59E0B" : "#10B981";
-
-  // TST Calculation: TST (minutes) = Math.max(10, Math.round((Trust Score * Packaging Factor * Base Survival Multiplier) / (Hazard Multiplier * Solar Hour Multiplier) * 60))
-  // For demo: Trust Score=85, Insulated Packaging=2.0, Base Survival=1.0. Hazard rises with temp.
-  const hazardFactor = temp >= 40 ? 1.8 : temp >= 33 ? 1.3 : 0.8;
-  const calculatedTst = Math.max(10, Math.round(85 * 2.0 * 1.0 / (hazardFactor * 1.2) * 60));
+  // Contact Form State
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactOrg, setContactOrg] = useState("");
+  const [contactMessage, setContactMessage] = useState("");
+  const [contactSubmitted, setContactSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const handleSearchSubmit = e => {
+    e.preventDefault();
+    if (searchId.trim()) {
+      setActiveSearchId(searchId.trim());
+    }
+  };
+  const handleContactSubmit = e => {
+    e.preventDefault();
+    if (!contactName || !contactEmail || !contactMessage) {
+      alert("Please fill in all required fields.");
+      return;
+    }
+    setSubmitting(true);
+    setTimeout(() => {
+      setSubmitting(false);
+      setContactSubmitted(true);
+      // Reset form
+      setContactName("");
+      setContactEmail("");
+      setContactOrg("");
+      setContactMessage("");
+    }, 1200);
+  };
   return /*#__PURE__*/React.createElement("div", {
     style: {
+      minHeight: "100vh",
       background: "#0B0F19",
+      backgroundImage: "radial-gradient(circle at top right, rgba(16, 185, 129, 0.08), transparent 40%), radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.05), transparent 45%)",
       color: "#F9FAFB",
       fontFamily: "'Inter', sans-serif",
-      minHeight: "100vh",
-      overflowX: "hidden"
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "space-between"
     }
-  }, /*#__PURE__*/React.createElement("style", null, `
-        .scroll-animate {
-          opacity: 0;
-          transform: translateY(30px);
-          transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .scroll-animate.visible {
-          opacity: 1;
-          transform: translateY(0);
-        }
-        .delay-100 { transition-delay: 100ms; }
-        .delay-200 { transition-delay: 200ms; }
-        .delay-300 { transition-delay: 300ms; }
-        .delay-400 { transition-delay: 400ms; }
-        .delay-500 { transition-delay: 500ms; }
-
-        .hero-title span {
-          background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-        }
-
-        .cta-primary {
-          background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-          box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
-          transition: all 0.25s ease;
-        }
-        .cta-primary:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
-          filter: brightness(1.1);
-        }
-
-        .cta-secondary {
-          border: 1px solid rgba(52, 211, 153, 0.65);
-          background: rgba(255, 255, 255, 0.05);
-          color: #34D399;
-          transition: all 0.25s ease;
-        }
-        .cta-secondary:hover {
-          background: rgba(52, 211, 153, 0.15);
-          border-color: #34D399;
-          transform: translateY(-2px);
-          box-shadow: 0 4px 14px rgba(52, 211, 153, 0.25);
-        }
-
-        .glass-panel {
-          background: rgba(17, 24, 39, 0.75);
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
-          border: 1px solid rgba(16, 185, 129, 0.18);
-          border-radius: 16px;
-        }
-
-        .problem-card {
-          border-left: 4px solid #10B981;
-        }
-
-        .feature-num {
-          font-family: 'JetBrains Mono', monospace;
-          color: #10B981;
-          text-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
-        }
-
-        .map-zone {
-          transition: fill 0.5s ease;
-        }
-
-        .logo-badge {
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 9999px;
-          padding: 8px 18px;
-          font-size: 13px;
-          font-family: 'JetBrains Mono', monospace;
-          color: #94A3B8;
-        }
-
-        .mobile-drawer {
-          transform: translateX(100%);
-          transition: transform 0.3s ease-in-out;
-        }
-        .mobile-drawer.open {
-          transform: translateX(0);
-        }
-      `), /*#__PURE__*/React.createElement("nav", {
+  }, /*#__PURE__*/React.createElement("header", {
     style: {
-      position: "fixed",
-      top: 0,
-      left: 0,
-      right: 0,
-      zIndex: 50,
-      background: "rgba(11, 15, 25, 0.85)",
+      padding: "20px 40px",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
       backdropFilter: "blur(12px)",
       WebkitBackdropFilter: "blur(12px)",
-      borderBottom: "1px solid rgba(16, 185, 129, 0.15)",
-      height: "64px",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      padding: "0 24px"
+      background: "rgba(11, 15, 25, 0.6)",
+      position: "sticky",
+      top: 0,
+      zIndex: 100
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
-      gap: "8px",
-      cursor: "pointer"
+      gap: "10px"
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
-      fontSize: "22px"
-    }
-  }, "\uD83C\uDF0D"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontFamily: "Inter",
-      fontWeight: "800",
-      fontSize: "19px",
-      letterSpacing: "-0.02em",
-      color: "#F9FAFB"
-    }
-  }, "ClimaLogix", /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: "#10B981"
-    }
-  }, ".ai"))), /*#__PURE__*/React.createElement("div", {
-    className: "hidden-mobile",
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: "28px"
-    }
-  }, /*#__PURE__*/React.createElement("a", {
-    href: "#features",
-    style: {
-      color: "#94A3B8",
-      textDecoration: "none",
-      fontSize: "14px",
-      fontWeight: "500",
-      transition: "color 0.2s"
-    },
-    onMouseOver: e => e.target.style.color = "#10B981",
-    onMouseOut: e => e.target.style.color = "#94A3B8"
-  }, "Features"), /*#__PURE__*/React.createElement("a", {
-    href: "#demo",
-    style: {
-      color: "#94A3B8",
-      textDecoration: "none",
-      fontSize: "14px",
-      fontWeight: "500",
-      transition: "color 0.2s"
-    },
-    onMouseOver: e => e.target.style.color = "#10B981",
-    onMouseOut: e => e.target.style.color = "#94A3B8"
-  }, "Demo"), /*#__PURE__*/React.createElement("a", {
-    href: "#testimonials",
-    style: {
-      color: "#94A3B8",
-      textDecoration: "none",
-      fontSize: "14px",
-      fontWeight: "500",
-      transition: "color 0.2s"
-    },
-    onMouseOver: e => e.target.style.color = "#10B981",
-    onMouseOut: e => e.target.style.color = "#94A3B8"
-  }, "Pricing"), /*#__PURE__*/React.createElement("a", {
-    href: "#docs",
-    style: {
-      color: "#94A3B8",
-      textDecoration: "none",
-      fontSize: "14px",
-      fontWeight: "500",
-      transition: "color 0.2s"
-    },
-    onMouseOver: e => e.target.style.color = "#10B981",
-    onMouseOut: e => e.target.style.color = "#94A3B8"
-  }, "Docs"), /*#__PURE__*/React.createElement("button", {
-    onClick: onLogin,
-    style: {
-      background: "transparent",
-      border: "1px solid #10B981",
-      borderRadius: "8px",
-      color: "#10B981",
-      padding: "8px 16px",
-      cursor: "pointer",
-      fontSize: "14px",
-      fontWeight: "600",
-      transition: "all 0.2s"
-    },
-    onMouseOver: e => {
-      e.target.style.background = "rgba(16, 185, 129, 0.1)";
-    },
-    onMouseOut: e => e.target.style.background = "transparent"
-  }, "Login"), /*#__PURE__*/React.createElement("button", {
-    onClick: onRegister,
-    className: "cta-primary",
-    style: {
-      border: "none",
-      borderRadius: "8px",
-      color: "#0B0F19",
-      padding: "8px 18px",
-      cursor: "pointer",
-      fontSize: "14px",
-      fontWeight: "700"
-    }
-  }, "Get Started")), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setMobileMenuOpen(!mobileMenuOpen),
-    className: "visible-mobile-only",
-    style: {
-      background: "transparent",
-      border: "none",
-      color: "#F9FAFB",
-      cursor: "pointer",
       fontSize: "24px"
     }
-  }, mobileMenuOpen ? "✕" : "☰"), /*#__PURE__*/React.createElement("div", {
-    className: `mobile-drawer ${mobileMenuOpen ? 'open' : ''}`,
+  }, "\uD83C\uDF31"), /*#__PURE__*/React.createElement("span", {
     style: {
-      position: "fixed",
-      top: "64px",
-      right: 0,
-      bottom: 0,
-      width: "260px",
-      background: "#0B0F19",
-      borderLeft: "1px solid rgba(16, 185, 129, 0.15)",
-      display: "flex",
-      flexDirection: "column",
-      padding: "24px",
-      gap: "20px",
-      zIndex: 49,
-      boxShadow: "-10px 0 30px rgba(0,0,0,0.5)"
-    }
-  }, /*#__PURE__*/React.createElement("a", {
-    href: "#features",
-    onClick: () => setMobileMenuOpen(false),
-    style: {
-      color: "#F9FAFB",
-      textDecoration: "none",
-      fontSize: "16px",
-      fontWeight: "600"
-    }
-  }, "Features"), /*#__PURE__*/React.createElement("a", {
-    href: "#demo",
-    onClick: () => setMobileMenuOpen(false),
-    style: {
-      color: "#F9FAFB",
-      textDecoration: "none",
-      fontSize: "16px",
-      fontWeight: "600"
-    }
-  }, "Demo"), /*#__PURE__*/React.createElement("a", {
-    href: "#testimonials",
-    onClick: () => setMobileMenuOpen(false),
-    style: {
-      color: "#F9FAFB",
-      textDecoration: "none",
-      fontSize: "16px",
-      fontWeight: "600"
-    }
-  }, "Pricing"), /*#__PURE__*/React.createElement("a", {
-    href: "#docs",
-    onClick: () => setMobileMenuOpen(false),
-    style: {
-      color: "#F9FAFB",
-      textDecoration: "none",
-      fontSize: "16px",
-      fontWeight: "600"
-    }
-  }, "Docs"), /*#__PURE__*/React.createElement("hr", {
-    style: {
-      border: "none",
-      borderTop: "1px solid rgba(255,255,255,0.08)"
-    }
-  }), /*#__PURE__*/React.createElement("button", {
-    onClick: () => {
-      setMobileMenuOpen(false);
-      onLogin();
-    },
-    style: {
-      background: "transparent",
-      border: "1px solid #10B981",
-      borderRadius: "8px",
-      color: "#10B981",
-      padding: "12px",
-      cursor: "pointer",
-      fontSize: "15px",
-      fontWeight: "600"
-    }
-  }, "Login"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => {
-      setMobileMenuOpen(false);
-      onRegister();
-    },
-    className: "cta-primary",
-    style: {
-      border: "none",
-      borderRadius: "8px",
-      color: "#0B0F19",
-      padding: "12px",
-      cursor: "pointer",
-      fontSize: "15px",
-      fontWeight: "700"
-    }
-  }, "Get Started"))), /*#__PURE__*/React.createElement("section", {
-    style: {
-      minHeight: "100vh",
-      display: "grid",
-      gridTemplateColumns: "1.2fr 1fr",
-      padding: "100px 40px 40px",
-      gap: "40px",
-      alignItems: "center",
-      maxWidth: "1400px",
-      margin: "0 auto",
-      boxSizing: "border-box"
-    },
-    className: "stack-mobile"
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: "24px"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "scroll-animate",
-    style: {
-      alignSelf: "flex-start"
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      background: "rgba(16, 185, 129, 0.08)",
-      border: "1px solid rgba(16, 185, 129, 0.3)",
-      borderRadius: "9999px",
-      padding: "6px 14px",
-      fontSize: "11px",
-      fontWeight: "700",
-      color: "#10B981",
+      fontWeight: 800,
+      fontSize: "20px",
       letterSpacing: "0.05em",
-      textTransform: "uppercase"
-    }
-  }, "\uD83D\uDCE1 AI-Powered Climate Logistics")), /*#__PURE__*/React.createElement("h1", {
-    className: "hero-title scroll-animate delay-100",
-    style: {
-      fontSize: "clamp(32px, 5vw, 52px)",
-      fontWeight: "800",
-      lineHeight: "1.1",
-      letterSpacing: "-0.03em"
-    }
-  }, "Protect Your Supply Chain from the ", /*#__PURE__*/React.createElement("span", null, "Heat")), /*#__PURE__*/React.createElement("p", {
-    className: "scroll-animate delay-200",
-    style: {
-      fontSize: "17px",
-      color: "#D1D5DB",
-      lineHeight: "1.6",
-      maxWidth: "600px"
-    }
-  }, "ClimaLogix AI monitors real-time thermal conditions, optimizes heat-safe routes, and shields SME logistics in climate-vulnerable regions like Bangladesh."), /*#__PURE__*/React.createElement("div", {
-    className: "scroll-animate delay-300",
-    style: {
-      display: "flex",
-      gap: "16px",
-      flexWrap: "wrap",
-      marginTop: "8px"
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: onRegister,
-    className: "cta-primary",
-    style: {
-      border: "none",
-      borderRadius: "10px",
-      color: "#0B0F19",
-      padding: "14px 28px",
-      cursor: "pointer",
-      fontSize: "15px",
-      fontWeight: "700"
-    }
-  }, "Get Started Free"), /*#__PURE__*/React.createElement("a", {
-    href: "#demo",
-    className: "cta-secondary",
-    style: {
-      borderRadius: "10px",
-      padding: "14px 28px",
-      textDecoration: "none",
-      textAlign: "center",
-      fontSize: "15px",
-      fontWeight: "700",
-      display: "inline-block"
-    }
-  }, "Watch Demo")), /*#__PURE__*/React.createElement("div", {
-    className: "scroll-animate delay-400",
-    style: {
-      display: "flex",
-      gap: "24px",
-      flexWrap: "wrap",
-      borderTop: "1px solid rgba(255,255,255,0.06)",
-      paddingTop: "28px",
-      marginTop: "16px"
-    }
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontFamily: "'JetBrains Mono', monospace",
-      color: "#10B981",
-      fontSize: "24px",
-      fontWeight: "700"
-    }
-  }, "2,400+"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      color: "#CBD5E1",
-      fontSize: "12px",
-      marginTop: "2px"
-    }
-  }, "SMEs Protected")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: "1px",
-      background: "rgba(255,255,255,0.1)"
-    }
-  }), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontFamily: "'JetBrains Mono', monospace",
-      color: "#10B981",
-      fontSize: "24px",
-      fontWeight: "700"
-    }
-  }, "98.7%"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      color: "#CBD5E1",
-      fontSize: "12px",
-      marginTop: "2px"
-    }
-  }, "Route Accuracy")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: "1px",
-      background: "rgba(255,255,255,0.1)"
-    }
-  }), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontFamily: "'JetBrains Mono', monospace",
-      color: "#10B981",
-      fontSize: "24px",
-      fontWeight: "700"
-    }
-  }, "12+"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      color: "#CBD5E1",
-      fontSize: "12px",
-      marginTop: "2px"
-    }
-  }, "Districts Active")))), /*#__PURE__*/React.createElement("div", {
-    className: "scroll-animate delay-300",
-    style: {
-      height: "100%",
-      minHeight: "450px",
-      position: "relative"
-    }
-  }, window.ThreeScene ? /*#__PURE__*/React.createElement(window.ThreeScene, null) : /*#__PURE__*/React.createElement("div", {
-    style: {
       color: "#10B981"
     }
-  }, "Loading 3D Atmosphere Scene..."))), /*#__PURE__*/React.createElement("section", {
-    id: "features",
+  }, "ClimaLogix AI")), /*#__PURE__*/React.createElement("button", {
+    onClick: onGetStarted,
     style: {
-      background: "#111827",
-      padding: "100px 40px",
-      borderTop: "1px solid rgba(255,255,255,0.04)",
-      borderBottom: "1px solid rgba(255,255,255,0.04)"
+      background: "#10B981",
+      color: "#0B0F19",
+      border: "none",
+      borderRadius: "8px",
+      padding: "10px 20px",
+      fontSize: "13px",
+      fontWeight: 700,
+      cursor: "pointer",
+      transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+      boxShadow: "0 0 15px rgba(16, 185, 129, 0.3)"
+    },
+    onMouseEnter: e => {
+      e.currentTarget.style.transform = "scale(1.05)";
+      e.currentTarget.style.boxShadow = "0 0 25px rgba(16, 185, 129, 0.5)";
+    },
+    onMouseLeave: e => {
+      e.currentTarget.style.transform = "scale(1)";
+      e.currentTarget.style.boxShadow = "0 0 15px rgba(16, 185, 129, 0.3)";
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, "GET STARTED")), /*#__PURE__*/React.createElement("main", {
     style: {
+      flex: 1,
+      padding: "60px 20px",
       maxWidth: "1200px",
-      margin: "0 auto"
+      margin: "0 auto",
+      width: "100%"
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: "scroll-animate",
     style: {
       textAlign: "center",
-      marginBottom: "64px"
+      marginBottom: "80px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "8px",
+      background: "rgba(16, 185, 129, 0.08)",
+      border: "1px solid rgba(16, 185, 129, 0.25)",
+      padding: "6px 16px",
+      borderRadius: "999px",
+      fontSize: "12px",
+      fontWeight: 600,
+      color: "#10B981",
+      marginBottom: "24px",
+      letterSpacing: "0.05em"
+    }
+  }, /*#__PURE__*/React.createElement("span", null, "\uD83D\uDD12"), " CRYPTOGRAPHICALLY VERIFIED COLD CHAIN & LOGISTICS"), /*#__PURE__*/React.createElement("h1", {
+    style: {
+      fontSize: "48px",
+      fontWeight: 800,
+      lineHeight: 1.15,
+      marginBottom: "24px",
+      letterSpacing: "-0.03em",
+      background: "linear-gradient(135deg, #FFFFFF 40%, #34D399 100%)",
+      WebkitBackgroundClip: "text",
+      WebkitTextFillColor: "transparent"
+    }
+  }, "Predictive Climate-Resilient Agricultural Supply Chains"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "17px",
+      color: "#9CA3AF",
+      maxWidth: "750px",
+      margin: "0 auto 36px auto",
+      lineHeight: 1.6
+    }
+  }, "Synchronizing hardware IoT microclimate telemetry, AI-driven thermal hazard routing, and cryptographic ledger verification to assure crop provenance and combat dynamic transit degradation."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "center",
+      gap: "16px"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onGetStarted,
+    style: {
+      background: "linear-gradient(135deg, #10B981, #059669)",
+      color: "#FFFFFF",
+      border: "none",
+      borderRadius: "10px",
+      padding: "14px 32px",
+      fontSize: "14px",
+      fontWeight: 700,
+      cursor: "pointer",
+      transition: "all 0.2s",
+      boxShadow: "0 4px 20px rgba(16, 185, 129, 0.25)"
+    },
+    onMouseEnter: e => {
+      e.currentTarget.style.transform = "translateY(-2px)";
+    },
+    onMouseLeave: e => {
+      e.currentTarget.style.transform = "translateY(0)";
+    }
+  }, "Access Platform Portal"), /*#__PURE__*/React.createElement("a", {
+    href: "#trace",
+    style: {
+      background: "rgba(255, 255, 255, 0.04)",
+      border: "1px solid rgba(255, 255, 255, 0.08)",
+      borderRadius: "10px",
+      padding: "14px 32px",
+      fontSize: "14px",
+      fontWeight: 700,
+      color: "#F3F4F6",
+      cursor: "pointer",
+      textDecoration: "none",
+      display: "inline-block",
+      transition: "all 0.2s"
+    },
+    onMouseEnter: e => {
+      e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
+    },
+    onMouseLeave: e => {
+      e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)";
+    }
+  }, "Instant Provenance Tracer")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: "48px",
+      position: "relative",
+      borderRadius: "16px",
+      overflow: "hidden",
+      border: "1px solid rgba(255, 255, 255, 0.08)",
+      boxShadow: "0 20px 40px rgba(0, 0, 0, 0.4)"
+    }
+  }, /*#__PURE__*/React.createElement("img", {
+    src: "./farm_banner.png",
+    alt: "Sustainable Agricultural Logistics Hub",
+    style: {
+      width: "100%",
+      height: "auto",
+      maxHeight: "400px",
+      objectFit: "cover",
+      display: "block"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      bottom: 0,
+      left: 0,
+      right: 0,
+      background: "linear-gradient(to top, rgba(11, 15, 25, 0.9) 0%, rgba(11, 15, 25, 0) 100%)",
+      padding: "24px 32px",
+      textAlign: "left"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "11px",
+      fontWeight: 700,
+      color: "#10B981",
+      letterSpacing: "0.1em",
+      textTransform: "uppercase",
+      marginBottom: "4px"
+    }
+  }, "Active Staging & Operations"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "16px",
+      fontWeight: 700,
+      color: "#FFFFFF"
+    }
+  }, "ClimaLogix-Enabled Farm Cooperatives")))), /*#__PURE__*/React.createElement("div", {
+    id: "trace",
+    style: {
+      background: "rgba(17, 24, 39, 0.65)",
+      backdropFilter: "blur(20px)",
+      border: "1px solid rgba(16, 185, 129, 0.15)",
+      borderRadius: "16px",
+      padding: "32px",
+      boxShadow: "0 10px 40px rgba(0, 0, 0, 0.3)",
+      marginBottom: "80px"
     }
   }, /*#__PURE__*/React.createElement("h2", {
     style: {
-      fontSize: "clamp(26px, 4vw, 36px)",
-      fontWeight: "800",
-      maxWidth: "800px",
-      margin: "0 auto 18px",
-      lineHeight: "1.2"
+      fontSize: "20px",
+      fontWeight: 700,
+      marginBottom: "12px",
+      color: "#F9FAFB",
+      display: "flex",
+      alignItems: "center",
+      gap: "8px"
     }
-  }, "Bangladesh Loses Billions to Heat-Damaged Goods Every Year"), /*#__PURE__*/React.createElement("p", {
+  }, /*#__PURE__*/React.createElement("span", null, "\uD83D\uDD0D"), " Global Provenance Verification"), /*#__PURE__*/React.createElement("p", {
     style: {
-      color: "#94A3B8",
-      fontSize: "16px",
-      maxWidth: "600px",
-      margin: "0 auto"
+      fontSize: "13px",
+      color: "#9CA3AF",
+      marginBottom: "20px"
     }
-  }, "Traditional shipping models fail to protect delicate assets during seasonal heat spikes in urban logistics paths.")), /*#__PURE__*/React.createElement("div", {
+  }, "Query real-time batch telemetry, thermal preservation indicators, and BARI trust certs directly. Secure, immediate, and authorization-free."), /*#__PURE__*/React.createElement("form", {
+    onSubmit: handleSearchSubmit,
+    style: {
+      display: "flex",
+      gap: "10px",
+      marginBottom: "24px"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    value: searchId,
+    onChange: e => setSearchId(e.target.value),
+    placeholder: "Input Batch Signature (e.g. BCH-3180) or paste cryptographic hash...",
+    style: {
+      flex: 1,
+      padding: "14px 16px",
+      fontSize: "13px",
+      background: "rgba(255, 255, 255, 0.03)",
+      border: "1px solid rgba(255, 255, 255, 0.08)",
+      borderRadius: "10px",
+      color: "#FFFFFF",
+      fontFamily: "'JetBrains Mono', monospace",
+      outline: "none"
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    type: "submit",
+    style: {
+      background: "rgba(59, 130, 246, 0.12)",
+      color: "#3B82F6",
+      border: "1px solid rgba(59, 130, 246, 0.35)",
+      borderRadius: "10px",
+      padding: "14px 28px",
+      fontSize: "13px",
+      fontWeight: 700,
+      cursor: "pointer",
+      transition: "all 0.2s"
+    },
+    onMouseEnter: e => {
+      e.currentTarget.style.background = "rgba(59, 130, 246, 0.2)";
+    },
+    onMouseLeave: e => {
+      e.currentTarget.style.background = "rgba(59, 130, 246, 0.12)";
+    }
+  }, "VERIFY BATCH")), activeSearchId && /*#__PURE__*/React.createElement("div", {
+    style: {
+      borderTop: "1px solid rgba(255, 255, 255, 0.06)",
+      paddingTop: "24px",
+      marginTop: "10px"
+    }
+  }, /*#__PURE__*/React.createElement(TrackingView, {
+    prefilledId: activeSearchId
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: "80px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "center",
+      marginBottom: "40px"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "11px",
+      fontWeight: 700,
+      color: "#10B981",
+      letterSpacing: "0.15em",
+      textTransform: "uppercase"
+    }
+  }, "Ecosystem Integration"), /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontSize: "28px",
+      fontWeight: 800,
+      marginTop: "8px",
+      color: "#FFFFFF"
+    }
+  }, "Coordinated Supply Chain Stakeholders"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "14px",
+      color: "#9CA3AF",
+      marginTop: "10px"
+    }
+  }, "Assuring quality and transparency for every role in the agricultural logistics cycle.")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
-      gridTemplateColumns: "repeat(3, 1fr)",
-      gap: "28px"
-    },
-    className: "stack-mobile"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "glass-panel problem-card scroll-animate",
-    style: {
-      padding: "32px"
+      gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+      gap: "24px"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: "32px",
-      marginBottom: "16px"
+      background: "rgba(17, 24, 39, 0.4)",
+      border: "1px solid rgba(255,255,255,0.05)",
+      borderRadius: "14px",
+      padding: "24px"
     }
-  }, "\uD83C\uDF21\uFE0F"), /*#__PURE__*/React.createElement("h3", {
+  }, /*#__PURE__*/React.createElement("img", {
+    src: "./harvest.png",
+    alt: "Harvest Operations",
     style: {
-      fontSize: "18px",
-      fontWeight: "700",
-      marginBottom: "12px"
+      width: "100%",
+      height: "130px",
+      objectFit: "cover",
+      borderRadius: "10px",
+      marginBottom: "16px",
+      border: "1px solid rgba(255,255,255,0.04)"
     }
-  }, "Extreme Heat Events"), /*#__PURE__*/React.createElement("p", {
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
-      color: "#94A3B8",
-      fontSize: "14px",
-      lineHeight: "1.6"
+      fontSize: "28px",
+      marginBottom: "8px",
+      display: "none"
     }
-  }, "Temperature spikes above 42\xB0C devastate perishable agricultural and biological goods without real-time microclimate monitoring.")), /*#__PURE__*/React.createElement("div", {
-    className: "glass-panel problem-card scroll-animate delay-150",
+  }, "\uD83D\uDC69\u200D\uD83C\uDF3E"), /*#__PURE__*/React.createElement("h3", {
     style: {
-      padding: "32px"
+      fontSize: "17px",
+      fontWeight: 700,
+      color: "#FFFFFF",
+      marginBottom: "10px"
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, "Primary Producers"), /*#__PURE__*/React.createElement("p", {
     style: {
-      fontSize: "32px",
-      marginBottom: "16px"
+      fontSize: "13px",
+      color: "#9CA3AF",
+      lineHeight: 1.5
+    }
+  }, "Agricultural cooperatives and local farms log immediate crop specifications, microclimate data, and GPS signatures directly at harvest origin.")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(17, 24, 39, 0.4)",
+      border: "1px solid rgba(255,255,255,0.05)",
+      borderRadius: "14px",
+      padding: "24px"
+    }
+  }, /*#__PURE__*/React.createElement("img", {
+    src: "./logistics_driver.png",
+    alt: "Logistics Tracking",
+    style: {
+      width: "100%",
+      height: "130px",
+      objectFit: "cover",
+      borderRadius: "10px",
+      marginBottom: "16px",
+      border: "1px solid rgba(255,255,255,0.04)"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "28px",
+      marginBottom: "8px",
+      display: "none"
     }
   }, "\uD83D\uDE9B"), /*#__PURE__*/React.createElement("h3", {
     style: {
-      fontSize: "18px",
-      fontWeight: "700",
-      marginBottom: "12px"
+      fontSize: "17px",
+      fontWeight: 700,
+      color: "#FFFFFF",
+      marginBottom: "10px"
     }
-  }, "Blind Route Planning"), /*#__PURE__*/React.createElement("p", {
+  }, "Fleet Operators"), /*#__PURE__*/React.createElement("p", {
     style: {
-      color: "#94A3B8",
-      fontSize: "14px",
-      lineHeight: "1.6"
+      fontSize: "13px",
+      color: "#9CA3AF",
+      lineHeight: 1.5
     }
-  }, "Drivers navigate without corridor-specific thermal risk data, exposing high-value shipments to critical temperature zones.")), /*#__PURE__*/React.createElement("div", {
-    className: "glass-panel problem-card scroll-animate delay-300",
+  }, "Logistics managers monitor transit corridors, receiving heatwave alerts and dynamic routing suggestions to avoid severe urban heat hazard vectors.")), /*#__PURE__*/React.createElement("div", {
     style: {
-      padding: "32px"
+      background: "rgba(17, 24, 39, 0.4)",
+      border: "1px solid rgba(255,255,255,0.05)",
+      borderRadius: "14px",
+      padding: "24px"
+    }
+  }, /*#__PURE__*/React.createElement("img", {
+    src: "./industrial_processors.png",
+    alt: "Industrial Processors",
+    style: {
+      width: "100%",
+      height: "130px",
+      objectFit: "cover",
+      borderRadius: "10px",
+      marginBottom: "16px",
+      border: "1px solid rgba(255,255,255,0.04)"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "28px",
+      marginBottom: "8px",
+      display: "none"
+    }
+  }, "\uD83C\uDFED"), /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontSize: "17px",
+      fontWeight: 700,
+      color: "#FFFFFF",
+      marginBottom: "10px"
+    }
+  }, "Industrial Processors"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "13px",
+      color: "#9CA3AF",
+      lineHeight: 1.5
+    }
+  }, "Food and biochemical manufacturers retrieve complete temperature preservation logs and chemical metrics to guarantee feedstock integrity.")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(17, 24, 39, 0.4)",
+      border: "1px solid rgba(255,255,255,0.05)",
+      borderRadius: "14px",
+      padding: "24px"
+    }
+  }, /*#__PURE__*/React.createElement("img", {
+    src: "./inspector.png",
+    alt: "Quality Inspection",
+    style: {
+      width: "100%",
+      height: "130px",
+      objectFit: "cover",
+      borderRadius: "10px",
+      marginBottom: "16px",
+      border: "1px solid rgba(255,255,255,0.04)"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "28px",
+      marginBottom: "8px",
+      display: "none"
+    }
+  }, "\uD83D\uDD75\uFE0F\u200D\u2642\uFE0F"), /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontSize: "17px",
+      fontWeight: 700,
+      color: "#FFFFFF",
+      marginBottom: "10px"
+    }
+  }, "Quality Inspectors"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "13px",
+      color: "#9CA3AF",
+      lineHeight: 1.5
+    }
+  }, "Regulatory officers and certification agencies inspect IoT ledgers to grant BARI-compliant quality seals and approve compliance certifications.")))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: "80px"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: "32px",
-      marginBottom: "16px"
+      textAlign: "center",
+      marginBottom: "40px"
     }
-  }, "\uD83D\uDCE6"), /*#__PURE__*/React.createElement("h3", {
+  }, /*#__PURE__*/React.createElement("span", {
     style: {
-      fontSize: "18px",
-      fontWeight: "700",
+      fontSize: "11px",
+      fontWeight: 700,
+      color: "#3B82F6",
+      letterSpacing: "0.15em",
+      textTransform: "uppercase"
+    }
+  }, "Operational Excellence"), /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontSize: "28px",
+      fontWeight: 800,
+      marginTop: "8px",
+      color: "#FFFFFF"
+    }
+  }, "Measurable Supply Chain Outcomes"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "14px",
+      color: "#9CA3AF",
+      marginTop: "10px"
+    }
+  }, "Realizing tangible mitigation and trust indexes across high-value cold chains.")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+      gap: "24px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "linear-gradient(135deg, rgba(16,185,129,0.03), rgba(17,24,39,0.6))",
+      border: "1px solid rgba(16,185,129,0.15)",
+      borderRadius: "14px",
+      padding: "28px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "11px",
+      fontWeight: 700,
+      color: "#10B981",
+      letterSpacing: "0.1em",
       marginBottom: "12px"
     }
-  }, "No Cold-Chain Visibility"), /*#__PURE__*/React.createElement("p", {
+  }, "LOSS MINIMIZATION"), /*#__PURE__*/React.createElement("h3", {
     style: {
-      color: "#94A3B8",
-      fontSize: "14px",
-      lineHeight: "1.6"
+      fontSize: "18px",
+      fontWeight: 700,
+      color: "#FFFFFF",
+      marginBottom: "10px"
     }
-  }, "SMEs lack affordable IoT analytics to track batch quality degradation, insulation metrics, and precise spoilage risk."))))), /*#__PURE__*/React.createElement("section", {
+  }, "~35% Spoilage Reduction"), /*#__PURE__*/React.createElement("p", {
     style: {
-      padding: "100px 40px",
-      maxWidth: "1200px",
-      margin: "0 auto"
+      fontSize: "13px",
+      color: "#9CA3AF",
+      lineHeight: 1.5
+    }
+  }, "Bypassing microclimatic thermal pockets and urban heat islands ensures sensitive organic inputs remain inside safe temperature thresholds.")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "linear-gradient(135deg, rgba(59,130,246,0.03), rgba(17,24,39,0.6))",
+      border: "1px solid rgba(59,130,246,0.15)",
+      borderRadius: "14px",
+      padding: "28px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "11px",
+      fontWeight: 700,
+      color: "#3B82F6",
+      letterSpacing: "0.1em",
+      marginBottom: "12px"
+    }
+  }, "PREVENTATIVE ANALYTICS"), /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontSize: "18px",
+      fontWeight: 700,
+      color: "#FFFFFF",
+      marginBottom: "10px"
+    }
+  }, "Dynamic Viability Scoring"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "13px",
+      color: "#9CA3AF",
+      lineHeight: 1.5
+    }
+  }, "Continuous calculation of product decay velocities (DVS) enables real-time updates to delivery routes and inventory prioritize.")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "linear-gradient(135deg, rgba(245,158,11,0.03), rgba(17,24,39,0.6))",
+      border: "1px solid rgba(245,158,11,0.15)",
+      borderRadius: "14px",
+      padding: "28px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "11px",
+      fontWeight: 700,
+      color: "#F59E0B",
+      letterSpacing: "0.1em",
+      marginBottom: "12px"
+    }
+  }, "BRAND EQUITY"), /*#__PURE__*/React.createElement("h3", {
+    style: {
+      fontSize: "18px",
+      fontWeight: 700,
+      color: "#FFFFFF",
+      marginBottom: "10px"
+    }
+  }, "Cryptographic Trust Validation"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "13px",
+      color: "#9CA3AF",
+      lineHeight: 1.5
+    }
+  }, "Equipping products with verifiable public records of origin builds customer trust and matches requirements for organic certifications.")))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: "80px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "center",
+      marginBottom: "40px"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "11px",
+      fontWeight: 700,
+      color: "#F59E0B",
+      letterSpacing: "0.15em",
+      textTransform: "uppercase"
+    }
+  }, "Core Differentiation"), /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontSize: "28px",
+      fontWeight: 800,
+      marginTop: "8px",
+      color: "#FFFFFF"
+    }
+  }, "Next-Generation Technology Integration"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "14px",
+      color: "#9CA3AF",
+      marginTop: "10px"
+    }
+  }, "Why enterprise operators deploy ClimaLogix over traditional logistics systems.")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr 1fr",
+      gap: "24px"
+    },
+    className: "stack-mobile"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "20px",
+      borderLeft: "3px solid #10B981",
+      background: "rgba(255,255,255,0.01)"
+    }
+  }, /*#__PURE__*/React.createElement("h4", {
+    style: {
+      fontSize: "15px",
+      fontWeight: 700,
+      color: "#FFFFFF",
+      marginBottom: "8px"
+    }
+  }, "Direct IoT Ledger Binding"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "12.5px",
+      color: "#9CA3AF",
+      lineHeight: 1.5
+    }
+  }, "Sensor measurements are written directly from field modems into cryptographic records, preventing data alteration or manual spreadsheet errors.")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "20px",
+      borderLeft: "3px solid #3B82F6",
+      background: "rgba(255,255,255,0.01)"
+    }
+  }, /*#__PURE__*/React.createElement("h4", {
+    style: {
+      fontSize: "15px",
+      fontWeight: 700,
+      color: "#FFFFFF",
+      marginBottom: "8px"
+    }
+  }, "Urban Heat Island (UHI) Mapping"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "12.5px",
+      color: "#9CA3AF",
+      lineHeight: 1.5
+    }
+  }, "Resolving micro-scale thermal pockets within built city environments, compared to standard regional atmospheric models.")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "20px",
+      borderLeft: "3px solid #F59E0B",
+      background: "rgba(255,255,255,0.01)"
+    }
+  }, /*#__PURE__*/React.createElement("h4", {
+    style: {
+      fontSize: "15px",
+      fontWeight: 700,
+      color: "#FFFFFF",
+      marginBottom: "8px"
+    }
+  }, "BARI-Calibrated Calculations"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "12.5px",
+      color: "#9CA3AF",
+      lineHeight: 1.5
+    }
+  }, "Product expiration curves utilize mathematical formulations validated by regional scientific agricultural research institutes.")))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "linear-gradient(180deg, rgba(17, 24, 39, 0.4) 0%, rgba(17, 24, 39, 0.8) 100%)",
+      border: "1px solid rgba(255, 255, 255, 0.06)",
+      borderRadius: "20px",
+      padding: "40px",
+      boxShadow: "0 20px 50px rgba(0, 0, 0, 0.4)",
+      marginBottom: "40px"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
       gridTemplateColumns: "1fr 1.2fr",
-      gap: "60px"
+      gap: "40px"
     },
     className: "stack-mobile"
-  }, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
     style: {
-      position: "sticky",
-      top: "100px",
-      height: "fit-content"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "scroll-animate"
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: "#10B981",
       fontSize: "11px",
-      fontWeight: "700",
+      fontWeight: 700,
+      color: "#10B981",
       letterSpacing: "0.1em",
       textTransform: "uppercase"
     }
-  }, "Proven Protection"), /*#__PURE__*/React.createElement("h2", {
+  }, "Pilot Programs & Partners"), /*#__PURE__*/React.createElement("h2", {
     style: {
-      fontSize: "clamp(26px, 4vw, 36px)",
-      fontWeight: "800",
-      margin: "12px 0 18px",
-      lineHeight: "1.2"
+      fontSize: "26px",
+      fontWeight: 800,
+      marginTop: "8px",
+      marginBottom: "16px",
+      color: "#FFFFFF"
     }
-  }, "How ClimaLogix Protects You"), /*#__PURE__*/React.createElement("p", {
+  }, "Initiate a Staging Trial"), /*#__PURE__*/React.createElement("p", {
     style: {
-      color: "#94A3B8",
-      fontSize: "15px",
-      lineHeight: "1.6"
+      fontSize: "13.5px",
+      color: "#9CA3AF",
+      lineHeight: 1.6,
+      marginBottom: "20px"
     }
-  }, "ClimaLogix AI equips local merchants and transport networks with the exact computational tools needed to bypass urban heat islands and log certified batch health."))), /*#__PURE__*/React.createElement("div", {
+  }, "Integrate ClimaLogix AI into your existing logistics platforms or register your cooperative farm clusters. Our solution architects will construct a custom dashboard mapping your thermal zones."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
-      gap: "36px"
-    }
-  }, [{
-    num: "01",
-    icon: "🛰️",
-    title: "Real-Time Heat Monitoring",
-    desc: "OpenWeather + local IoT integration delivers live microclimate telemetry across your entire transit route."
-  }, {
-    num: "02",
-    icon: "🧭",
-    title: "AI Route Optimization",
-    desc: "Dynamic heat-risk scores predict UHI hotspots and automatically redirect drivers before thermal damage occurs."
-  }, {
-    num: "03",
-    icon: "📊",
-    title: "TST Analytics Engine",
-    desc: "Our proprietary Thermal Survival Time algorithm models packaging ratings to forecast shipment stability windows."
-  }, {
-    num: "04",
-    icon: "🔔",
-    title: "Instant Smart Alerts",
-    desc: "Push notifications trigger when temperature parameters cross set safety thresholds. Never risk a cargo blindly."
-  }, {
-    num: "05",
-    icon: "🗣",
-    title: "Multilingual Voice Assistant",
-    desc: "Fully integrated voice portal translates spoken Bangla and English commands for local drivers in transit."
-  }].map((f, i) => /*#__PURE__*/React.createElement("div", {
-    key: i,
-    className: "glass-panel scroll-animate",
-    style: {
-      padding: "24px",
-      display: "flex",
-      gap: "20px",
-      alignItems: "flex-start"
+      gap: "12px",
+      fontSize: "12.5px",
+      color: "#CBD5E1"
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: "feature-num",
     style: {
-      fontSize: "22px",
-      fontWeight: "700"
-    }
-  }, f.num), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: "6px"
-    }
-  }, /*#__PURE__*/React.createElement("h3", {
-    style: {
-      fontSize: "17px",
-      fontWeight: "700",
       display: "flex",
       alignItems: "center",
-      gap: "8px"
+      gap: "10px"
     }
-  }, /*#__PURE__*/React.createElement("span", null, f.icon), " ", f.title), /*#__PURE__*/React.createElement("p", {
+  }, /*#__PURE__*/React.createElement("span", null, "\uD83D\uDCE7"), " ", /*#__PURE__*/React.createElement("span", null, "solutions@climalogix.ai")), /*#__PURE__*/React.createElement("div", {
     style: {
-      color: "#94A3B8",
-      fontSize: "14px",
-      lineHeight: "1.6"
+      display: "flex",
+      alignItems: "center",
+      gap: "10px"
     }
-  }, f.desc))))))), /*#__PURE__*/React.createElement("section", {
-    id: "demo",
+  }, /*#__PURE__*/React.createElement("span", null, "\uD83C\uDFE2"), " ", /*#__PURE__*/React.createElement("span", null, "Global Headquarters: Innovation Hub Tower, Dhaka")))), /*#__PURE__*/React.createElement("div", null, contactSubmitted ? /*#__PURE__*/React.createElement("div", {
     style: {
-      background: "#111827",
-      padding: "100px 40px",
-      borderTop: "1px solid rgba(255,255,255,0.04)"
+      background: "rgba(16, 185, 129, 0.08)",
+      border: "1px solid rgba(16, 185, 129, 0.25)",
+      borderRadius: "12px",
+      padding: "24px",
+      textAlign: "center"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      maxWidth: "1000px",
-      margin: "0 auto"
+      fontSize: "32px",
+      marginBottom: "12px"
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "scroll-animate",
+  }, "\u2709\uFE0F"), /*#__PURE__*/React.createElement("h3", {
     style: {
-      textAlign: "center",
-      marginBottom: "50px"
+      fontSize: "18px",
+      fontWeight: 700,
+      color: "#FFFFFF",
+      marginBottom: "8px"
     }
-  }, /*#__PURE__*/React.createElement("h2", {
+  }, "Consultation Request Submitted"), /*#__PURE__*/React.createElement("p", {
     style: {
-      fontSize: "clamp(26px, 4vw, 36px)",
-      fontWeight: "800",
-      marginBottom: "14px"
+      fontSize: "13px",
+      color: "#9CA3AF",
+      lineHeight: 1.5
     }
-  }, "See It in Action"), /*#__PURE__*/React.createElement("p", {
-    style: {
-      color: "#94A3B8",
-      fontSize: "15px"
-    }
-  }, "Drag the slider to adjust outside temperature and watch ClimaLogix model route hazards in real-time.")), /*#__PURE__*/React.createElement("div", {
-    className: "glass-panel scroll-animate stack-mobile",
-    style: {
-      padding: "36px",
-      display: "grid",
-      gridTemplateColumns: "1.2fr 1fr",
-      gap: "40px"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, "Thank you. A logistics integration specialist will respond to your corporate email within 24 business hours to coordinate telemetry mapping.")) : /*#__PURE__*/React.createElement("form", {
+    onSubmit: handleContactSubmit,
     style: {
       display: "flex",
       flexDirection: "column",
-      gap: "24px"
+      gap: "16px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: "12px"
+    },
+    className: "stack-mobile"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: {
+      display: "block",
+      fontSize: "11px",
+      color: "#9CA3AF",
+      marginBottom: "6px",
+      fontWeight: 600
+    }
+  }, "Full Name *"), /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    required: true,
+    value: contactName,
+    onChange: e => setContactName(e.target.value),
+    placeholder: "Sarah Jenkins",
+    style: {
+      width: "100%",
+      padding: "10px 12px",
+      fontSize: "13px",
+      background: "rgba(255,255,255,0.03)",
+      border: "1px solid rgba(255,255,255,0.08)",
+      borderRadius: "8px",
+      color: "#FFFFFF",
+      outline: "none"
+    }
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: {
+      display: "block",
+      fontSize: "11px",
+      color: "#9CA3AF",
+      marginBottom: "6px",
+      fontWeight: 600
+    }
+  }, "Corporate Email *"), /*#__PURE__*/React.createElement("input", {
+    type: "email",
+    required: true,
+    value: contactEmail,
+    onChange: e => setContactEmail(e.target.value),
+    placeholder: "s.jenkins@enterprise.com",
+    style: {
+      width: "100%",
+      padding: "10px 12px",
+      fontSize: "13px",
+      background: "rgba(255,255,255,0.03)",
+      border: "1px solid rgba(255,255,255,0.08)",
+      borderRadius: "8px",
+      color: "#FFFFFF",
+      outline: "none"
+    }
+  }))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: {
+      display: "block",
+      fontSize: "11px",
+      color: "#9CA3AF",
+      marginBottom: "6px",
+      fontWeight: 600
+    }
+  }, "Organization Name"), /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    value: contactOrg,
+    onChange: e => setContactOrg(e.target.value),
+    placeholder: "BioFoods International Ltd",
+    style: {
+      width: "100%",
+      padding: "10px 12px",
+      fontSize: "13px",
+      background: "rgba(255,255,255,0.03)",
+      border: "1px solid rgba(255,255,255,0.08)",
+      borderRadius: "8px",
+      color: "#FFFFFF",
+      outline: "none"
+    }
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: {
+      display: "block",
+      fontSize: "11px",
+      color: "#9CA3AF",
+      marginBottom: "6px",
+      fontWeight: 600
+    }
+  }, "Project Details & Fleet Requirements *"), /*#__PURE__*/React.createElement("textarea", {
+    required: true,
+    value: contactMessage,
+    onChange: e => setContactMessage(e.target.value),
+    placeholder: "Outline your fleet zones, sensor configurations, or specific feedstock verification needs...",
+    rows: 3,
+    style: {
+      width: "100%",
+      padding: "10px 12px",
+      fontSize: "13px",
+      fontFamily: "inherit",
+      background: "rgba(255,255,255,0.03)",
+      border: "1px solid rgba(255,255,255,0.08)",
+      borderRadius: "8px",
+      color: "#FFFFFF",
+      outline: "none",
+      resize: "vertical"
+    }
+  })), /*#__PURE__*/React.createElement("button", {
+    type: "submit",
+    disabled: submitting,
+    style: {
+      background: submitting ? "rgba(16, 185, 129, 0.4)" : "linear-gradient(135deg, #10B981, #059669)",
+      color: "#0B0F19",
+      border: "none",
+      borderRadius: "8px",
+      padding: "12px 24px",
+      fontSize: "13px",
+      fontWeight: 700,
+      cursor: submitting ? "not-allowed" : "pointer",
+      transition: "all 0.2s",
+      textAlign: "center"
+    }
+  }, submitting ? "PROCESSING REQUEST..." : "SUBMIT CONSULTATION REQUEST")))))), /*#__PURE__*/React.createElement("footer", {
+    style: {
+      borderTop: "1px solid rgba(255, 255, 255, 0.06)",
+      padding: "20px 40px",
+      textAlign: "center",
+      fontSize: "11px",
+      color: "#6B7280"
+    }
+  }, "CLIMALOGIX AI CLIMATESHIELD \xB7 INFINITY AI BUILDFEST 2026 \xB7 TEAM GLIDERS \xB7 ALL RIGHTS RESERVED"));
+}
+function NotificationsView({
+  onSelectBatch
+}) {
+  const [notifications, setNotifications] = useState([{
+    id: 1,
+    batchId: "BCH-1082",
+    zone: "Kamrangirchar",
+    feedstock: "Bio-Slurry",
+    status: "pending",
+    time: "10 mins ago"
+  }, {
+    id: 2,
+    batchId: "BCH-2144",
+    zone: "Mirpur",
+    feedstock: "Organic Fertilizer",
+    status: "pending",
+    time: "1 hour ago"
+  }, {
+    id: 3,
+    batchId: "BCH-0941",
+    zone: "Old Dhaka",
+    feedstock: "Liquid Compost",
+    status: "completed",
+    time: "Yesterday"
+  }]);
+  const handleAction = (batchId, zone) => {
+    onSelectBatch(batchId, zone);
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      animation: "fadeSlideIn 0.4s ease"
+    }
+  }, /*#__PURE__*/React.createElement(SectionLabel, {
+    icon: "\uD83D\uDD14",
+    text: "Pending Verification Requests"
+  }), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "13px",
+      color: "var(--text-secondary)",
+      marginBottom: "20px"
+    }
+  }, "Inspectors receive batch registration requests from manufacturers and SMEs. Review telemetry logs and verify parameters."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: "12px"
+    }
+  }, notifications.map(n => /*#__PURE__*/React.createElement("div", {
+    key: n.id,
+    style: {
+      background: "var(--bg-input)",
+      border: "1px solid var(--border-primary)",
+      borderRadius: "10px",
+      padding: "16px",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center"
     }
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
-      justifyContent: "space-between",
-      marginBottom: "10px"
+      alignItems: "center",
+      gap: "8px",
+      marginBottom: "4px"
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
+      fontWeight: 700,
       fontSize: "14px",
-      fontWeight: "600",
-      color: "#94A3B8"
+      fontFamily: "'JetBrains Mono', monospace",
+      color: "var(--text-primary)"
     }
-  }, "Outside Ambient Temperature:"), /*#__PURE__*/React.createElement("span", {
+  }, n.batchId), /*#__PURE__*/React.createElement("span", {
     style: {
-      fontFamily: "monospace",
-      fontSize: "18px",
-      fontWeight: "700",
-      color: riskColor
+      fontSize: "9px",
+      fontWeight: 700,
+      padding: "2px 6px",
+      borderRadius: "4px",
+      background: n.status === "pending" ? "rgba(245, 158, 11, 0.12)" : "rgba(16, 185, 129, 0.12)",
+      color: n.status === "pending" ? "#F59E0B" : "#10B981"
     }
-  }, temp, "\xB0C")), /*#__PURE__*/React.createElement("input", {
-    type: "range",
-    min: "20",
-    max: "50",
-    value: temp,
-    onChange: e => setTemp(parseInt(e.target.value)),
+  }, n.status.toUpperCase())), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "12px",
+      color: "var(--text-secondary)"
+    }
+  }, "Feedstock: ", /*#__PURE__*/React.createElement("strong", null, n.feedstock), " | Zone: ", /*#__PURE__*/React.createElement("strong", null, n.zone), " | Registered: ", n.time)), n.status === "pending" && /*#__PURE__*/React.createElement("button", {
+    onClick: () => handleAction(n.batchId, n.zone),
+    style: {
+      background: "#10B981",
+      color: "#0B0F19",
+      border: "none",
+      borderRadius: "8px",
+      padding: "8px 16px",
+      fontSize: "12px",
+      fontWeight: 700,
+      cursor: "pointer",
+      transition: "all 0.2s"
+    },
+    onMouseEnter: e => {
+      e.currentTarget.style.transform = "scale(1.05)";
+    },
+    onMouseLeave: e => {
+      e.currentTarget.style.transform = "scale(1)";
+    }
+  }, "INSPECT BATCH"))))));
+}
+function SettingsView() {
+  const [name, setName] = useState("Demo User");
+  const [badgeId, setBadgeId] = useState("INS-8422-CLX");
+  const [prefZone, setPrefZone] = useState("Mirpur");
+  const [heatwaveAlerts, setHeatwaveAlerts] = useState(true);
+  const handleSave = e => {
+    e.preventDefault();
+    alert("Profile settings successfully saved!");
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      animation: "fadeSlideIn 0.4s ease"
+    }
+  }, /*#__PURE__*/React.createElement(SectionLabel, {
+    icon: "\u2699\uFE0F",
+    text: "Profile & Inspector Settings"
+  }), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement("form", {
+    onSubmit: handleSave,
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: "16px",
+      maxWidth: "480px"
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: {
+      display: "block",
+      fontSize: "12px",
+      color: "var(--text-secondary)",
+      marginBottom: "6px"
+    }
+  }, "Full Name"), /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    value: name,
+    onChange: e => setName(e.target.value),
     style: {
       width: "100%",
-      accentColor: "#10B981"
+      padding: "10px 12px",
+      background: "var(--bg-input)",
+      border: "1px solid var(--border-primary)",
+      borderRadius: "8px",
+      color: "var(--text-primary)",
+      fontSize: "13px"
     }
-  })), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     style: {
-      background: "rgba(255,255,255,0.02)",
-      border: "1px solid rgba(255,255,255,0.05)",
-      borderRadius: "12px",
-      padding: "20px"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
+      display: "block",
       fontSize: "12px",
-      color: "#64748B",
-      textTransform: "uppercase",
-      fontWeight: "600",
-      letterSpacing: "0.05em"
+      color: "var(--text-secondary)",
+      marginBottom: "6px"
     }
-  }, "Analysis Result"), /*#__PURE__*/React.createElement("div", {
+  }, "Inspector Badge ID / Organization"), /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    value: badgeId,
+    onChange: e => setBadgeId(e.target.value),
     style: {
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      marginTop: "12px"
+      width: "100%",
+      padding: "10px 12px",
+      background: "var(--bg-input)",
+      border: "1px solid var(--border-primary)",
+      borderRadius: "8px",
+      color: "var(--text-primary)",
+      fontSize: "13px",
+      fontFamily: "'JetBrains Mono', monospace"
     }
-  }, /*#__PURE__*/React.createElement("span", {
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     style: {
-      fontSize: "14px",
-      color: "#94A3B8"
-    }
-  }, "Hazard Risk Level:"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: riskColor,
-      fontWeight: "800",
-      fontSize: "14px",
-      background: `${riskColor}15`,
-      border: `1px solid ${riskColor}30`,
-      borderRadius: "9999px",
-      padding: "4px 14px",
-      letterSpacing: "0.05em"
-    }
-  }, routeRisk)), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      marginTop: "16px"
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: "14px",
-      color: "#94A3B8"
-    }
-  }, "Calculated TST:"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontFamily: "'JetBrains Mono', monospace",
-      fontWeight: "700",
-      color: "#F9FAFB",
-      fontSize: "17px"
-    }
-  }, calculatedTst, " minutes")))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: "16px"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
+      display: "block",
       fontSize: "12px",
-      color: "#64748B",
-      textTransform: "uppercase",
-      fontWeight: "600"
+      color: "var(--text-secondary)",
+      marginBottom: "6px"
     }
-  }, "Bangladesh Route Hazard Map"), /*#__PURE__*/React.createElement("svg", {
-    width: "180",
-    height: "240",
-    viewBox: "0 0 200 280",
+  }, "Primary Observation Zone"), /*#__PURE__*/React.createElement("select", {
+    value: prefZone,
+    onChange: e => setPrefZone(e.target.value),
     style: {
-      filter: "drop-shadow(0 10px 20px rgba(0,0,0,0.5))"
+      width: "100%",
+      padding: "10px 12px",
+      background: "var(--bg-input)",
+      border: "1px solid var(--border-primary)",
+      borderRadius: "8px",
+      color: "var(--text-primary)",
+      fontSize: "13px"
     }
-  }, /*#__PURE__*/React.createElement("path", {
-    d: "M 60 20 L 100 10 L 140 30 L 150 70 L 170 120 L 190 180 L 160 220 L 170 270 L 120 270 L 100 240 L 90 260 L 50 240 L 30 200 L 20 150 L 40 100 L 30 70 Z",
-    fill: "rgba(16, 185, 129, 0.05)",
-    stroke: "rgba(16, 185, 129, 0.2)",
-    strokeWidth: "2"
-  }), /*#__PURE__*/React.createElement("circle", {
-    cx: "95",
-    cy: "110",
-    r: "14",
-    className: "map-zone",
-    fill: temp >= 40 ? "#EF444455" : temp >= 33 ? "#F59E0B55" : "#10B98155",
-    stroke: temp >= 40 ? "#EF4444" : temp >= 33 ? "#F59E0B" : "#10B981",
-    strokeWidth: "2"
-  }), /*#__PURE__*/React.createElement("text", {
-    x: "95",
-    y: "114",
-    fill: "#FFF",
-    fontSize: "9",
-    fontWeight: "700",
-    textAnchor: "middle"
-  }, "Zone A"), /*#__PURE__*/React.createElement("circle", {
-    cx: "145",
-    cy: "200",
-    r: "14",
-    className: "map-zone",
-    fill: temp >= 44 ? "#EF444455" : temp >= 35 ? "#F59E0B55" : "#10B98155",
-    stroke: temp >= 44 ? "#EF4444" : temp >= 35 ? "#F59E0B" : "#10B981",
-    strokeWidth: "2"
-  }), /*#__PURE__*/React.createElement("text", {
-    x: "145",
-    y: "204",
-    fill: "#FFF",
-    fontSize: "9",
-    fontWeight: "700",
-    textAnchor: "middle"
-  }, "Zone B"), /*#__PURE__*/React.createElement("circle", {
-    cx: "55",
-    cy: "210",
-    r: "14",
-    className: "map-zone",
-    fill: temp >= 38 ? "#EF444455" : temp >= 30 ? "#F59E0B55" : "#10B98155",
-    stroke: temp >= 38 ? "#EF4444" : temp >= 30 ? "#F59E0B" : "#10B981",
-    strokeWidth: "2"
-  }), /*#__PURE__*/React.createElement("text", {
-    x: "55",
-    y: "214",
-    fill: "#FFF",
-    fontSize: "9",
-    fontWeight: "700",
-    textAnchor: "middle"
-  }, "Zone C")))))), /*#__PURE__*/React.createElement("section", {
-    id: "testimonials",
+  }, Object.keys(UHI_ZONES).map(z => /*#__PURE__*/React.createElement("option", {
+    key: z,
+    value: z
+  }, z)))), /*#__PURE__*/React.createElement("div", {
     style: {
-      padding: "100px 40px",
-      maxWidth: "1200px",
-      margin: "0 auto"
+      display: "flex",
+      alignItems: "center",
+      gap: "10px",
+      marginTop: "8px"
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "scroll-animate",
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: heatwaveAlerts,
+    onChange: e => setHeatwaveAlerts(e.target.checked),
+    id: "hw-alerts",
     style: {
-      textAlign: "center",
-      marginBottom: "64px"
+      cursor: "pointer"
     }
-  }, /*#__PURE__*/React.createElement("span", {
+  }), /*#__PURE__*/React.createElement("label", {
+    htmlFor: "hw-alerts",
     style: {
-      color: "#10B981",
-      fontSize: "11px",
-      fontWeight: "700",
-      letterSpacing: "0.1em",
-      textTransform: "uppercase"
+      fontSize: "13px",
+      color: "var(--text-secondary)",
+      cursor: "pointer"
     }
-  }, "Testimonials"), /*#__PURE__*/React.createElement("h2", {
+  }, "Enable heatwave and UHI microclimate alerts")), /*#__PURE__*/React.createElement("button", {
+    type: "submit",
     style: {
-      fontSize: "clamp(26px, 4vw, 36px)",
-      fontWeight: "800",
-      marginTop: "12px"
+      marginTop: "12px",
+      padding: "12px",
+      background: "#10B981",
+      color: "#0B0F19",
+      border: "none",
+      borderRadius: "8px",
+      fontWeight: 700,
+      cursor: "pointer",
+      fontSize: "13px"
     }
-  }, "Trusted by SMEs Across Bangladesh")), /*#__PURE__*/React.createElement("div", {
+  }, "SAVE SETTINGS"))));
+}
+function DeliveryView({
+  userRole,
+  onUpdateTrustScore
+}) {
+  const [shipments, setShipments] = useState([{
+    id: "SH-102",
+    batchId: "BCH-1082",
+    origin: "Savár Farm",
+    dest: "Kamrangirchar",
+    eta: "45 mins",
+    temp: "29.4°C",
+    status: "in-transit",
+    optimized: false
+  }, {
+    id: "SH-105",
+    batchId: "BCH-2144",
+    origin: "Gazipur Facility",
+    dest: "Mirpur",
+    eta: "1.2 hours",
+    temp: "28.1°C",
+    status: "in-transit",
+    optimized: false
+  }]);
+  const [optLog, setOptLog] = useState("");
+  const handleOptimize = shipmentId => {
+    setShipments(prev => prev.map(s => {
+      if (s.id === shipmentId) {
+        return {
+          ...s,
+          optimized: true,
+          temp: "26.5°C",
+          eta: "50 mins"
+        };
+      }
+      return s;
+    }));
+    setOptLog(`[AI OPTIMIZATION] Re-routed shipment ${shipmentId} away from Hazaribagh thermal corridor (+3.5°C) to greenbelt bypass path. Dynamic decay risk reduced!`);
+  };
+  const handleAcknowledge = shipmentId => {
+    setShipments(prev => prev.map(s => {
+      if (s.id === shipmentId) {
+        return {
+          ...s,
+          status: "delivered",
+          eta: "completed"
+        };
+      }
+      return s;
+    }));
+    if (onUpdateTrustScore) onUpdateTrustScore(prev => Math.min(100, prev + 4));
+    alert(`Delivery acknowledged! BARI Trust Score increased due to chain-of-custody confirmation.`);
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      animation: "fadeSlideIn 0.4s ease"
+    }
+  }, /*#__PURE__*/React.createElement(SectionLabel, {
+    icon: "\uD83D\uDE9A",
+    text: "Logistics & Climate-Resilient Routing"
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
-      gridTemplateColumns: "repeat(3, 1fr)",
-      gap: "28px"
-    },
-    className: "stack-mobile"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "glass-panel scroll-animate",
+      gridTemplateColumns: "1fr 1fr",
+      gap: "20px"
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement("div", {
     style: {
-      padding: "30px",
+      fontSize: "14px",
+      fontWeight: 700,
+      marginBottom: "16px"
+    }
+  }, "Active Shipments"), /*#__PURE__*/React.createElement("div", {
+    style: {
       display: "flex",
       flexDirection: "column",
-      gap: "16px"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
       gap: "12px"
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, shipments.map(s => /*#__PURE__*/React.createElement("div", {
+    key: s.id,
     style: {
-      width: "40px",
-      height: "40px",
-      borderRadius: "50%",
-      background: "#1E293B",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: "18px"
-    }
-  }, "\uD83E\uDDD4"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: "700",
-      fontSize: "14px"
-    }
-  }, "Anwar Hossain"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: "11px",
-      color: "#64748B"
-    }
-  }, "Agro-Biologicals Supplier, Savar"))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      color: "#10B981",
-      fontSize: "12px"
-    }
-  }, "\u2605\u2605\u2605\u2605\u2605"), /*#__PURE__*/React.createElement("p", {
-    style: {
-      color: "#CBD5E1",
-      fontSize: "13.5px",
-      lineHeight: "1.6",
-      fontStyle: "italic"
-    }
-  }, "\"Before ClimaLogix, we lost up to 30% of organic fertilizer active bio-cultures during Dhaka midday heat spikes. Now we route dispatch based on live TST projections.\"")), /*#__PURE__*/React.createElement("div", {
-    className: "glass-panel scroll-animate delay-150",
-    style: {
-      padding: "30px",
-      display: "flex",
-      flexDirection: "column",
-      gap: "16px"
+      background: "var(--bg-input)",
+      border: "1px solid var(--border-primary)",
+      borderRadius: "10px",
+      padding: "16px"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
+      justifyContent: "space-between",
       alignItems: "center",
-      gap: "12px"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: "40px",
-      height: "40px",
-      borderRadius: "50%",
-      background: "#1E293B",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: "18px"
-    }
-  }, "\uD83D\uDC69"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: "700",
-      fontSize: "14px"
-    }
-  }, "Fariha Rahman"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: "11px",
-      color: "#64748B"
-    }
-  }, "Perishable Retail Merchant"))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      color: "#10B981",
-      fontSize: "12px"
-    }
-  }, "\u2605\u2605\u2605\u2605\u2605"), /*#__PURE__*/React.createElement("p", {
-    style: {
-      color: "#CBD5E1",
-      fontSize: "13.5px",
-      lineHeight: "1.6",
-      fontStyle: "italic"
-    }
-  }, "\"The dynamic heat route calculations are highly precise. We haven't had a single batch cargo spoil since transitioning our delivery maps.\"")), /*#__PURE__*/React.createElement("div", {
-    className: "glass-panel scroll-animate delay-300",
-    style: {
-      padding: "30px",
-      display: "flex",
-      flexDirection: "column",
-      gap: "16px"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: "12px"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: "40px",
-      height: "40px",
-      borderRadius: "50%",
-      background: "#1E293B",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: "18px"
-    }
-  }, "\uD83D\uDC68"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: "700",
-      fontSize: "14px"
-    }
-  }, "Sabbir Ahmed"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: "11px",
-      color: "#64748B"
-    }
-  }, "Chemical Distribution Manager"))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      color: "#10B981",
-      fontSize: "12px"
-    }
-  }, "\u2605\u2605\u2605\u2605\u2605"), /*#__PURE__*/React.createElement("p", {
-    style: {
-      color: "#CBD5E1",
-      fontSize: "13.5px",
-      lineHeight: "1.6",
-      fontStyle: "italic"
-    }
-  }, "\"The voice command integration in local Bangla makes it easy for drivers to fetch live weather warnings. Highly recommend ClimaLogix.\""))), /*#__PURE__*/React.createElement("div", {
-    className: "scroll-animate",
-    style: {
-      display: "flex",
-      justifyContent: "center",
-      gap: "16px",
-      flexWrap: "wrap",
-      marginTop: "64px"
+      marginBottom: "8px"
     }
   }, /*#__PURE__*/React.createElement("span", {
-    className: "logo-badge"
-  }, "SAVAR_AGRO_LTD"), /*#__PURE__*/React.createElement("span", {
-    className: "logo-badge"
-  }, "BENGAL_CHEM"), /*#__PURE__*/React.createElement("span", {
-    className: "logo-badge"
-  }, "DHAKA_DISTRIB"), /*#__PURE__*/React.createElement("span", {
-    className: "logo-badge"
-  }, "GREEN_MERCHANTS"))), /*#__PURE__*/React.createElement("section", {
     style: {
-      background: "linear-gradient(135deg, #10B981 0%, #059669 100%)",
-      padding: "80px 40px",
-      textAlign: "center"
+      fontSize: "13px",
+      fontWeight: 700,
+      color: "var(--text-primary)",
+      fontFamily: "'JetBrains Mono', monospace"
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, s.id, " (", s.batchId, ")"), /*#__PURE__*/React.createElement("span", {
     style: {
-      maxWidth: "800px",
-      margin: "0 auto",
+      fontSize: "9px",
+      fontWeight: 700,
+      padding: "2px 6px",
+      borderRadius: "4px",
+      background: s.status === "delivered" ? "rgba(16, 185, 129, 0.12)" : "rgba(59, 130, 246, 0.12)",
+      color: s.status === "delivered" ? "#10B981" : "#3B82F6"
+    }
+  }, s.status.toUpperCase())), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "12px",
+      color: "var(--text-secondary)",
+      lineHeight: 1.5,
+      marginBottom: "12px"
+    }
+  }, /*#__PURE__*/React.createElement("div", null, "Origin: ", /*#__PURE__*/React.createElement("strong", null, s.origin)), /*#__PURE__*/React.createElement("div", null, "Destination: ", /*#__PURE__*/React.createElement("strong", null, s.dest)), /*#__PURE__*/React.createElement("div", null, "ETA: ", /*#__PURE__*/React.createElement("strong", {
+    style: {
+      color: ACCENT.green
+    }
+  }, s.eta)), /*#__PURE__*/React.createElement("div", null, "Internal Temp: ", /*#__PURE__*/React.createElement("strong", {
+    style: {
+      color: parseFloat(s.temp) > 28 ? ACCENT.amber : ACCENT.green
+    }
+  }, s.temp)), s.optimized && /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: "#3B82F6",
+      fontWeight: "bold",
+      fontSize: "10px",
+      marginTop: "4px"
+    }
+  }, "\u26A1 UHI CORRIDOR AVOIDED")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "8px"
+    }
+  }, s.status === "in-transit" && !s.optimized && /*#__PURE__*/React.createElement("button", {
+    onClick: () => handleOptimize(s.id),
+    style: {
+      flex: 1,
+      padding: "8px 12px",
+      background: "rgba(59, 130, 246, 0.12)",
+      color: "#3B82F6",
+      border: "1px solid rgba(59, 130, 246, 0.3)",
+      borderRadius: "6px",
+      fontSize: "11px",
+      fontWeight: 700,
+      cursor: "pointer"
+    }
+  }, "OPTIMIZE ROUTE"), s.status === "in-transit" && (userRole === "buyer" || userRole === "sme") && /*#__PURE__*/React.createElement("button", {
+    onClick: () => handleAcknowledge(s.id),
+    style: {
+      flex: 1,
+      padding: "8px 12px",
+      background: "rgba(16, 185, 129, 0.12)",
+      color: "#10B981",
+      border: "1px solid rgba(16, 185, 129, 0.3)",
+      borderRadius: "6px",
+      fontSize: "11px",
+      fontWeight: 700,
+      cursor: "pointer"
+    }
+  }, "ACKNOWLEDGE RECEIPT"))))))), /*#__PURE__*/React.createElement("div", {
+    style: {
       display: "flex",
       flexDirection: "column",
       gap: "20px"
     }
-  }, /*#__PURE__*/React.createElement("h2", {
+  }, /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: "clamp(26px, 5vw, 42px)",
-      fontWeight: "800",
-      color: "#0B0F19",
-      lineHeight: "1.1",
-      letterSpacing: "-0.02em"
+      fontSize: "14px",
+      fontWeight: 700,
+      marginBottom: "16px"
     }
-  }, "Start Protecting Your Shipments Today"), /*#__PURE__*/React.createElement("p", {
+  }, "Dynamic Route Optimization Map"), /*#__PURE__*/React.createElement("div", {
     style: {
-      color: "rgba(11, 15, 25, 0.8)",
-      fontSize: "16px",
-      fontWeight: "500",
-      maxWidth: "600px",
-      margin: "0 auto"
-    }
-  }, "Free tier available. No credit card required. Deploy in minutes."), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: "16px"
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: onRegister,
-    style: {
-      background: "#0B0F19",
-      border: "none",
+      height: "180px",
+      background: "rgba(0,0,0,0.3)",
+      border: "1px solid var(--border-primary)",
       borderRadius: "10px",
-      color: "#10B981",
-      padding: "16px 36px",
-      cursor: "pointer",
-      fontSize: "16px",
-      fontWeight: "800",
-      boxShadow: "0 10px 25px rgba(0,0,0,0.25)",
-      transition: "transform 0.2s"
-    },
-    onMouseOver: e => e.target.style.transform = "scale(1.05)",
-    onMouseOut: e => e.target.style.transform = "scale(1)"
-  }, "Create Free Account")))), /*#__PURE__*/React.createElement("footer", {
+      position: "relative",
+      overflow: "hidden",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    }
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "100%",
+    height: "100%",
     style: {
-      background: "#0B0F19",
-      borderTop: "1px solid rgba(255,255,255,0.04)",
-      padding: "24px",
+      position: "absolute",
+      inset: 0
+    }
+  }, /*#__PURE__*/React.createElement("circle", {
+    cx: "50",
+    cy: "50",
+    r: "5",
+    fill: "#EF4444"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: "60",
+    y: "54",
+    fill: "#6B7280",
+    fontSize: "10"
+  }, "Gazipur (Origin)"), /*#__PURE__*/React.createElement("circle", {
+    cx: "150",
+    cy: "120",
+    r: "5",
+    fill: "#3B82F6"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: "160",
+    y: "124",
+    fill: "#6B7280",
+    fontSize: "10"
+  }, "Mirpur (Dest)"), /*#__PURE__*/React.createElement("circle", {
+    cx: "280",
+    cy: "80",
+    r: "5",
+    fill: "#10B981"
+  }), /*#__PURE__*/React.createElement("text", {
+    x: "290",
+    y: "84",
+    fill: "#6B7280",
+    fontSize: "10"
+  }, "Savar (Origin)"), /*#__PURE__*/React.createElement("path", {
+    d: "M 50 50 Q 100 80 150 120",
+    fill: "none",
+    stroke: "rgba(255,255,255,0.15)",
+    strokeWidth: "2",
+    strokeDasharray: "4"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M 50 50 Q 70 120 150 120",
+    fill: "none",
+    stroke: "#3B82F6",
+    strokeWidth: "2"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M 280 80 Q 200 100 150 120",
+    fill: "none",
+    stroke: "rgba(255,255,255,0.15)",
+    strokeWidth: "2",
+    strokeDasharray: "4"
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "11px",
+      color: "var(--text-dim)",
+      zIndex: 10,
       textAlign: "center"
     }
-  }, /*#__PURE__*/React.createElement("p", {
+  }, "Interactive GIS Overlay: Dhaka Division Grid"))), optLog && /*#__PURE__*/React.createElement("div", {
     style: {
-      color: "#475569",
-      fontSize: "12px"
+      background: "rgba(59, 130, 246, 0.08)",
+      border: "1px solid rgba(59, 130, 246, 0.2)",
+      borderRadius: "8px",
+      padding: "12px",
+      fontSize: "11.5px",
+      color: "#3B82F6",
+      fontFamily: "'JetBrains Mono', monospace",
+      lineHeight: 1.4
     }
-  }, "\xA9 ", new Date().getFullYear(), " ClimaLogix AI. All rights reserved. Dhaka, Bangladesh.")));
+  }, optLog))));
 }
-window.HeroLandingPage = HeroLandingPage;
 function CLimaLogixApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [showAuthOverlay, setShowAuthOverlay] = useState(false);
-  const [authOverlayMode, setAuthOverlayMode] = useState("login");
-  const [loginWelcome, setLoginWelcome] = useState(null); // { name, role, label }
-
-  // Returns the first (default) tab id for a given role
-  const getDefaultTabForRole = role => {
-    if (role === "admin" || role === "inspector") return "notifications";
-    if (role === "processor" || role === "manufacturer") return "batches";
-    return "dashboard"; // buyer / sme / default
-  };
-
-  // Returns a human-friendly role label
-  const getRoleLabel = role => {
-    const labels = {
-      admin: "Administrator",
-      inspector: "Quality Inspector",
-      processor: "Producer / Processor",
-      manufacturer: "Manufacturer",
-      buyer: "SME Buyer",
-      sme: "SME Owner"
-    };
-    return labels[role] || "Member";
-  };
+  const [isLanding, setIsLanding] = useState(true);
   useEffect(() => {
     if (!window.supabaseClient) {
       // Kept unauthenticated by default so Landing Home Page displays
@@ -13700,7 +14947,6 @@ function CLimaLogixApp() {
       } else {
         setCurrentUser(null);
         window.SUPABASE_SESSION_TOKEN = null;
-        setLoginWelcome(null);
       }
       setAuthLoading(false);
     });
@@ -14050,25 +15296,10 @@ function CLimaLogixApp() {
   });
   useEffect(() => {
     if (currentUser) {
-      const role = currentUser.user_metadata?.role || currentUser.role || "buyer";
-      const defaultTab = getDefaultTabForRole(role);
-      const allowed = getTabsForRole(role);
-      // Always route to the role-specific default tab on (re)login
-      if (allowed.find(t => t.id === defaultTab)) {
-        setActiveTab(defaultTab);
-      } else if (allowed.length > 0) {
+      const allowed = getTabsForRole(currentUser.user_metadata?.role || currentUser.role);
+      if (allowed.length > 0 && !allowed.find(t => t.id === activeTab)) {
         setActiveTab(allowed[0].id);
       }
-      // Show a welcome toast with the user's name and role
-      const name = currentUser.user_metadata?.name || currentUser.user_metadata?.full_name || (currentUser.email ? currentUser.email.split("@")[0] : "User");
-      setLoginWelcome({
-        name,
-        role,
-        label: getRoleLabel(role)
-      });
-      // Auto-dismiss welcome toast after 6 seconds
-      const timer = setTimeout(() => setLoginWelcome(null), 6000);
-      return () => clearTimeout(timer);
     }
   }, [currentUser]);
   useEffect(() => {
@@ -14112,27 +15343,15 @@ function CLimaLogixApp() {
     })), /*#__PURE__*/React.createElement("span", null, "LOADING SECURE NODE..."));
   }
   if (!currentUser) {
-    return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(HeroLandingPage, {
-      onLogin: () => {
-        setAuthOverlayMode("login");
-        setShowAuthOverlay(true);
-      },
-      onRegister: () => {
-        setAuthOverlayMode("register");
-        setShowAuthOverlay(true);
-      }
-    }), showAuthOverlay && /*#__PURE__*/React.createElement(AuthPanel, {
-      initialMode: authOverlayMode,
-      onClose: () => setShowAuthOverlay(false),
-      onAuthSuccess: (user, token) => {
-        // Route to role-specific dashboard immediately
-        const role = user?.user_metadata?.role || user?.role || "buyer";
-        const defaultTab = getDefaultTabForRole(role);
-        setActiveTab(defaultTab);
-        setCurrentUser(user);
-        setShowAuthOverlay(false);
-      }
-    }));
+    if (isLanding) {
+      return /*#__PURE__*/React.createElement(LandingView, {
+        onGetStarted: () => setIsLanding(false)
+      });
+    }
+    return /*#__PURE__*/React.createElement(AuthPanel, {
+      onAuthSuccess: user => setCurrentUser(user),
+      onClose: () => setIsLanding(true)
+    });
   }
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -14178,90 +15397,7 @@ function CLimaLogixApp() {
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::selection { background: rgba(16,185,129,0.3); }
-        @keyframes welcomeSlideIn {
-          from { opacity: 0; transform: translateX(110%); }
-          to   { opacity: 1; transform: translateX(0); }
-        }
-        @keyframes welcomeSlideOut {
-          from { opacity: 1; transform: translateX(0); }
-          to   { opacity: 0; transform: translateX(110%); }
-        }
-        .welcome-toast {
-          position: fixed;
-          top: 20px;
-          right: 20px;
-          z-index: 9999;
-          min-width: 280px;
-          max-width: 360px;
-          background: rgba(11, 15, 25, 0.95);
-          border: 1px solid rgba(16, 185, 129, 0.4);
-          border-radius: 14px;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(16,185,129,0.08), 0 0 30px rgba(16,185,129,0.1);
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
-          padding: 16px 18px;
-          display: flex;
-          align-items: flex-start;
-          gap: 12px;
-          animation: welcomeSlideIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-        .welcome-toast-dismiss {
-          background: transparent;
-          border: none;
-          color: #6B7280;
-          cursor: pointer;
-          font-size: 16px;
-          padding: 0;
-          line-height: 1;
-          flex-shrink: 0;
-          transition: color 0.2s;
-        }
-        .welcome-toast-dismiss:hover { color: #EF4444; }
-      `), loginWelcome && /*#__PURE__*/React.createElement("div", {
-    className: "welcome-toast"
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
-      flexShrink: 0,
-      background: "rgba(16,185,129,0.12)",
-      border: "1px solid rgba(16,185,129,0.25)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: 18
-    }
-  }, loginWelcome.role === "admin" || loginWelcome.role === "inspector" ? "🔍" : loginWelcome.role === "processor" || loginWelcome.role === "manufacturer" ? "📦" : "🌿"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1,
-      minWidth: 0
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontFamily: "Inter",
-      fontSize: 13,
-      fontWeight: 600,
-      color: "#10B981",
-      marginBottom: 3
-    }
-  }, "Welcome back, ", loginWelcome.name, "!"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontFamily: "Inter",
-      fontSize: 12,
-      color: "#9CA3AF",
-      lineHeight: 1.4
-    }
-  }, "Signed in as ", /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: "#F9FAFB",
-      fontWeight: 500
-    }
-  }, loginWelcome.label), ". Routed to your personalized dashboard.")), /*#__PURE__*/React.createElement("button", {
-    className: "welcome-toast-dismiss",
-    onClick: () => setLoginWelcome(null),
-    "aria-label": "Dismiss"
-  }, "\xD7")), /*#__PURE__*/React.createElement("div", {
+      `), /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       top: 0,
@@ -14400,7 +15536,6 @@ function CLimaLogixApp() {
         await window.supabaseClient.auth.signOut();
       } else {
         setCurrentUser(null);
-        setLoginWelcome(null);
       }
       setIsDrawerOpen(false);
     },

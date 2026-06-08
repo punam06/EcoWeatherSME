@@ -228,7 +228,7 @@ function AuthPanel({
     try {
       const sb = window.supabaseClient;
       if (!sb) throw new Error("Supabase client not initialized");
-      const backendRole = uiRole === "producer" ? "processor" : "buyer";
+      const backendRole = uiRole === "producer" ? "processor" : uiRole === "inspector" ? "admin" : "buyer";
       let result;
       if (mode === "login") {
         result = await sb.auth.signInWithPassword({
@@ -325,7 +325,7 @@ function AuthPanel({
       inset: 0,
       zIndex: 99999,
       background: "#0B0F19",
-      overflow: "hidden"
+      overflowY: "auto"
     }
   }, /*#__PURE__*/React.createElement("style", null, `
         .auth-card {
@@ -547,12 +547,21 @@ function AuthPanel({
     }
   }, "SYS_OPS: NOMINAL"), /*#__PURE__*/React.createElement("div", {
     style: {
-      position: "absolute",
-      top: "50%",
-      left: "50%",
-      transform: "translate(-50%, -50%)",
-      width: "calc(100% - 32px)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: "100%",
+      width: "100%",
+      padding: "60px 16px",
+      boxSizing: "border-box",
+      position: "relative",
+      zIndex: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "100%",
       maxWidth: 460,
+      position: "relative",
       zIndex: 10
     }
   }, isSuccess && mode === "register" && /*#__PURE__*/React.createElement("div", {
@@ -632,12 +641,12 @@ function AuthPanel({
     }
   }, "Climate-Resilient Commerce Platform")), /*#__PURE__*/React.createElement("div", {
     className: "segment-tabs"
-  }, ["producer", "consumer", "sme owner"].map(r => /*#__PURE__*/React.createElement("button", {
+  }, ["producer", "inspector", "sme owner"].map(r => /*#__PURE__*/React.createElement("button", {
     key: r,
     type: "button",
     className: `segment-btn ${uiRole === r ? "active" : ""}`,
     onClick: () => setUiRole(r)
-  }, r === "sme owner" ? "SME Owner" : r.charAt(0).toUpperCase() + r.slice(1)))), /*#__PURE__*/React.createElement("form", {
+  }, r === "sme owner" ? "SME Owner" : r === "inspector" ? "Inspector" : r.charAt(0).toUpperCase() + r.slice(1)))), /*#__PURE__*/React.createElement("form", {
     onSubmit: handleSubmit
   }, /*#__PURE__*/React.createElement("div", {
     style: formStyles.inputGroup
@@ -974,12 +983,12 @@ function AuthPanel({
     }
   }, "Create Account")), /*#__PURE__*/React.createElement("div", {
     className: "segment-tabs"
-  }, ["producer", "consumer", "sme owner"].map(r => /*#__PURE__*/React.createElement("button", {
+  }, ["producer", "inspector", "sme owner"].map(r => /*#__PURE__*/React.createElement("button", {
     key: r,
     type: "button",
     className: `segment-btn ${uiRole === r ? "active" : ""}`,
     onClick: () => setUiRole(r)
-  }, r === "sme owner" ? "SME Owner" : r.charAt(0).toUpperCase() + r.slice(1)))), /*#__PURE__*/React.createElement("form", {
+  }, r === "sme owner" ? "SME Owner" : r === "inspector" ? "Inspector" : r.charAt(0).toUpperCase() + r.slice(1)))), /*#__PURE__*/React.createElement("form", {
     onSubmit: handleSubmit
   }, /*#__PURE__*/React.createElement("div", {
     style: formStyles.inputGroup
@@ -1170,6 +1179,6 @@ function AuthPanel({
     },
     onMouseOver: e => e.target.style.textDecoration = "underline",
     onMouseOut: e => e.target.style.textDecoration = "none"
-  }, "Sign in")))))));
+  }, "Sign in"))))))));
 }
 window.AuthPanel = AuthPanel;

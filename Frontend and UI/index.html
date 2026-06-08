@@ -276,6 +276,17 @@
 
       /* ── Mobile Responsiveness ── */
       @media (max-width: 900px) {
+        .grid-2col,
+        .grid-3col,
+        .grid-4col,
+        .grid-2fr-1fr,
+        .grid-1-2fr-1-8fr,
+        .grid-sidebar {
+          grid-template-columns: 1fr !important;
+        }
+        .flex-row-to-col {
+          flex-direction: column !important;
+        }
         body {
           font-size: 14px;
         }
