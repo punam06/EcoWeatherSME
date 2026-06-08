@@ -3416,7 +3416,7 @@ function DashboardView({ onNewBatch }) {
     if (isManual) setIsRefreshing(true);
     try {
       const res = await fetch(`${BACKEND_URL}/api/dashboard`);
-      const json = await res.json();
+      
       if (json.success && json.data) {
         setDashData(json.data);
         setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
@@ -8899,7 +8899,7 @@ function CLimaLogixApp() {
             activeZone={activeZone}
             setActiveZone={setActiveZone}
             liveWeather={liveWeather}
-            detectGpsLocation={detectGpsLocation} gpsError={gpsError} gpsError={gpsError}
+            detectGpsLocation={detectGpsLocation} gpsError={gpsError}
           />
         )}
         {activeTab === "tracking" && <TrackingView />}

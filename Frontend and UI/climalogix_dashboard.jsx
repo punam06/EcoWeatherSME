@@ -3664,7 +3664,7 @@ function DashboardView({ onNewBatch }) {
     if (isManual) setIsRefreshing(true);
     try {
       const res = await fetch(`${BACKEND_URL}/api/dashboard`);
-      const json = await res.json();
+      
       if (json.success && json.data) {
         setDashData(json.data);
         setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
@@ -8363,7 +8363,7 @@ function SettingsView() {
           heatwave_alerts: heatwaveAlerts
         })
       });
-      const json = await res.json();
+      
       if (json.success) {
         showToast("Profile settings successfully saved!", "success");
       } else {
@@ -8502,12 +8502,7 @@ function DeliveryView({ userRole, onUpdateTrustScore }) {
       showToast("Server error during acknowledgment", "error");
     }
   };
-      }
-      return s;
-    }));
-    if (onUpdateTrustScore) onUpdateTrustScore(prev => Math.min(100, prev + 4));
-    showToast(`Delivery acknowledged! BARI Trust Score increased due to chain-of-custody confirmation.`, "success");
-  };
+
 
   return (
     <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
@@ -9413,7 +9408,7 @@ function CLimaLogixApp() {
             activeZone={activeZone}
             setActiveZone={setActiveZone}
             liveWeather={liveWeather}
-            detectGpsLocation={detectGpsLocation} gpsError={gpsError} gpsError={gpsError}
+            detectGpsLocation={detectGpsLocation} gpsError={gpsError}
           />
         )}
         {activeTab === "tracking" && <TrackingView />}
