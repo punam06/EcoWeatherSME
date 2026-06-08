@@ -246,6 +246,11 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
             setIsLoading(false);
             return;
           }
+          if (mode === "forgot" && !email) {
+            setError("Please enter your email address");
+            setIsLoading(false);
+            return;
+          }
 
           const backendRole = uiRole === "manufacturer" ? "processor" : uiRole === "inspector" ? "admin" : "buyer";
 
@@ -270,7 +275,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
             let result;
             if (mode === "login") {
               result = await sb.auth.signInWithPassword({ email, password });
-            } else {
+            } else if (mode === "register") {
               result = await sb.auth.signUp({
                 email,
                 password,
@@ -278,6 +283,18 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
                   data: { name, role: backendRole }
                 }
               });
+            } else if (mode === "forgot") {
+              result = await sb.auth.resetPasswordForEmail(email);
+              if (!result.error) {
+                setIsSuccess(true);
+                setSuccessMsg("Reset link sent to your email!");
+                setTimeout(() => {
+                  setMode("login");
+                  setIsSuccess(false);
+                }, 2500);
+                setIsLoading(false);
+                return;
+              }
             }
 
             if (result.error) {
@@ -496,7 +513,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
               )}
 
               <div className={`auth-card ${mode === "login" ? "card--visible" : "card--hidden"}`}>
-                <div className={error && mode === "login" ? "auth-error-shake" : ""}>
+                <div className={error ? "auth-error-shake" : ""}>
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", marginBottom: "30px" }}>
                     <div style={{
                       width: "56px", height: "56px", background: "rgba(16, 185, 129, 0.1)",
@@ -543,6 +560,8 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
                         </div>
                       )}
                     </div>
+                    {mode !== "forgot" && (
+
 
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
                       <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13px", color: "#9CA3AF", fontFamily: "Inter" }}>
@@ -555,17 +574,19 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
                         </div>
                         Remember me
                       </label>
-                      <a href="#" style={{ color: "#10B981", fontSize: "13px", textDecoration: "none", fontFamily: "Inter" }}>Forgot password?</a>
+                      <a href="#" onClick={(e) => { e.preventDefault(); setMode("forgot"); }} style={{ color: "#10B981", fontSize: "13px", textDecoration: "none", fontFamily: "Inter" }}>Forgot password?</a>
                     </div>
 
-                    {error && mode === "login" && <div style={{ color: "#EF4444", fontSize: "13px", marginBottom: "16px", textAlign: "center", fontFamily: "Inter" }}>{error}</div>}
+                    
+                    )}
+{error && <div style={{ color: "#EF4444", fontSize: "13px", marginBottom: "16px", textAlign: "center", fontFamily: "Inter" }}>{error}</div>}
 
                     <button type="submit" className="auth-btn" disabled={isLoading}>
                       {isLoading ? (
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
                       ) : isSuccess ? (
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                      ) : "Sign In"}
+                      ) : mode === "forgot" ? "Send Reset Link" : mode === "register" ? "Create Account" : "Sign In"}
                     </button>
 
                     <div style={{ marginTop: "20px", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: "16px" }}>
@@ -1203,10 +1224,10 @@ function BatchVerificationForm({ onResult, onResultDetail, prefilledBatchId, pre
         if (result.success && Array.isArray(result.data)) {
           setRegisteredBatches(result.data);
         } else {
-          setRegisteredBatches(window.__SEED_BATCHES__ || []);
+          setRegisteredBatches([]);
         }
       } catch (err) {
-        setRegisteredBatches(window.__SEED_BATCHES__ || []);
+        setRegisteredBatches([]);
       }
     };
     loadBatches();
@@ -1546,9 +1567,7 @@ function BatchVerificationForm({ onResult, onResultDetail, prefilledBatchId, pre
                   }
                   return b;
                 };
-                if (window.__SEED_BATCHES__) {
-                  window.__SEED_BATCHES__ = window.__SEED_BATCHES__.map(updateLocalBatch);
-                }
+                
                 setRegisteredBatches(prev => prev.map(updateLocalBatch));
               } else {
                 throw new Error(res.error || "Batch certification failed.");
@@ -3680,10 +3699,10 @@ function DashboardView({ onNewBatch }) {
       if (json.success && Array.isArray(json.data) && json.data.length > 0) {
         setBatchList(json.data.map(b => ({ ...b, status: (b.status || "").trim().toLowerCase() })));
       } else {
-        setBatchList(window.__SEED_BATCHES__ || []);
+        setBatchList([]);
       }
     } catch (_) {
-      setBatchList(window.__SEED_BATCHES__ || []);
+      setBatchList([]);
     } finally {
       setBatchListLoading(false);
     }
@@ -3958,26 +3977,6 @@ function DashboardView({ onNewBatch }) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   BATCH REGISTRY – module-level seed data (stable across renders)
-   ═══════════════════════════════════════════════════════════════ */
-(function() {
-  // defined at module scope so fetchBatches closures always see same reference
-  const _now = new Date();
-  const _seed = _now.getFullYear() * 100 + _now.getMonth() * 10 + _now.getDate();
-  window.__SEED_BATCHES__ = [
-    { id: `BCH-${_seed+0}`, product_name: "Bio-Slurry Concentrate",    status: "certified",  trust_score: 70+((_seed+0*7)%30),  destination_zone: "Old Dhaka",   weight_kg: 80+((_seed+0*13)%220),  created_at: new Date(Date.now()-0*18000000).toISOString() },
-    { id: `BCH-${_seed+1}`, product_name: "Biochar Granules",           status: "active",     trust_score: 70+((_seed+1*7)%30),  destination_zone: "Mirpur",      weight_kg: 80+((_seed+1*13)%220),  created_at: new Date(Date.now()-1*18000000).toISOString() },
-    { id: `BCH-${_seed+2}`, product_name: "EM-1 Bio-Culture",           status: "pending",    trust_score: 70+((_seed+2*7)%30),  destination_zone: "Gulshan",     weight_kg: 80+((_seed+2*13)%220),  created_at: new Date(Date.now()-2*18000000).toISOString() },
-    { id: `BCH-${_seed+3}`, product_name: "Organic Compost",            status: "dispatched", trust_score: 70+((_seed+3*7)%30),  destination_zone: "Savar",       weight_kg: 80+((_seed+3*13)%220),  created_at: new Date(Date.now()-3*18000000).toISOString() },
-    { id: `BCH-${_seed+4}`, product_name: "Liquid Fertiliser",          status: "delivered",  trust_score: 70+((_seed+4*7)%30),  destination_zone: "Dhanmondi",   weight_kg: 80+((_seed+4*13)%220),  created_at: new Date(Date.now()-4*18000000).toISOString() },
-    { id: `BCH-${_seed+5}`, product_name: "Thermal-Safe Vaccine Batch", status: "certified",  trust_score: 70+((_seed+5*7)%30),  destination_zone: "Uttara",      weight_kg: 80+((_seed+5*13)%220),  created_at: new Date(Date.now()-5*18000000).toISOString() },
-    { id: `BCH-${_seed+6}`, product_name: "Fresh Dairy Mix",            status: "active",     trust_score: 70+((_seed+6*7)%30),  destination_zone: "Banani",      weight_kg: 80+((_seed+6*13)%220),  created_at: new Date(Date.now()-6*18000000).toISOString() },
-    { id: `BCH-${_seed+7}`, product_name: "Carbon-Neutral Biochar",     status: "certified",  trust_score: 70+((_seed+7*7)%30),  destination_zone: "Motijheel",   weight_kg: 80+((_seed+7*13)%220),  created_at: new Date(Date.now()-7*18000000).toISOString() },
-    { id: `BCH-${_seed+8}`, product_name: "Cold-Chain Fish Paste",      status: "pending",    trust_score: 70+((_seed+8*7)%30),  destination_zone: "Jatrabari",   weight_kg: 80+((_seed+8*13)%220),  created_at: new Date(Date.now()-8*18000000).toISOString() },
-    { id: `BCH-${_seed+9}`, product_name: "Poultry Probiotic Mix",      status: "dispatched", trust_score: 70+((_seed+9*7)%30),  destination_zone: "Tejgaon",     weight_kg: 80+((_seed+9*13)%220),  created_at: new Date(Date.now()-9*18000000).toISOString() },
-  ];
-})();
 
 function BatchRegistry({ onNewBatch }) {
   const STATUS_TABS = ["All", "Pending", "Active", "Certified", "Dispatched", "Delivered"];
@@ -4023,10 +4022,10 @@ function BatchRegistry({ onNewBatch }) {
       if (json.success && Array.isArray(json.data) && json.data.length > 0) {
         setBatches(json.data.map(b => ({ ...b, status: (b.status || "").trim().toLowerCase() })));
       } else {
-        setBatches(window.__SEED_BATCHES__ || []);
+        setBatches([]);
       }
     } catch (_) {
-      setBatches(window.__SEED_BATCHES__ || []);
+      setBatches([]);
     } finally {
       setIsLoading(false);
       setLastFetched(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
@@ -4429,16 +4428,14 @@ function BatchRegistry({ onNewBatch }) {
                       const result = await res.json();
                       if (result.success) {
                         setBatches(prev => prev.filter(b => b.id !== selectedBatch.id && b.batch_number !== selectedBatch.id));
-                        if (window.__SEED_BATCHES__) {
-                          window.__SEED_BATCHES__ = window.__SEED_BATCHES__.filter(b => b.id !== selectedBatch.id && b.batch_number !== selectedBatch.id);
-                        }
+                        
                         setSelected(null);
                       } else {
-                        alert(result.error || "Failed to delete batch");
+                        showToast(result.error || "Failed to delete batch", "error");
                       }
                     } catch (err) {
                       console.error("Failed to delete batch:", err);
-                      alert("Network error. Unable to contact the backend server.");
+                      showToast("Network error. Unable to contact the backend server.", "error");
                     }
                   }
                 }}
@@ -4534,16 +4531,12 @@ function RegisterBatch({ onCancel }) {
         }
       }
       // Always add to local seed (whether backend succeeded or not)
-      if (window.__SEED_BATCHES__) {
-        window.__SEED_BATCHES__.unshift(localBatch);
-      }
+      
       onCancel();
     } catch (error) {
       console.warn("Backend unreachable — saving batch locally only:", error);
       // Offline fallback: still add to registry so user sees their batch
-      if (window.__SEED_BATCHES__) {
-        window.__SEED_BATCHES__.unshift(localBatch);
-      }
+      
       onCancel();
     } finally {
       setIsSubmitting(false);
@@ -4657,16 +4650,7 @@ function RegisterBatch({ onCancel }) {
   );
 }
 
-const MOCK_PRODUCTS = [
-  { id: 1, name: "Premium Bio-Slurry", category: "Agriculture", price: "৳ 450", unit: "L", seller: "Green Refineries Ltd.", dvs: 85, icon: "🌱", badge: "BARI Certified" },
-  { id: 2, name: "Thermal-Safe EM-1", category: "Agriculture", price: "৳ 320", unit: "Kg", seller: "Agro Eco SME", dvs: 72, icon: "🌾", badge: null },
-  { id: 3, name: "Insulin (Lantus 10ml)", category: "Pharmaceuticals", price: "৳ 1,250", unit: "Vial", seller: "PharmaCare BD", dvs: 94, icon: "⚕️", badge: "Cold-Chain verified" },
-  { id: 4, name: "Polio Vaccine (OPV)", category: "Pharmaceuticals", price: "৳ 4,800", unit: "Box", seller: "Health Line Inc.", dvs: 98, icon: "💉", badge: "Critical Priority" },
-  { id: 5, name: "Fresh Dairy Milk", category: "Food & Dairy", price: "৳ 90", unit: "L", seller: "Aarong Dairy", dvs: 68, icon: "🥛", badge: null },
-  { id: 6, name: "Premium Hilsha Fish", category: "Food & Seafood", price: "৳ 1,500", unit: "Kg", seller: "Padma Catch", dvs: 65, icon: "🐟", badge: null },
-  { id: 7, name: "Carbon-Neutral Biochar", category: "Agriculture", price: "৳ 150", unit: "Kg", seller: "SME Co-op", dvs: 92, icon: "🌿", badge: null },
-  { id: 8, name: "Temperature Reagents", category: "Chemicals", price: "৳ 3,500", unit: "Pack", seller: "ChemLab BD", dvs: 88, icon: "🧪", badge: "Hazard Risk" },
-];
+const MOCK_PRODUCTS = [];
 
 
 const IS_LOCAL_DEV = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -5104,7 +5088,7 @@ function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerific
   );
 }
 
-function MarketplaceView({ products = MOCK_PRODUCTS }) {
+function MarketplaceView({ products = [], isLoading = false }) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [minDvs, setMinDvs] = useState(0);
@@ -5463,82 +5447,99 @@ function MarketplaceView({ products = MOCK_PRODUCTS }) {
 
       {/* Product Grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 20, marginBottom: 80 }}>
-        {filteredProducts.map(p => {
-          const rawPrice = Number((p.price || "").replace(/[৳\s,]/g, ""));
-          const isClearance = p.dvs < 75;
-          const discountedPrice = isClearance ? Math.round(rawPrice * 0.7) : rawPrice;
-          
-          return (
-            <Card 
-              key={p.id} 
-              onClick={() => { setSelectedProduct(p); setQuantityInput(1); }}
-              style={{ padding: "20px 24px", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden", cursor: "pointer" }}
-            >
-              {isClearance ? (
-                <div style={{
-                  position: "absolute",
-                  top: 16,
-                  right: 16,
-                  background: ACCENT.redBg,
-                  color: ACCENT.red,
-                  padding: "4px 10px",
-                  borderRadius: 4,
-                  fontSize: 10,
-                  fontWeight: 700,
-                  letterSpacing: "0.05em",
-                  border: `1px solid ${ACCENT.redBorder}`,
-                  animation: "pulseGlow 2s infinite"
-                }}>
-                  ⚡ DYNAMIC CLEARANCE
+        {isLoading ? (
+          Array.from({ length: 8 }).map((_, i) => (
+            <Card key={i} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden", minHeight: 280 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16 }}>
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: "var(--border-primary)", animation: "pulse 1.5s infinite" }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ height: 16, width: "80%", background: "var(--border-primary)", borderRadius: 4, marginBottom: 8, animation: "pulse 1.5s infinite" }} />
+                  <div style={{ height: 12, width: "50%", background: "var(--border-primary)", borderRadius: 4, animation: "pulse 1.5s infinite" }} />
                 </div>
-              ) : p.badge ? (
-                <div style={{ position: "absolute", top: 16, right: 16, background: p.badge.includes("Critical") ? ACCENT.redBg : ACCENT.blueBg, color: p.badge.includes("Critical") ? ACCENT.red : ACCENT.blue, padding: "4px 10px", borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", border: `1px solid ${p.badge.includes("Critical") ? ACCENT.redBorder : "var(--border-primary)"}` }}>
-                  {p.badge.toUpperCase()}
-                </div>
-              ) : null}
-              
-              <div style={{ fontSize: 36, marginBottom: 16 }}>{p.icon}</div>
-              
-              <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 4 }}>{p.category}</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4, lineHeight: 1.3 }}>{p.name}</div>
-              <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 16 }}>{p.seller}</div>
-              
+              </div>
               <div style={{ marginTop: "auto" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border-primary)" }}>
-                  <div>
-                    {isClearance ? (
-                      <div>
-                        <div style={{ fontSize: 12, textDecoration: "line-through", color: "var(--text-muted)", marginBottom: 2 }}>{p.price}</div>
-                        <div style={{ fontSize: 20, fontWeight: 700, color: ACCENT.red, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>৳ {discountedPrice.toLocaleString()}</div>
-                      </div>
-                    ) : (
-                      <div style={{ fontSize: 20, fontWeight: 700, color: ACCENT.green, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>{p.price}</div>
-                    )}
-                    <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 4 }}>per {p.unit}</div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: p.dvs >= 90 ? ACCENT.green : p.dvs >= 75 ? ACCENT.blue : ACCENT.amber, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>{p.dvs}</div>
-                    <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 4, fontWeight: 600 }}>DVS SCORE</div>
-                  </div>
-                </div>
-                
-                <button 
-                  onClick={(e) => addToCart(p, 1, e)}
-                  style={{ width: "100%", padding: "10px 0", background: isClearance ? ACCENT.redBg : "var(--bg-input)", border: `1px solid ${isClearance ? ACCENT.redBorder : "var(--border-primary)"}`, borderRadius: 8, color: isClearance ? ACCENT.red : "var(--text-primary)", fontWeight: 600, cursor: "pointer", fontSize: 13, transition: "background 0.2s" }}
-                  onMouseEnter={e => e.currentTarget.style.background = isClearance ? "rgba(239, 68, 68, 0.15)" : ACCENT.greenBg}
-                  onMouseLeave={e => e.currentTarget.style.background = isClearance ? ACCENT.redBg : "var(--bg-input)"}
-                >
-                  Add to Cart
-                </button>
+                <div style={{ height: 20, width: "40%", background: "var(--border-primary)", borderRadius: 4, marginBottom: 16, animation: "pulse 1.5s infinite" }} />
+                <div style={{ height: 40, width: "100%", background: "var(--border-primary)", borderRadius: 8, animation: "pulse 1.5s infinite" }} />
               </div>
             </Card>
-          );
-        })}
-        {filteredProducts.length === 0 && (
+          ))
+        ) : filteredProducts.length === 0 ? (
           <div style={{ gridColumn: "1 / -1", padding: 60, textAlign: "center", color: "var(--text-secondary)" }}>
             <div style={{ fontSize: 40, marginBottom: 16 }}>🔍</div>
             <div style={{ fontSize: 16, fontWeight: 500 }}>No products match your filters.</div>
           </div>
+        ) : (
+          filteredProducts.map(p => {
+            const rawPrice = Number((p.price || "").replace(/[৳\s,]/g, ""));
+            const isClearance = p.dvs < 75;
+            const discountedPrice = isClearance ? Math.round(rawPrice * 0.7) : rawPrice;
+            
+            return (
+              <Card 
+                key={p.id} 
+                onClick={() => { setSelectedProduct(p); setQuantityInput(1); }}
+                style={{ padding: "20px 24px", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden", cursor: "pointer" }}
+              >
+                {isClearance ? (
+                  <div style={{
+                    position: "absolute",
+                    top: 16,
+                    right: 16,
+                    background: ACCENT.redBg,
+                    color: ACCENT.red,
+                    padding: "4px 10px",
+                    borderRadius: 4,
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: "0.05em",
+                    border: `1px solid ${ACCENT.redBorder}`,
+                    animation: "pulseGlow 2s infinite"
+                  }}>
+                    ⚡ DYNAMIC CLEARANCE
+                  </div>
+                ) : p.badge ? (
+                  <div style={{ position: "absolute", top: 16, right: 16, background: p.badge.includes("Critical") ? ACCENT.redBg : ACCENT.blueBg, color: p.badge.includes("Critical") ? ACCENT.red : ACCENT.blue, padding: "4px 10px", borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", border: `1px solid ${p.badge.includes("Critical") ? ACCENT.redBorder : "var(--border-primary)"}` }}>
+                    {p.badge.toUpperCase()}
+                  </div>
+                ) : null}
+                
+                <div style={{ fontSize: 36, marginBottom: 16 }}>{p.icon}</div>
+                
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 4 }}>{p.category}</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4, lineHeight: 1.3 }}>{p.name}</div>
+                <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 16 }}>{p.seller}</div>
+                
+                <div style={{ marginTop: "auto" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border-primary)" }}>
+                    <div>
+                      {isClearance ? (
+                        <div>
+                          <div style={{ fontSize: 12, textDecoration: "line-through", color: "var(--text-muted)", marginBottom: 2 }}>{p.price}</div>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: ACCENT.red, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>৳ {discountedPrice.toLocaleString()}</div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 20, fontWeight: 700, color: ACCENT.green, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>{p.price}</div>
+                      )}
+                      <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 4 }}>per {p.unit}</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: p.dvs >= 90 ? ACCENT.green : p.dvs >= 75 ? ACCENT.blue : ACCENT.amber, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>{p.dvs}</div>
+                      <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 4, fontWeight: 600 }}>DVS SCORE</div>
+                    </div>
+                  </div>
+                  
+                  <button 
+                    onClick={(e) => addToCart(p, 1, e)}
+                    style={{ width: "100%", padding: "10px 0", background: isClearance ? ACCENT.redBg : "var(--bg-input)", border: `1px solid ${isClearance ? ACCENT.redBorder : "var(--border-primary)"}`, borderRadius: 8, color: isClearance ? ACCENT.red : "var(--text-primary)", fontWeight: 600, cursor: "pointer", fontSize: 13, transition: "background 0.2s" }}
+                    onMouseEnter={e => e.currentTarget.style.background = isClearance ? "rgba(239, 68, 68, 0.15)" : ACCENT.greenBg}
+                    onMouseLeave={e => e.currentTarget.style.background = isClearance ? ACCENT.redBg : "var(--bg-input)"}
+                  >
+                    Add to Cart
+                  </button>
+                </div>
+              </Card>
+            );
+          })
         )}
       </div>
 
@@ -6829,7 +6830,7 @@ function SystemDocsView({ productsList, liveWeather }) {
   useEffect(() => { localStorage.setItem("docs_team", JSON.stringify(team)); }, [team]);
 
   // Dynamic Telemetry calculation from live memory state
-  const batches = window.__SEED_BATCHES__ || [];
+  const batches = [];
   const totalBatches = batches.length;
   
   const avgTrustScore = totalBatches > 0 
@@ -7667,7 +7668,7 @@ function SystemDocsView({ productsList, liveWeather }) {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)" }}>
                     <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Mock Supabase Database Connection</span>
                     <button
-                      onClick={() => alert("Supabase Connection Status: Connected (SSL Secure, 2 active client channels).")}
+                      onClick={() => showToast("Supabase Connection Status: Connected (SSL Secure, 2 active client channels).", "success")}
                       style={{ padding: "6px 14px", borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: "pointer", border: "none", background: ACCENT.greenBg, color: ACCENT.green }}
                     >
                       ✓ CONNECTED
@@ -7680,29 +7681,7 @@ function SystemDocsView({ productsList, liveWeather }) {
                       style={{ width: 80, padding: 6, borderRadius: 6, border: "1px solid var(--border-primary)", background: "var(--bg-header)", color: "var(--text-primary)", textAlign: "center", fontSize: 13 }}
                     />
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border-primary)" }}>
-                    <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Simulated Environmental Heat Hazard Lot</span>
-                    <button
-                      onClick={() => {
-                        const randomId = Math.floor(100000 + Math.random() * 900000);
-                        const mockBatch = {
-                          id: `batch-${randomId}`,
-                          batch_number: `CL-${randomId}`,
-                          product_name: "Simulated Organic Composites",
-                          destination_zone: "Old Dhaka",
-                          weight_kg: 500,
-                          trust_score: 95,
-                          status: "certified",
-                          created_at: new Date().toISOString()
-                        };
-                        window.__SEED_BATCHES__ = [mockBatch, ...(window.__SEED_BATCHES__ || [])];
-                        alert(`Injected simulated certified hazard lot CL-${randomId} to destination zone "Old Dhaka"!`);
-                      }}
-                      style={{ padding: "6px 14px", borderRadius: 6, fontSize: 11.5, fontWeight: 700, cursor: "pointer", border: "none", background: ACCENT.blueBg, color: ACCENT.blue }}
-                    >
-                      ⚡ INJECT BATCH
-                    </button>
-                  </div>
+
                 </div>
               </div>
 
@@ -7714,7 +7693,7 @@ function SystemDocsView({ productsList, liveWeather }) {
                   {"⚠️ Reset Defaults"}
                 </button>
                 <button 
-                  onClick={() => alert("Settings successfully saved and persisted to local configurations!")}
+                  onClick={() => showToast("Settings successfully saved and persisted to local configurations!", "success")}
                   style={{ flex: 1, padding: "12px", borderRadius: 8, background: ACCENT.green, color: "#fff", fontWeight: 700, fontSize: 13, border: "none", cursor: "pointer" }}
                 >
                   {"Save Changes"}
@@ -7775,7 +7754,7 @@ function LandingView({ onGetStarted }) {
   const handleContactSubmit = (e) => {
     e.preventDefault();
     if (!contactName || !contactEmail || !contactMessage) {
-      alert("Please fill in all required fields.");
+      showToast("Please fill in all required fields.", "warning");
       return;
     }
     setSubmitting(true);
@@ -8316,10 +8295,62 @@ function SettingsView() {
   const [badgeId, setBadgeId] = useState("INS-8422-CLX");
   const [prefZone, setPrefZone] = useState("Mirpur");
   const [heatwaveAlerts, setHeatwaveAlerts] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleSave = (e) => {
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const token = window.SUPABASE_SESSION_TOKEN || localStorage.getItem("sb-token");
+        const res = await fetch(`${BACKEND_URL}/api/profile`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        const json = await res.json();
+        if (json.success && json.data) {
+          setName(json.data.full_name || "Demo User");
+          setBadgeId(json.data.badge_id || "INS-8422-CLX");
+          setPrefZone(json.data.pref_zone || "Mirpur");
+          setHeatwaveAlerts(json.data.heatwave_alerts !== false);
+        }
+      } catch (err) {
+        console.error("Failed to fetch profile:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    if (window.SUPABASE_SESSION_TOKEN || localStorage.getItem("sb-token")) {
+      fetchProfile();
+    } else {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const handleSave = async (e) => {
     e.preventDefault();
-    alert("Profile settings successfully saved!");
+    try {
+      const token = window.SUPABASE_SESSION_TOKEN || localStorage.getItem("sb-token");
+      const res = await fetch(`${BACKEND_URL}/api/profile`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          full_name: name,
+          badge_id: badgeId,
+          pref_zone: prefZone,
+          heatwave_alerts: heatwaveAlerts
+        })
+      });
+      const json = await res.json();
+      if (json.success) {
+        showToast("Profile settings successfully saved!", "success");
+      } else {
+        showToast("Failed to save profile: " + (json.error || "Unknown"), "error");
+      }
+    } catch (err) {
+      console.error("Failed to update profile:", err);
+      showToast("Server error during save", "error");
+    }
   };
 
   return (
@@ -8397,31 +8428,75 @@ function SettingsView() {
 }
 
 function DeliveryView({ userRole, onUpdateTrustScore }) {
-  const [shipments, setShipments] = useState([
-    { id: "SH-102", batchId: "BCH-1082", origin: "Savár Farm", dest: "Kamrangirchar", eta: "45 mins", temp: "29.4°C", status: "in-transit", optimized: false },
-    { id: "SH-105", batchId: "BCH-2144", origin: "Gazipur Facility", dest: "Mirpur", eta: "1.2 hours", temp: "28.1°C", status: "in-transit", optimized: false }
-  ]);
+  const [shipments, setShipments] = useState([]);
   const [optLog, setOptLog] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleOptimize = (shipmentId) => {
-    setShipments(prev => prev.map(s => {
-      if (s.id === shipmentId) {
-        return { ...s, optimized: true, temp: "26.5°C", eta: "50 mins" };
+  useEffect(() => {
+    const fetchDeliveries = async () => {
+      try {
+        const token = window.SUPABASE_SESSION_TOKEN || localStorage.getItem("sb-token");
+        const res = await fetch(`${BACKEND_URL}/api/deliveries`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        const json = await res.json();
+        if (json.success && json.data) {
+          setShipments(json.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch deliveries:", err);
+      } finally {
+        setIsLoading(false);
       }
-      return s;
-    }));
+    };
+    if (window.SUPABASE_SESSION_TOKEN || localStorage.getItem("sb-token")) {
+      fetchDeliveries();
+    } else {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const handleOptimize = async (shipmentId) => {
+    setShipments(prev => prev.map(s => s.id === shipmentId ? { ...s, optimized: true, temp: "26.5°C", eta: "50 mins" } : s));
     setOptLog(`[AI OPTIMIZATION] Re-routed shipment ${shipmentId} away from Hazaribagh thermal corridor (+3.5°C) to greenbelt bypass path. Dynamic decay risk reduced!`);
+    
+    try {
+      const token = window.SUPABASE_SESSION_TOKEN || localStorage.getItem("sb-token");
+      await fetch(`${BACKEND_URL}/api/deliveries/${shipmentId}/optimize`, {
+        method: "PUT",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+    } catch (err) {
+      console.error("Failed to optimize delivery:", err);
+    }
   };
 
-  const handleAcknowledge = (shipmentId) => {
-    setShipments(prev => prev.map(s => {
-      if (s.id === shipmentId) {
-        return { ...s, status: "delivered", eta: "completed" };
+  const handleAcknowledge = async (shipmentId) => {
+    setShipments(prev => prev.map(s => s.id === shipmentId ? { ...s, status: "delivered", eta: "completed" } : s));
+    if (onUpdateTrustScore) onUpdateTrustScore(prev => Math.min(100, prev + 4));
+    
+    try {
+      const token = window.SUPABASE_SESSION_TOKEN || localStorage.getItem("sb-token");
+      const res = await fetch(`${BACKEND_URL}/api/deliveries/${shipmentId}/acknowledge`, {
+        method: "PUT",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const json = await res.json();
+      if (json.success) {
+        showToast(`Delivery acknowledged! BARI Trust Score increased due to chain-of-custody confirmation.`, "success");
+      } else {
+        showToast("Failed to acknowledge: " + (json.error || "Unknown"), "error");
+      }
+    } catch (err) {
+      console.error("Failed to acknowledge delivery:", err);
+      showToast("Server error during acknowledgment", "error");
+    }
+  };
       }
       return s;
     }));
     if (onUpdateTrustScore) onUpdateTrustScore(prev => Math.min(100, prev + 4));
-    alert(`Delivery acknowledged! BARI Trust Score increased due to chain-of-custody confirmation.`);
+    showToast(`Delivery acknowledged! BARI Trust Score increased due to chain-of-custody confirmation.`, "success");
   };
 
   return (
@@ -8434,7 +8509,7 @@ function DeliveryView({ userRole, onUpdateTrustScore }) {
           <Card>
             <div style={{ fontSize: "14px", fontWeight: 700, marginBottom: "16px" }}>Active Shipments</div>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              {shipments.map(s => (
+              {isLoading ? <div style={{padding: "20px", color: "var(--text-secondary)"}}>Loading deliveries...</div> : shipments.map(s => (
                 <div key={s.id} style={{
                   background: "var(--bg-input)", border: "1px solid var(--border-primary)",
                   borderRadius: "10px", padding: "16px"
@@ -8575,7 +8650,7 @@ function CLimaLogixApp() {
   const [isRegisteringBatch, setIsRegisteringBatch] = useState(false);
   const [theme, setTheme] = useState("dark");
   const [dvs, setDvs] = useState(72);
-  const [productsList, setProductsList] = useState(MOCK_PRODUCTS);
+  const [productsList, setProductsList] = useState([]); const [isLoadingProducts, setIsLoadingProducts] = useState(true); useEffect(() => { const fetchProducts = async () => { try { const res = await fetch(`${BACKEND_URL}/api/products`); const json = await res.json(); if (json.success && json.data) { setProductsList(json.data); } else { setProductsList([]); } } catch (err) { console.error("Failed to fetch products:", err); } finally { setIsLoadingProducts(false); } }; fetchProducts(); }, []);
   const [selectedSme, setSelectedSme] = useState("green_refineries");
   const [customSmeName, setCustomSmeName] = useState("My Custom SME");
   const [verificationBatchId, setVerificationBatchId] = useState("");
@@ -8665,20 +8740,22 @@ function CLimaLogixApp() {
   });
 
   const detectGpsLocation = () => {
+    setGpsError(null);
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      alert("Geolocation is not supported by your browser.");
+      setGpsError("Geolocation is not supported by your browser.");
       return;
     }
     setLiveWeather(prev => ({ ...prev, source: "fetching" }));
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        setGpsError(null);
         const { latitude, longitude } = pos.coords;
         const closest = findClosestZone(latitude, longitude);
         setActiveZone(closest);
         setLiveWeather(prev => ({ ...prev, source: "live-device" }));
       },
       (err) => {
-        alert("GPS auto-detection failed: " + err.message + ". Falling back to manual selection.");
+        setGpsError("GPS auto-detection failed: " + err.message + ". Please select manually.");
         console.warn("[LiveWeather] Geolocation failed:", err);
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -9321,7 +9398,7 @@ function CLimaLogixApp() {
             activeZone={activeZone}
             setActiveZone={setActiveZone}
             liveWeather={liveWeather}
-            detectGpsLocation={detectGpsLocation}
+            detectGpsLocation={detectGpsLocation} gpsError={gpsError} gpsError={gpsError}
           />
         )}
         {activeTab === "tracking" && <TrackingView />}
@@ -9335,7 +9412,7 @@ function CLimaLogixApp() {
         )}
         {activeTab === "settings" && <SettingsView />}
 
-        {activeTab === "marketplace" && <MarketplaceView products={productsList} />}
+        {activeTab === "marketplace" && <MarketplaceView products={productsList} isLoading={isLoadingProducts} />}
         {activeTab === "chatbot" && (
           <ChatbotView
             setTab={setTab}

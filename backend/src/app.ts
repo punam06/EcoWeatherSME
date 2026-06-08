@@ -62,6 +62,9 @@ import { authenticateJWT, optionalJWT } from './middleware/authenticateJWT';
 
 // ── New Feature Module Imports (Tasks 1-8) ────────────────────────────────────
 import notificationsRouter from './api/routes/notifications.route';
+import productsRouter from './api/routes/products.route';
+import profileRouter from './api/routes/profile.route';
+import deliveriesRouter from './api/routes/deliveries.route';
 import aiCostReportRouter from './api/routes/aiCostReport.route';
 import routeOptimizeRouter from './api/routes/routeOptimize.route';
 import { aiCostShield } from './middleware/aiCostShield';
@@ -264,6 +267,9 @@ app.use('/api/weather', weatherRouter);
 // ── New Feature Module Routes ────────────────────────────────────────────────
 // Task 1: Real-Time Notifications
 app.use('/api/notifications', notificationsRouter);
+app.use('/api/products', productsRouter);
+app.use('/api/profile', authenticateJWT, profileRouter);
+app.use('/api/deliveries', deliveriesRouter);
 
 // Task 2: AI Cost Report
 app.use('/api/ai/cost-report', aiCostReportRouter);
