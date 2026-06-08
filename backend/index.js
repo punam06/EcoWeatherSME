@@ -305,6 +305,78 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+app.get('/api/config', (req, res) => {
+  res.status(200).json({
+    success: true,
+    data: {
+      supabaseUrl: process.env.SUPABASE_URL,
+      supabaseAnonKey: process.env.SUPABASE_ANON_KEY
+    }
+  });
+});
+
+app.get('/api/weather', asyncHandler(async (req, res) => {
+  const { lat, lon } = req.query;
+  const apiKey = process.env.OPENWEATHER_API_KEY;
+  if (!apiKey) {
+    const now = new Date();
+    const h = now.getHours() + now.getMinutes() / 60;
+    const peak = 13;
+    const low = 5;
+    const closer = Math.min(Math.abs(h - peak), Math.abs(h - low));
+    const temp = 26 + (8.5 * (1 - Math.cos((closer / 8) * Math.PI)) / 2);
+    const wind = Math.max(3, Math.round(6 + 4 * Math.sin(((h - 9) / 24) * 2 * Math.PI)));
+    return res.json({
+      success: true,
+      data: {
+        temperature: Math.round(temp * 10) / 10,
+        windspeed_kmh: wind,
+        humidity: 65,
+        feelsLike: Math.round((temp + 1.5) * 10) / 10,
+        description: 'estimated (no API key configured)',
+      }
+    });
+  }
+
+  try {
+    const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`;
+    const response = await fetch(url);
+    const data = await response.json();
+    if (data && data.main && data.main.temp !== undefined) {
+      return res.json({
+        success: true,
+        data: {
+          temperature: data.main.temp,
+          windspeed_kmh: (data.wind?.speed || 0) * 3.6,
+          humidity: data.main.humidity,
+          feelsLike: data.main.feels_like,
+          description: data.weather?.[0]?.description || '',
+        }
+      });
+    } else {
+      throw new Error(data.message || 'Weather fetch failed');
+    }
+  } catch (err) {
+    const now = new Date();
+    const h = now.getHours() + now.getMinutes() / 60;
+    const peak = 13;
+    const low = 5;
+    const closer = Math.min(Math.abs(h - peak), Math.abs(h - low));
+    const temp = 26 + (8.5 * (1 - Math.cos((closer / 8) * Math.PI)) / 2);
+    const wind = Math.max(3, Math.round(6 + 4 * Math.sin(((h - 9) / 24) * 2 * Math.PI)));
+    return res.json({
+      success: true,
+      data: {
+        temperature: Math.round(temp * 10) / 10,
+        windspeed_kmh: wind,
+        humidity: 65,
+        feelsLike: Math.round((temp + 1.5) * 10) / 10,
+        description: `estimated (${err.message})`,
+      }
+    });
+  }
+}));
+
 app.get('/api/test-db', asyncHandler(async (req, res) => {
   try {
     const result = await queryDB('SELECT NOW();');
