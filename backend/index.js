@@ -407,9 +407,9 @@ app.get('/api/dashboard', asyncHandler(async (req, res) => {
   const weatherApiKey = process.env.OPENWEATHER_API_KEY;
   const zones = [
     { zone: 'Old Dhaka',  city: 'Dhaka',       uhiOffset: 3.8, desc: 'Class A thermal accumulation zone. Narrow concrete corridors trap heat.' },
-    { zone: 'Mirpur',     city: 'Mirpur,Dhaka', uhiOffset: 2.9, desc: 'Dense residential concrete with limited canopy cover.' },
+    { zone: 'Mirpur',     city: 'Dhaka',       uhiOffset: 2.9, desc: 'Dense residential concrete with limited canopy cover.' },
     { zone: 'Savar',      city: 'Savar',        uhiOffset: 2.1, desc: 'Mixed urban with partial green canopy. Moderate risk window.' },
-    { zone: 'Gulshan',    city: 'Gulshan,Dhaka',uhiOffset: 1.2, desc: 'High green canopy coverage and lake proximity reduce thermal load.' },
+    { zone: 'Gulshan',    city: 'Dhaka',       uhiOffset: 1.2, desc: 'High green canopy coverage and lake proximity reduce thermal load.' },
   ];
 
   const heatmapData = await Promise.all(zones.map(async (z) => {

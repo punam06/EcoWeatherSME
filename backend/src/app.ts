@@ -854,7 +854,7 @@ app.use((_req: Request, res: Response) => {
 
 startSessionPruningInterval();
 
-if (require.main === module) {
+if (require.main === module || process.argv[1]?.endsWith('app.ts') || process.argv[1]?.endsWith('app.js')) {
   app.listen(PORT, () => {
     console.log('\n╔══════════════════════════════════════════════════════════╗');
     console.log('║       ClimaLogix AI — ClimateShield Backend v2.0          ║');
