@@ -389,6 +389,81 @@
     <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   </head>
   <body>
+    <div id="toast-container" style="position: fixed; bottom: 24px; right: 24px; z-index: 999999; display: flex; flex-direction: column; gap: 10px; max-width: 380px; width: calc(100vw - 48px); pointer-events: none;"></div>
+
+    <script>
+      window.showToast = function(title, message, type = 'success') {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+
+        const toast = document.createElement('div');
+        toast.className = 'custom-toast';
+        toast.style.cssText = `
+          pointer-events: all;
+          background: rgba(17, 24, 39, 0.85);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border-radius: 12px;
+          padding: 16px;
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+          transform: translateX(120%);
+          transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s;
+          opacity: 0;
+          margin-bottom: 8px;
+        `;
+
+        let accentColor = '#10B981'; // success (green)
+        let iconHtml = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+
+        if (type === 'error') {
+          accentColor = '#EF4444'; // red
+          iconHtml = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`;
+        } else if (type === 'warning') {
+          accentColor = '#F59E0B'; // amber
+          iconHtml = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`;
+        } else if (type === 'info') {
+          accentColor = '#3B82F6'; // blue
+          iconHtml = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`;
+        }
+
+        toast.style.border = `1px solid ${accentColor}30`;
+        toast.style.borderLeft = `4px solid ${accentColor}`;
+
+        toast.innerHTML = `
+          <div style="flex-shrink: 0; padding-top: 2px;">${iconHtml}</div>
+          <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 4px;">
+            <div style="color: #F9FAFB; font-weight: 600; font-size: 13.5px; font-family: 'Inter', sans-serif;">${title}</div>
+            <div style="color: #9CA3AF; font-size: 12px; line-height: 1.4; font-family: 'Inter', sans-serif;">${message}</div>
+          </div>
+          <button style="background: transparent; border: none; cursor: pointer; color: #6B7280; padding: 2px; flex-shrink: 0;" onclick="this.parentElement.style.transform='translateX(120%)'; this.parentElement.style.opacity='0'; setTimeout(()=>this.parentElement.remove(), 400)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        `;
+
+        container.appendChild(toast);
+        // Force reflow
+        toast.offsetHeight;
+
+        // Animate in
+        toast.style.transform = 'translateX(0)';
+        toast.style.opacity = '1';
+
+        // Auto remove
+        setTimeout(() => {
+          if (toast.parentNode) {
+            toast.style.transform = 'translateX(120%)';
+            toast.style.opacity = '0';
+            setTimeout(() => {
+              if (toast.parentNode) toast.remove();
+            }, 400);
+          }
+        }, 5000);
+      };
+    </script>
+
     <div id="root"></div>
 
     <script src="./lang/languageManager.js"></script>

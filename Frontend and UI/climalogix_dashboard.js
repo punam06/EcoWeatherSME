@@ -8064,11 +8064,11 @@ function BatchRegistry({
             }
             setSelected(null);
           } else {
-            alert(result.error || "Failed to delete batch");
+            showToast("Delete Failed", result.error || "Failed to delete batch", "error");
           }
         } catch (err) {
           console.error("Failed to delete batch:", err);
-          alert("Network error. Unable to contact the backend server.");
+          showToast("Network Error", "Unable to contact the backend server.", "error");
         }
       }
     },
@@ -13339,7 +13339,7 @@ function SystemDocsView({
       color: "var(--text-secondary)"
     }
   }, "Mock Supabase Database Connection"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => alert("Supabase Connection Status: Connected (SSL Secure, 2 active client channels)."),
+    onClick: () => showToast("Database Status", "Supabase Connection Status: Connected (SSL Secure, 2 active client channels).", "success"),
     style: {
       padding: "6px 14px",
       borderRadius: 6,
@@ -13408,7 +13408,7 @@ function SystemDocsView({
         created_at: new Date().toISOString()
       };
       window.__SEED_BATCHES__ = [mockBatch, ...(window.__SEED_BATCHES__ || [])];
-      alert(`Injected simulated certified hazard lot CL-${randomId} to destination zone "Old Dhaka"!`);
+      showToast("Telemetry Injected", `Injected simulated certified hazard lot CL-${randomId} to destination zone "Old Dhaka"!`, "success");
     },
     style: {
       padding: "6px 14px",
@@ -13441,7 +13441,7 @@ function SystemDocsView({
       cursor: "pointer"
     }
   }, "⚠️ Reset Defaults"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => alert("Settings successfully saved and persisted to local configurations!"),
+    onClick: () => showToast("Settings Saved", "Settings successfully saved and persisted to local configurations!", "success"),
     style: {
       flex: 1,
       padding: "12px",
@@ -13552,7 +13552,7 @@ function LandingView({
   const handleContactSubmit = e => {
     e.preventDefault();
     if (!contactName || !contactEmail || !contactMessage) {
-      alert("Please fill in all required fields.");
+      showToast("Form Incomplete", "Please fill in all required fields.", "warning");
       return;
     }
     setSubmitting(true);
@@ -14578,7 +14578,7 @@ function SettingsView() {
   const [heatwaveAlerts, setHeatwaveAlerts] = useState(true);
   const handleSave = e => {
     e.preventDefault();
-    alert("Profile settings successfully saved!");
+    showToast("Settings Updated", "Profile settings successfully saved!", "success");
   };
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -14745,7 +14745,7 @@ function DeliveryView({
       return s;
     }));
     if (onUpdateTrustScore) onUpdateTrustScore(prev => Math.min(100, prev + 4));
-    alert(`Delivery acknowledged! BARI Trust Score increased due to chain-of-custody confirmation.`);
+    showToast("Delivery Acknowledged", "Delivery acknowledged! BARI Trust Score increased due to chain-of-custody confirmation.", "success");
   };
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -14995,6 +14995,21 @@ function CLimaLogixApp() {
       if (subscription) subscription.unsubscribe();
     };
   }, []);
+  const [currentLang, setCurrentLang] = useState("en");
+  useEffect(() => {
+    if (window.EcoLang) {
+      setCurrentLang(window.EcoLang.getCurrentLanguage());
+      const unsubscribe = window.EcoLang.onLanguageChange(newLang => {
+        setCurrentLang(newLang);
+      });
+      return unsubscribe;
+    }
+  }, []);
+  const t = (key, fallback) => {
+    const translations = window.CLIMALOGIX_TRANSLATIONS || {};
+    const dict = translations[currentLang] || {};
+    return dict[key] || fallback;
+  };
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [trustScore, setTrustScore] = useState(84);
@@ -15092,7 +15107,7 @@ function CLimaLogixApp() {
   });
   const detectGpsLocation = () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      alert("Geolocation is not supported by your browser.");
+      showToast("GPS Error", "Geolocation is not supported by your browser.", "error");
       return;
     }
     setLiveWeather(prev => ({
@@ -15111,7 +15126,7 @@ function CLimaLogixApp() {
         source: "live-device"
       }));
     }, err => {
-      alert("GPS auto-detection failed: " + err.message + ". Falling back to manual selection.");
+      showToast("GPS Error", "GPS auto-detection failed: " + err.message + ". Falling back to manual selection.", "warning");
       console.warn("[LiveWeather] Geolocation failed:", err);
     }, {
       enableHighAccuracy: true,
@@ -15553,7 +15568,7 @@ function CLimaLogixApp() {
         fontSize: 13,
         letterSpacing: "0.02em"
       }
-    }, t.label), t.layer && t.layer !== "L0" && t.layer !== "LX" && /*#__PURE__*/React.createElement("span", {
+    }, t(t.id, t.label)), t.layer && t.layer !== "L0" && t.layer !== "LX" && /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 8,
         padding: "2px 6px",
