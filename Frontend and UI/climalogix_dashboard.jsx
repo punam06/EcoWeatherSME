@@ -1,4 +1,4 @@
-const { useState, useEffect, useRef, useCallback, useMemo } = React;
+var { useState, useEffect, useRef, useCallback, useMemo } = React;
 
 // Inline LanguageSelector Component
       function LanguageSelector() {

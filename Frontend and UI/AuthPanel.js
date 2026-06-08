@@ -14,7 +14,7 @@
       - Resolved: Added high-visibility Back to Home button at top left.
    ═══════════════════════════════════════════════════════════════ */
 
-const {
+var {
   useState,
   useEffect,
   useRef,
