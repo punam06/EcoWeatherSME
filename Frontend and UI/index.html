@@ -9011,20 +9011,25 @@ const initializeAndMount = async () => {
       
     const configRes = await fetch(`${API_BASE}/api/config`).then(r => r.json());
     if (configRes && configRes.success && configRes.data) {
-      window.SUPABASE_URL = configRes.data.supabaseUrl;
-      window.SUPABASE_ANON_KEY = configRes.data.supabaseAnonKey;
-      
-      // Initialize Supabase Client dynamically
-      if (window.supabase && !window.supabaseClient) {
-        window.supabaseClient = window.supabase.createClient(
-          window.SUPABASE_URL,
-          window.SUPABASE_ANON_KEY
-        );
-      }
+      window.SUPABASE_URL = configRes.data.supabaseUrl || window.SUPABASE_URL;
+      window.SUPABASE_ANON_KEY = configRes.data.supabaseAnonKey || window.SUPABASE_ANON_KEY;
     }
   } catch (err) {
     console.error("Failed to load dynamic Supabase config from backend:", err);
   } finally {
+    if (!window.SUPABASE_URL) {
+      window.SUPABASE_URL = 'https://pdeskdcdyhbldwfgbowz.supabase.co';
+    }
+    if (!window.SUPABASE_ANON_KEY) {
+      window.SUPABASE_ANON_KEY = 'sb_publishable_H-_gcEncBp26k2iCHKOb_g_3RDQSr_M';
+    }
+    // Initialize Supabase Client dynamically
+    if (window.supabase && !window.supabaseClient && window.SUPABASE_URL && window.SUPABASE_ANON_KEY) {
+      window.supabaseClient = window.supabase.createClient(
+        window.SUPABASE_URL,
+        window.SUPABASE_ANON_KEY
+      );
+    }
     const root = ReactDOM.createRoot(document.getElementById("root"));
     root.render(<CLimaLogixApp />);
   }
