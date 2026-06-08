@@ -324,6 +324,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
               }, 800);
             }
           } catch (err) {
+        setIsVoiceProcessing(false);
             setError(err.message || "Connection failed. Please try again.");
           } finally {
             setIsLoading(false);
@@ -4773,15 +4774,11 @@ function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerific
         const userStr = localStorage.getItem("user") || localStorage.getItem("farmer");
         const user = userStr ? JSON.parse(userStr) : null;
         
-        const voiceRes = await fetch(`${BACKEND_URL}/api/orders/voice`, {
+        setIsVoiceProcessing(true);
+        const voiceRes = await fetch(`${BACKEND_URL}/api/checkout/voice`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            productName: orderContext.productName,
-            quantity: orderContext.quantity,
-            farmerId: user ? user.id : undefined,
-            customProducts: products.filter(p => p.isCustom)
-          })
+          body: JSON.stringify({ transcript: transcript })
         });
         const voiceData = await voiceRes.json();
         if (voiceData.success && voiceData.data) {
