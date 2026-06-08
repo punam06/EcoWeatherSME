@@ -88,39 +88,36 @@ router.post(
       }
 
       // 4. Insert into database
-      let orderId = `mock-ord-${uuidv4().slice(-6)}`;
-
-      if (isSupabaseConfigured()) {
-        const supabase = getSupabaseClient();
-        const { data, error } = await supabase
-          .from('checkout_orders')
-          .insert({
-            session_id: sessionId,
-            product_name: result.productName,
-            quantity: result.quantity,
-            unit: result.unit,
-            transcript: transcript,
-            confidence: result.confidence,
-            status: 'pending',
-          })
-          .select('id')
-          .single();
-
-        if (error) {
-          console.error('[CheckoutAPI] Supabase insert failed:', error.stack ?? error.message);
-          res.status(500).json({
-            success: false,
-            error: 'Failed to process voice order',
-          });
-          return;
-        }
-
-        if (data) {
-          orderId = data.id;
-        }
-      } else {
-        console.warn('[CheckoutAPI] Supabase is not configured, running in local fallback mode.');
+      if (!isSupabaseConfigured()) {
+        res.status(500).json({ success: false, error: 'Database not configured' });
+        return;
       }
+
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('checkout_orders')
+        .insert({
+          session_id: sessionId,
+          product_name: result.productName,
+          quantity: result.quantity,
+          unit: result.unit,
+          transcript: transcript,
+          confidence: result.confidence,
+          status: 'pending',
+        })
+        .select('id')
+        .single();
+
+      if (error || !data) {
+        console.error('[CheckoutAPI] Supabase insert failed:', error?.stack ?? error?.message);
+        res.status(500).json({
+          success: false,
+          error: 'Failed to process voice order',
+        });
+        return;
+      }
+
+      const orderId = data.id;
 
       // 5. Return success result
       res.status(200).json({

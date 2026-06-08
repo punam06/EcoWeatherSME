@@ -232,27 +232,37 @@ router.post('/orders/voice', authenticateJWT, aiRateLimiter, async (req: Request
     const totalBdt = matchedProduct.price_bdt * finalQuantity;
 
     // 2. Try to insert order if Supabase is connected
-    let orderId = `ord-${uuidv4().slice(-6)}`;
-    if (isSupabaseConfigured()) {
-      try {
-        const supabase = getSupabaseClient();
-        const { data: order } = await supabase
-          .from('orders')
-          .insert({
-            buyer_id: buyerId,
-            product_id: typeof matchedProduct.id === 'string' && matchedProduct.id.startsWith('custom') ? null : matchedProduct.id,
-            quantity: finalQuantity,
-            totalBdt,
-            status: 'pending'
-          })
-          .select('*')
-          .single();
-        if (order) {
-          orderId = order.id;
-        }
-      } catch (err) {
-        console.warn('Supabase insert failed, using mock order ID:', err);
+    if (!isSupabaseConfigured()) {
+      res.status(500).json({ success: false, error: 'Database not configured' });
+      return;
+    }
+
+    let orderId: string;
+    try {
+      const supabase = getSupabaseClient();
+      const { data: order, error } = await supabase
+        .from('orders')
+        .insert({
+          buyer_id: buyerId,
+          product_id: typeof matchedProduct.id === 'string' && matchedProduct.id.startsWith('custom') ? null : matchedProduct.id,
+          quantity: finalQuantity,
+          totalBdt,
+          status: 'pending'
+        })
+        .select('id')
+        .single();
+        
+      if (error || !order) {
+        console.error('Supabase insert failed:', error?.message);
+        res.status(500).json({ success: false, error: 'Failed to create order' });
+        return;
       }
+      
+      orderId = order.id;
+    } catch (err) {
+      console.error('Database connection error:', err);
+      res.status(500).json({ success: false, error: 'Failed to create order due to connection error' });
+      return;
     }
 
     // 3. Return confirmation with order ID, product name, quantity

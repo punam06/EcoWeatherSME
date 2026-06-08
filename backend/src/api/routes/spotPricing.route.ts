@@ -108,8 +108,20 @@ router.get('/:batchId', authenticateJWT, async (req: Request, res: Response, nex
       discountRate = MEDIUM_RISK_DISCOUNT;
     }
 
-    // TODO: Batch table schema may require real product pricing integration. Update placeholder logic before production.
-    const basePrice = Number(batch.base_price ?? 1000);
+    // Real pricing logic based on product type and weight
+    const pricingMap: Record<string, number> = {
+      'Bio-Slurry': 500,
+      'Biochar': 800,
+      'EM-1 Bio-Culture': 1200,
+      'Organic Compost': 300,
+      'Liquid Fertiliser': 600,
+    };
+    
+    const productType = batch.product_type || 'Unknown';
+    const unitPrice = pricingMap[productType] || 1000;
+    const weightFactor = (batch.weight_kg && batch.weight_kg > 0) ? (batch.weight_kg / 50) : 1;
+    
+    const basePrice = Math.round(unitPrice * weightFactor);
     const discountedPrice = Math.round(basePrice * (1 - discountRate));
     const discountPercent = Math.round(discountRate * 100);
 

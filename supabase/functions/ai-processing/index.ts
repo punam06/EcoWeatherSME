@@ -108,19 +108,40 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || Deno.env.get('DATABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
+    const groqApiKey = Deno.env.get('GROQ_API_KEY');
+    if (!groqApiKey) {
+      throw new Error("Missing GROQ_API_KEY environment variable");
+    }
+
     const { context, standardName } = await retrieveBARIContext(userQuery, supabaseUrl, supabaseKey);
     const prompt = buildClaudeRAGPrompt(userQuery, context, language || 'en');
 
-    // Here you would integrate with Anthropic API
-    // For now, returning mock response matching the prompt structure
-    const mockResponse: AIRecommendationResponse = {
-      advice: `(Mock Claude Response for: "${userQuery}") \nBased on ${standardName}, ensure your parameters are within optimal ranges.`,
-      citedStandardName: standardName,
-      suggestedAction: "Monitor pH and EC daily.",
-      isCompliant: true
-    };
+    // Call Groq API via fetch
+    const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${groqApiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "llama-3.1-8b-instant",
+        messages: [
+          { role: "system", content: "You are a helpful agricultural compliance assistant. You must output only valid JSON matching the requested structure." },
+          { role: "user", content: prompt + `\n\nProvide the response strictly as a JSON object with the following keys: "advice" (string), "citedStandardName" (string, must be "${standardName}"), "suggestedAction" (string), "isCompliant" (boolean).` }
+        ],
+        response_format: { type: "json_object" }
+      })
+    });
 
-    return new Response(JSON.stringify(mockResponse), {
+    if (!groqResponse.ok) {
+      const errText = await groqResponse.text();
+      throw new Error(`Groq API error: ${errText}`);
+    }
+
+    const groqData = await groqResponse.json();
+    const parsedResponse = JSON.parse(groqData.choices[0].message.content) as AIRecommendationResponse;
+
+    return new Response(JSON.stringify(parsedResponse), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {

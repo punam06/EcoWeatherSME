@@ -751,14 +751,67 @@ app.get('/api/zones/:zone', (req: Request, res: Response) => {
 /**
  * Legacy: GET /api/demand-forecast — returns mock 30-day demand forecast
  */
-app.get('/api/demand-forecast', (req: Request, res: Response) => {
+app.get('/api/demand-forecast', async (req: Request, res: Response) => {
   try {
-    // Resolve from project root: ../../public/demand-forecast-mock.json
-    const forecastPath = path.resolve(__dirname, '..', '..', '..', 'public', 'demand-forecast-mock.json');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const forecast = require(forecastPath);
+    let baseDailyDemand = 100;
+    
+    // Attempt to aggregate real data from Supabase
+    if (isSupabaseConfigured()) {
+      try {
+        const { getSupabaseClient } = await import('./lib/supabase');
+        const supabase = getSupabaseClient();
+        const { data: batches } = await supabase.from('batches').select('weight_kg, created_at');
+        
+        if (batches && batches.length > 0) {
+          // Calculate an average daily demand based on batch history
+          const totalWeight = batches.reduce((sum: number, b: any) => sum + (Number(b.weight_kg) || 0), 0);
+          baseDailyDemand = Math.max(50, Math.round(totalWeight / 30));
+        }
+      } catch (err) {
+        console.warn('Could not fetch real batches for demand forecast', err);
+      }
+    }
+    
+    // Generate a 30-day forecast based on the derived or default base demand
+    const forecast = [];
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    
+    let currentTemp = 30.0;
+    
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() + i);
+      
+      // Simulate slight temperature variation
+      currentTemp += (Math.random() * 1.5 - 0.6);
+      
+      // Heatwave logic: > 35C spikes demand for organic inputs
+      let annotation = null;
+      let adjusted = baseDailyDemand;
+      
+      if (currentTemp > 35) {
+        annotation = "Heatwave alert: Soil organic matter depletion rate increased. Demand spikes by 25%.";
+        adjusted = Math.round(baseDailyDemand * 1.25);
+      } else if (currentTemp > 33) {
+        adjusted = Math.round(baseDailyDemand * 1.10);
+      }
+      
+      // Add random daily noise (+/- 5%)
+      const noise = 1 + (Math.random() * 0.1 - 0.05);
+      adjusted = Math.round(adjusted * noise);
+      
+      forecast.push({
+        date: d.toISOString().split('T')[0],
+        base_demand: baseDailyDemand,
+        adjusted_demand: adjusted,
+        temperature: Math.round(currentTemp * 10) / 10,
+        annotation
+      });
+    }
+
     res.json({ success: true, data: forecast });
-  } catch {
+  } catch (error) {
     res.status(500).json({ success: false, error: 'Could not load forecast data' });
   }
 });
