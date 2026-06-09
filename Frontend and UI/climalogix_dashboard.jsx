@@ -7371,6 +7371,7 @@ function CLimaLogixApp() {
   if (!currentUser) {
     const AuthPanelComponent = window.AuthPanel || (() => <div style={{color:'white', padding: 20}}>Loading AuthPanel...</div>);
     return (
+<<<<<<< HEAD
       <AuthPanelComponent 
         initialMode={authOverlayMode}
         onClose={() => {}} 
@@ -7382,6 +7383,28 @@ function CLimaLogixApp() {
           setCurrentUser(user);
         }}
       />
+=======
+      <>
+        <HeroLandingPage 
+          onLogin={() => { setAuthOverlayMode("login"); setShowAuthOverlay(true); }}
+          onRegister={() => { setAuthOverlayMode("register"); setShowAuthOverlay(true); }} 
+        />
+        {showAuthOverlay && (
+          <AuthPanel 
+            initialMode={authOverlayMode}
+            onClose={() => setShowAuthOverlay(false)} 
+            onAuthSuccess={(user, token) => {
+              // Route to role-specific dashboard immediately
+              const role = user?.user_metadata?.role || user?.role || "buyer";
+              const defaultTab = getDefaultTabForRole(role);
+              setActiveTab(defaultTab);
+              setCurrentUser(user);
+              setShowAuthOverlay(false);
+            }}
+          />
+        )}
+      </>
+>>>>>>> parent of d4160f0 (fix: replace static HeroLandingPage with animated 3D AuthPanel as the default entry point)
     );
   }
 
