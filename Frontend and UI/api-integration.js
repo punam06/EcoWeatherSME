@@ -28,14 +28,14 @@ function unwrap(payload) {
 }
 
 function getAuthHeaders() {
-  const token = localStorage.getItem('climalogix_token') || sessionStorage.getItem('climalogix_token');
+  const token = localStorage.getItem('climaLogix_token') || localStorage.getItem('climalogix_token') || sessionStorage.getItem('climalogix_token');
   return token ? { 'Authorization': `Bearer ${token}` } : {};
 }
 
 async function apiCall(path, method = 'GET', body = null) {
   try {
-    const BASE_URL = window.location.hostname === 'localhost'
-      ? 'http://localhost:3001'
+    const BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:'
+      ? 'http://localhost:5001'
       : 'https://backsme.onrender.com';
 
     const options = {
