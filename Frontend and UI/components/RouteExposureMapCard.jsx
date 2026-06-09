@@ -1,4 +1,4 @@
-var { useState } = window.React || React;
+
 // Helpers defined in DhakaRouteMicroMap.jsx — available via global scope
 // Since we are loading this component via script tag sequentially, DhakaRouteMicroMap and ZoneDetailPanel are available on window if they register themselves. 
 // Wait, the prompt says: "wraps DhakaRouteMicroMap and ZoneDetailPanel in a glass-card div with a title, manages activeZone state"

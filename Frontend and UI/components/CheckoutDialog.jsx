@@ -1,4 +1,4 @@
-var { useState, useEffect } = window.React || React;
+
 
 function CheckoutDialog({ onClose, onComplete, totalItems, totalPrice, zone }) {
         const [stage, setStage] = useState(1);

@@ -1,4 +1,4 @@
-var { useState, useEffect, useRef } = window.React || React;
+
 
 function LanguageSelector() {
   const [isOpen, setIsOpen] = useState(false);

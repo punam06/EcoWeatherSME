@@ -1,4 +1,4 @@
-var { useState, useEffect } = window.React || React;
+
 
 function OrderTimeline({ status, language }) {
         const steps = [

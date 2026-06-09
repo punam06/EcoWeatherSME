@@ -14,12 +14,7 @@
       - Resolved: Added high-visibility Back to Home button at top left.
    ═══════════════════════════════════════════════════════════════ */
 
-var {
-  useState,
-  useEffect,
-  useRef,
-  useMemo
-} = React;
+
 function AuthPanel({
   onClose,
   onAuthSuccess,

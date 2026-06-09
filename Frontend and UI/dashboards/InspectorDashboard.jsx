@@ -1,4 +1,4 @@
-var { useState, useEffect } = window.React || React;
+
 
 const ACCENT = {
   green: "#10B981",

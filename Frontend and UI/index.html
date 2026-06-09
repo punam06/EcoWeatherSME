@@ -131,6 +131,15 @@
     <!-- React + Babel (browser) -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script>
+      // Make common React hooks globally available so un-bundled components can use them directly
+      // without re-declaring them and triggering Babel global scope conflicts.
+      window.useState = React.useState;
+      window.useEffect = React.useEffect;
+      window.useRef = React.useRef;
+      window.useCallback = React.useCallback;
+      window.useMemo = React.useMemo;
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.5/babel.min.js"></script>
 
     <style>
@@ -406,7 +415,7 @@
 
     <!-- Keep the initialization logic that was at the bottom of the inline script -->
     <script type="text/babel">
-    var { useState, useEffect, useRef, useCallback } = window.React || React;
+    
 
 // Inline LanguageSelector Component
       function LanguageSelector() {
