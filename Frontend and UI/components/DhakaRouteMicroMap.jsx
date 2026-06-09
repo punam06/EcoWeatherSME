@@ -115,5 +115,5 @@ const DhakaRouteMicroMap = () => {
 }
 
 window.DhakaRouteMicroMap = DhakaRouteMicroMap;
-export default DhakaRouteMicroMap;
+
 

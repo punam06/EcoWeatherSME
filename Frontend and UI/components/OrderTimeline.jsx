@@ -34,4 +34,4 @@ function OrderTimeline({ status, language }) {
       }
       window.OrderTimeline = OrderTimeline;
 
-export default OrderTimeline;
+

@@ -108,4 +108,4 @@ function CheckoutDialog({ onClose, onComplete, totalItems, totalPrice, zone }) {
       }
       window.CheckoutDialog = CheckoutDialog;
 
-export default CheckoutDialog;
+
