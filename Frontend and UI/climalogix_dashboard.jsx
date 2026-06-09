@@ -1,8 +1,11 @@
-import OrderTimeline from './components/OrderTimeline.jsx';
-import CheckoutDialog from './components/CheckoutDialog.jsx';
-import DhakaRouteMicroMap from './components/DhakaRouteMicroMap.jsx';
+const { useState, useEffect, useRef, useCallback, useMemo } = window.React || React;
+const OrderTimeline = window.OrderTimeline;
+const CheckoutDialog = window.CheckoutDialog;
+const DhakaRouteMicroMap = window.DhakaRouteMicroMap;
+const ZoneDetailPanel = window.ZoneDetailPanel;
+const RouteExposureMapCard = window.RouteExposureMapCard;
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+
 
 // Inline LanguageSelector Component
       function LanguageSelector() {
@@ -9509,3 +9512,4 @@ const initializeAndMount = async () => {
 };
 
 initializeAndMount();
+

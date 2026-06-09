@@ -63,3 +63,4 @@ export default function ZoneDetailPanel({ activeZone, setActiveZone }) {
     </div>
   );
 }
+
