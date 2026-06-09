@@ -405,12 +405,12 @@
     <script type="text/babel" src="./components/OrderTimeline.jsx"></script>
     <script type="text/babel" src="./components/CheckoutDialog.jsx"></script>
     
-        <script type="text/babel" src="./dashboards/SMEOwnerDashboard.jsx"></script>
-    <script type="text/babel" src="./dashboards/ProducerDashboard.jsx"></script>
-    <script type="text/babel" src="./dashboards/InspectorDashboard.jsx"></script>
     <script src="./AuthPanel.js"></script>
-    <script type="text/babel" src="./AuthRouter.jsx"></script>
-    <!-- Main dashboard script last -->
+    <script type="text/babel" src="./climalogix_dashboard.jsx"></script>
+    <script type="text/babel">
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<CLimaLogixApp />);
+    </script>
     
 
     <!-- Keep the initialization logic that was at the bottom of the inline script -->

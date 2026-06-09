@@ -1,4 +1,4 @@
-const { useState, useEffect, useRef, useCallback, useMemo } = window.React || React;
+
 const OrderTimeline = window.OrderTimeline;
 const CheckoutDialog = window.CheckoutDialog;
 const DhakaRouteMicroMap = window.DhakaRouteMicroMap;
@@ -86,7 +86,7 @@ const RouteExposureMapCard = window.RouteExposureMapCard;
       window.LanguageSelector = LanguageSelector;
 
       // Inline AuthPanel Component
-      function AuthPanel({ onClose, onAuthSuccess }) {
+      ) {
         const [mode, setMode] = useState("login");
         const [email, setEmail] = useState("");
         const [password, setPassword] = useState("");
