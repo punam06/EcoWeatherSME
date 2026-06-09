@@ -70,11 +70,12 @@ router.get('/:city', async (req: Request, res: Response) => {
   const temp = 26 + (8.5 * (1 - Math.cos((closer / 8) * Math.PI)) / 2);
   const wind = Math.max(3, Math.round(6 + 4 * Math.sin(((h - 9) / 24) * 2 * Math.PI)));
   
+  // TODO: Replace with real sensor/IoT data feed
   const fallbackPayload = {
-    temperature: Math.round((temp + (Math.random() * 2 - 1)) * 10) / 10,
-    feelsLike: Math.round((temp + 1.5) * 10) / 10,
-    description: lang === 'bn' ? 'আংশিক মেঘলা (আনুমানিক)' : 'Partly cloudy (Estimated fallback)',
-    humidity: 65,
+    temperature: 32, // Deterministic fallback for Dhaka climate
+    feelsLike: 34,
+    description: lang === 'bn' ? 'আংশিক মেঘলা (অনুমান নির্ভর)' : 'Partly cloudy (Estimated fallback)',
+    humidity: 75,
     windSpeed: wind,
     city: city,
   };

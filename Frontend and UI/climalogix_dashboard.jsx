@@ -4835,7 +4835,7 @@ function RegisterBatch({ onCancel }) {
   );
 }
 
-const MOCK_PRODUCTS = [];
+
 
 
 const isValidOrderUuid = (id) =>

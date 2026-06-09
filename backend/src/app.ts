@@ -327,6 +327,7 @@ app.get('/api/dashboard', async (req: Request, res: Response) => {
 
   const heatmap = await Promise.all(zones.map(async (z) => {
     const live = await fetchWeatherWithCache(z.city, weatherApiKey);
+    // Demo/test data — replace before production
     const baseTemp = live ? live.temp : 32 + Math.random() * 4;
     const rh = live ? live.rh : 60 + Math.floor(Math.random() * 20);
     const adjustedTemp = baseTemp + z.uhiOffset;
@@ -790,6 +791,7 @@ app.get('/api/demand-forecast', async (req: Request, res: Response) => {
       d.setDate(d.getDate() + i);
       
       // Simulate slight temperature variation
+      // Demo/test data — replace before production
       currentTemp += (Math.random() * 1.5 - 0.6);
       
       // Heatwave logic: > 35C spikes demand for organic inputs
@@ -804,6 +806,7 @@ app.get('/api/demand-forecast', async (req: Request, res: Response) => {
       }
       
       // Add random daily noise (+/- 5%)
+      // Demo/test data — replace before production
       const noise = 1 + (Math.random() * 0.1 - 0.05);
       adjusted = Math.round(adjusted * noise);
       
