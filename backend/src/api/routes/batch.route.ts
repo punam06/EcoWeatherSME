@@ -3,7 +3,8 @@ import QRCode from 'qrcode';
 import { z } from 'zod';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
 import { getBatchesList, addBatch, updateBatchInStore, getBatchFromStore, deleteBatchFromStore } from '../../lib/services/batchStore.service';
-import { authenticateJWT, requireRole } from '../../middleware/authenticateJWT';
+import { authenticateJWT } from '../../middleware/authenticateJWT';
+import { requireRoles } from '../../middleware/roleGuard';
 
 const router = Router();
 
@@ -111,7 +112,7 @@ router.get('/:id', authenticateJWT, async (req: Request, res: Response) => {
 });
 
 // POST /api/batches
-router.post('/', authenticateJWT, requireRole('sme', 'sme_owner', 'buyer'), async (req: Request, res: Response) => {
+router.post('/', authenticateJWT, requireRoles('sme', 'sme_owner', 'buyer'), async (req: Request, res: Response) => {
   try {
     const parsed = CreateBatchSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -184,7 +185,7 @@ router.post('/', authenticateJWT, requireRole('sme', 'sme_owner', 'buyer'), asyn
 });
 
 // PUT /api/batches/:id
-router.put('/:id', authenticateJWT, requireRole('processor'), async (req: Request, res: Response) => {
+router.put('/:id', authenticateJWT, requireRoles('processor'), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!id || typeof id !== 'string' || id.length > 100) {
@@ -221,7 +222,7 @@ router.put('/:id', authenticateJWT, requireRole('processor'), async (req: Reques
 });
 
 // POST /api/batches/certify
-router.post('/certify', authenticateJWT, requireRole('processor'), async (req: Request, res: Response) => {
+router.post('/certify', authenticateJWT, requireRoles('processor'), async (req: Request, res: Response) => {
   try {
     const parsed = CertifyBatchSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -305,7 +306,7 @@ router.post('/certify', authenticateJWT, requireRole('processor'), async (req: R
 });
 
 // Readings stubs so they are handled cleanly inside batchRouter
-router.post('/:id/readings', authenticateJWT, requireRole('processor'), async (req: Request, res: Response) => {
+router.post('/:id/readings', authenticateJWT, requireRoles('processor'), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!id || typeof id !== 'string' || id.length > 100) {
@@ -390,7 +391,7 @@ router.get('/:id/readings', async (req: Request, res: Response) => {
 });
 
 // DELETE /api/batches/:id
-router.delete('/:id', authenticateJWT, requireRole('processor'), async (req: Request, res: Response) => {
+router.delete('/:id', authenticateJWT, requireRoles('processor'), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!id || typeof id !== 'string' || id.length > 100) {
