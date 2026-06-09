@@ -7369,8 +7369,9 @@ function CLimaLogixApp() {
   }
 
   if (!currentUser) {
+    const AuthPanelComponent = window.AuthPanel || (() => <div style={{color:'white', padding: 20}}>Loading AuthPanel...</div>);
     return (
-      <AuthPanel 
+      <AuthPanelComponent 
         initialMode={authOverlayMode}
         onClose={() => {}} 
         onAuthSuccess={(user, token) => {
