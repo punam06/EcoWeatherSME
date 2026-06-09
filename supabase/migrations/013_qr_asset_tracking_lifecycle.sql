@@ -142,6 +142,9 @@ COMMENT ON COLUMN public.batches.is_sensor_verified IS
 --     Legacy values ('pending', 'active', 'certified', 'dispatched', 'delivered')
 --     are preserved so existing batches remain valid.
 ALTER TABLE public.batches
+  ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pending';
+
+ALTER TABLE public.batches
   DROP CONSTRAINT IF EXISTS batches_status_check;
 
 ALTER TABLE public.batches
