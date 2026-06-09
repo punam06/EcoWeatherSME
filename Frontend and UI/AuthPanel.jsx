@@ -72,17 +72,18 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
     const colorBlue = new THREE.Color("#3B82F6");
     
     for (let i = 0; i < particleCount; i++) {
-      const u = Math.random();
-      const v = Math.random();
+      const cryptoRand = () => crypto.getRandomValues(new Uint32Array(1))[0] / 4294967295;
+      const u = cryptoRand();
+      const v = cryptoRand();
       const theta = 2 * Math.PI * u;
       const phi = Math.acos(2 * v - 1);
-      const r = 8 * Math.cbrt(Math.random());
+      const r = 8 * Math.cbrt(cryptoRand());
       
       positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
       positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
       positions[i * 3 + 2] = r * Math.cos(phi);
       
-      const c = Math.random() < 0.15 ? colorBlue : colorGreen;
+      const c = cryptoRand() < 0.15 ? colorBlue : colorGreen;
       colors[i * 3] = c.r;
       colors[i * 3 + 1] = c.g;
       colors[i * 3 + 2] = c.b;
@@ -563,7 +564,7 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
                   </div>
                   Remember me
                 </label>
-                <a href="#" style={{ color: "#10B981", fontSize: "13px", textDecoration: "none", fontFamily: "Inter" }} onMouseOver={e=>e.target.style.textDecoration="underline"} onMouseOut={e=>e.target.style.textDecoration="none"}>Forgot password?</a>
+                <button type="button" onClick={(e) => { e.preventDefault(); /* implement forgot password */ }} style={{ background: "none", border: "none", padding: 0, color: "#10B981", fontSize: "13px", textDecoration: "none", fontFamily: "Inter", cursor: "pointer" }} onMouseOver={e=>e.target.style.textDecoration="underline"} onMouseOut={e=>e.target.style.textDecoration="none"}>Forgot password?</button>
               </div>
 
               {error && mode === "login" && <div style={{ color: "#EF4444", fontSize: "13px", marginBottom: "16px", textAlign: "center", fontFamily: "Inter" }}>{error}</div>}

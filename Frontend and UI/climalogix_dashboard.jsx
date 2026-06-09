@@ -116,17 +116,18 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
           const colorBlue = new THREE.Color("#3B82F6");
           
           for (let i = 0; i < particleCount; i++) {
-            const u = Math.random();
-            const v = Math.random();
+            const cryptoRand = () => crypto.getRandomValues(new Uint32Array(1))[0] / 4294967295;
+            const u = cryptoRand();
+            const v = cryptoRand();
             const theta = 2 * Math.PI * u;
             const phi = Math.acos(2 * v - 1);
-            const r = 8 * Math.cbrt(Math.random());
+            const r = 8 * Math.cbrt(cryptoRand());
             
             positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
             positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
             positions[i * 3 + 2] = r * Math.cos(phi);
             
-            const c = Math.random() < 0.15 ? colorBlue : colorGreen;
+            const c = cryptoRand() < 0.15 ? colorBlue : colorGreen;
             colors[i * 3] = c.r;
             colors[i * 3 + 1] = c.g;
             colors[i * 3 + 2] = c.b;
@@ -575,12 +576,12 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
                         </div>
                         Remember me
                       </label>
-                      <a href="#" onClick={(e) => { e.preventDefault(); setMode("forgot"); }} style={{ color: "#10B981", fontSize: "13px", textDecoration: "none", fontFamily: "Inter" }}>Forgot password?</a>
+                      <button onClick={(e) => { e.preventDefault(); setMode("forgot"); }} style={{ background: "none", border: "none", padding: 0, color: "#10B981", fontSize: "13px", textDecoration: "none", fontFamily: "'Inter', sans-serif", fontWeight: 500, cursor: "pointer" }}>
+                        Forgot Password?
+                      </button>
                     </div>
-
-                    
                     )}
-{error && <div style={{ color: "#EF4444", fontSize: "13px", marginBottom: "16px", textAlign: "center", fontFamily: "Inter" }}>{error}</div>}
+                    {error && <div style={{ color: "#EF4444", fontSize: "13px", marginBottom: "16px", textAlign: "center", fontFamily: "Inter" }}>{error}</div>}
 
                     <button type="submit" className="auth-btn" disabled={isLoading}>
                       {isLoading ? (
@@ -714,6 +715,148 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
       }
 
       window.AuthPanel = AuthPanel;
+
+      function OrderTimeline({ status, language }) {
+        const steps = [
+          { id: 'pending', label: language === 'bn' ? 'পেন্ডিং' : 'Pending' },
+          { id: 'processing', label: language === 'bn' ? 'প্রসেসিং' : 'Processing' },
+          { id: 'completed', label: language === 'bn' ? 'সম্পন্ন' : 'Completed' }
+        ];
+        
+        const currentIndex = steps.findIndex(s => s.id === (status || 'pending'));
+
+        return (
+          <div className="order-timeline" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "16px 0 8px 0", position: "relative" }}>
+            <div style={{ position: "absolute", top: 10, left: 20, right: 20, height: 2, background: "rgba(16, 185, 129, 0.2)", zIndex: 0 }} />
+            {steps.map((step, idx) => {
+              const isPast = idx < currentIndex;
+              const isCurrent = idx === currentIndex;
+              const color = isPast || isCurrent ? "#10B981" : "rgba(16, 185, 129, 0.3)";
+              return (
+                <div key={step.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", zIndex: 1, gap: 6 }}>
+                  <div style={{ 
+                    width: 20, height: 20, borderRadius: "50%", background: isCurrent ? "#10B981" : isPast ? "#10B981" : "rgba(17, 24, 39, 1)", 
+                    border: `2px solid ${color}`, display: "flex", alignItems: "center", justifyContent: "center" 
+                  }}>
+                    {isPast && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0B0F19" strokeWidth="3"><polyline points="20 6 9 17 4 12"></polyline></svg>}
+                    {isCurrent && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#0B0F19" }} />}
+                  </div>
+                  <span style={{ fontSize: 10, color: isCurrent ? "#10B981" : "var(--text-secondary)", fontWeight: isCurrent ? 600 : 400 }}>{step.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        );
+      }
+      window.OrderTimeline = OrderTimeline;
+
+      function CheckoutDialog({ onClose, onComplete, totalItems, totalPrice, zone }) {
+        const [stage, setStage] = useState(1);
+        const [method, setMethod] = useState('');
+        
+        useEffect(() => {
+          if (stage === 3) {
+            const timer = setTimeout(() => {
+              onComplete();
+            }, 2000);
+            return () => clearTimeout(timer);
+          }
+        }, [stage, onComplete]);
+
+        return (
+          <div style={{ position: "fixed", inset: 0, zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(11, 15, 25, 0.8)", backdropFilter: "blur(4px)" }}>
+            <div style={{ background: "var(--bg-secondary)", borderRadius: 16, width: "90%", maxWidth: 480, border: "1px solid var(--border-primary)", boxShadow: "var(--shadow-card)", overflow: "hidden", animation: "fadeSlideIn 0.3s ease" }}>
+              <div style={{ padding: "20px 24px", borderBottom: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--bg-primary)" }}>
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "var(--text-primary)" }}>Secure Checkout</h3>
+                {stage < 3 && <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: 20 }}>×</button>}
+              </div>
+              
+              <div style={{ padding: 24 }}>
+                {/* Stage indicators */}
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 32, position: "relative" }}>
+                  <div style={{ position: "absolute", top: 12, left: 20, right: 20, height: 2, background: "var(--border-primary)", zIndex: 0 }} />
+                  {['Delivery', 'Payment', 'Processing'].map((s, i) => (
+                    <div key={s} style={{ zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                      <div style={{ 
+                        width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600,
+                        background: stage > i ? "#10B981" : stage === i + 1 ? "var(--bg-primary)" : "var(--bg-secondary)",
+                        color: stage > i ? "#0B0F19" : stage === i + 1 ? "#10B981" : "var(--text-secondary)",
+                        border: `2px solid ${stage >= i + 1 ? "#10B981" : "var(--border-primary)"}`
+                      }}>
+                        {stage > i ? "✓" : i + 1}
+                      </div>
+                      <span style={{ fontSize: 11, color: stage >= i + 1 ? "var(--text-primary)" : "var(--text-secondary)", fontWeight: stage === i + 1 ? 600 : 400 }}>{s}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {stage === 1 && (
+                  <div style={{ animation: "fadeSlideIn 0.3s ease" }}>
+                    <div style={{ marginBottom: 20 }}>
+                      <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 8 }}>Delivery Zone</div>
+                      <div style={{ padding: 16, background: "var(--bg-primary)", color: "var(--text-primary)", borderRadius: 8, border: "1px solid var(--border-primary)", fontWeight: 600 }}>{zone}</div>
+                    </div>
+                    <div style={{ marginBottom: 24 }}>
+                      <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 8 }}>Order Summary</div>
+                      <div style={{ padding: 16, background: "var(--bg-primary)", borderRadius: 8, border: "1px solid var(--border-primary)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13, color: "var(--text-secondary)" }}>
+                          <span>Items ({totalItems})</span>
+                          <span style={{ color: "var(--text-primary)" }}>৳ {totalPrice.toLocaleString()}</span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 15, borderTop: "1px dashed var(--border-primary)", paddingTop: 8, color: "var(--text-primary)" }}>
+                          <span>Total</span>
+                          <span style={{ color: "#10B981" }}>৳ {totalPrice.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <button onClick={() => setStage(2)} style={{ width: "100%", padding: 14, background: "#10B981", color: "#0B0F19", border: "none", borderRadius: 8, fontWeight: 700, cursor: "pointer", fontSize: 15, transition: "background 0.2s" }}>Continue to Payment</button>
+                  </div>
+                )}
+
+                {stage === 2 && (
+                  <div style={{ animation: "fadeSlideIn 0.3s ease" }}>
+                    <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12 }}>Select Payment Method</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
+                      {['bKash', 'Nagad', 'Card', 'Ledger Credit'].map(m => (
+                        <button 
+                          key={m} 
+                          onClick={() => setMethod(m)}
+                          style={{ 
+                            padding: 16, borderRadius: 8, textAlign: "left", fontSize: 14, fontWeight: 500, cursor: "pointer", transition: "all 0.2s",
+                            background: method === m ? "rgba(16, 185, 129, 0.1)" : "var(--bg-primary)", 
+                            border: `1px solid ${method === m ? "#10B981" : "var(--border-primary)"}`,
+                            color: method === m ? "#10B981" : "var(--text-primary)",
+                            display: "flex", alignItems: "center", justifyContent: "space-between"
+                          }}
+                        >
+                          {m}
+                          {method === m && <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#10B981", border: "2px solid #0B0F19" }} />}
+                        </button>
+                      ))}
+                    </div>
+                    <button 
+                      onClick={() => setStage(3)} 
+                      disabled={!method}
+                      style={{ width: "100%", padding: 14, background: method ? "#10B981" : "var(--bg-input)", color: method ? "#0B0F19" : "var(--text-secondary)", border: "none", borderRadius: 8, fontWeight: 700, cursor: method ? "pointer" : "not-allowed", fontSize: 15, transition: "all 0.2s" }}
+                    >
+                      Confirm Payment
+                    </button>
+                  </div>
+                )}
+
+                {stage === 3 && (
+                  <div style={{ animation: "fadeSlideIn 0.3s ease", textAlign: "center", padding: "32px 0" }}>
+                    <div style={{ width: 48, height: 48, border: "4px solid var(--border-primary)", borderTopColor: "#10B981", borderRadius: "50%", animation: "spin 1s linear infinite", margin: "0 auto 24px" }} />
+                    <h4 style={{ margin: "0 0 8px", fontSize: 16, color: "var(--text-primary)" }}>Processing Transaction</h4>
+                    <p style={{ margin: 0, fontSize: 13, color: "var(--text-secondary)" }}>Verifying ledger commitment and generating receipt...</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      }
+      window.CheckoutDialog = CheckoutDialog;
 
 
 
@@ -4815,7 +4958,7 @@ function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerific
         const voiceRes = await fetch(`${BACKEND_URL}/api/checkout/voice`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ transcript: transcript })
+          body: JSON.stringify({ transcript: text })
         });
         const voiceData = await voiceRes.json();
         if (voiceData.success && voiceData.data) {
@@ -5057,6 +5200,12 @@ function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerific
               <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Listening ({speechLang})...</span>
             </div>
           )}
+          {isVoiceProcessing && (
+            <div className="voice-order-spinner" style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", fontSize: 13, color: ACCENT.green, background: "var(--bg-input)", borderRadius: "18px 18px 18px 0", width: "fit-content", border: `1px solid ${ACCENT.greenBorder}` }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+              Processing voice order...
+            </div>
+          )}
           {!speechSupported && (
             <div style={{ padding: "12px 18px", fontSize: 12, color: ACCENT.amber, background: "var(--bg-input)", borderRadius: "18px 18px 18px 0", width: "fit-content", border: `1px solid ${ACCENT.amberBorder}` }}>
               Microphone not supported in this browser.
@@ -5268,25 +5417,26 @@ function MarketplaceView({ products = [], isLoading = false }) {
 
   const handleCheckout = () => {
     setIsCheckingOut(true);
-    setTimeout(() => {
-      const orderId = `ord-${Math.floor(100000 + Math.random() * 900000)}`;
-      const txHash = "0x" + Array.from({length: 40}, () => Math.floor(Math.random()*16).toString(16)).join("");
-      
-      setCheckoutSuccess({
-        orderId,
-        txHash,
-        totalItems: cart.reduce((sum, item) => sum + item.quantity, 0),
-        totalPrice: cart.reduce((sum, item) => {
-          const rawPrice = Number((item.product.price || "").replace(/[৳\s,]/g, ""));
-          const isClearance = item.product.dvs < 75;
-          const price = isClearance ? Math.round(rawPrice * 0.7) : rawPrice;
-          return sum + (price * item.quantity);
-        }, 0) + getShippingCost(),
-        zone: selectedZone.replace(/_/g, " ").toUpperCase(),
-      });
-      setCart([]);
-      setIsCheckingOut(false);
-    }, 2000);
+  };
+
+  const handleCheckoutComplete = () => {
+    const orderId = `ord-${crypto.randomUUID().slice(0,8)}`;
+    const txHash = "0x" + Array.from(crypto.getRandomValues(new Uint8Array(20))).map(b => b.toString(16).padStart(2, '0')).join('');
+    
+    setCheckoutSuccess({
+      orderId,
+      txHash,
+      totalItems: cart.reduce((sum, item) => sum + item.quantity, 0),
+      totalPrice: cart.reduce((sum, item) => {
+        const rawPrice = Number((item.product.price || "").replace(/[৳\s,]/g, ""));
+        const isClearance = item.product.dvs < 75;
+        const price = isClearance ? Math.round(rawPrice * 0.7) : rawPrice;
+        return sum + (price * item.quantity);
+      }, 0) + getShippingCost(),
+      zone: selectedZone.replace(/_/g, " ").toUpperCase(),
+    });
+    setCart([]);
+    setIsCheckingOut(false);
   };
 
   const cartTotal = cart.reduce((sum, item) => {
@@ -5735,6 +5885,17 @@ function MarketplaceView({ products = [], isLoading = false }) {
           )}
         </div>
       </div>
+
+      {/* ── CHECKOUT DIALOG MODAL ────────────────────────────── */}
+      {isCheckingOut && (
+        <CheckoutDialog 
+          onClose={() => setIsCheckingOut(false)}
+          onComplete={handleCheckoutComplete}
+          totalItems={cart.reduce((sum, item) => sum + item.quantity, 0)}
+          totalPrice={cartTotal + getShippingCost()}
+          zone={selectedZone.replace(/_/g, " ").toUpperCase()}
+        />
+      )}
 
       {/* ── CHECKOUT SUCCESS MODAL ────────────────────────────── */}
       {checkoutSuccess && (
@@ -6635,9 +6796,7 @@ function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerifica
                     >
                       <div>🎉 {msg.content}</div>
                       {msg.orderId && isValidOrderUuid(msg.orderId) && (
-                        <div style={{ fontSize: 11, opacity: 0.9 }}>
-                          {language === "bn" ? "স্ট্যাটাস" : "Status"}: {msg.orderStatus || "pending"}
-                        </div>
+                        <OrderTimeline status={msg.orderStatus || "pending"} language={language} />
                       )}
                       {msg.orderId && isValidOrderUuid(msg.orderId) && (msg.orderStatus === "pending" || !msg.orderStatus) && (
                         <button
@@ -8578,6 +8737,36 @@ const DhakaRouteMicroMap = () => {
         </div>
         <div style={{ fontSize: "11px", color: "var(--text-primary)" }}>
           Health: <strong style={{ color: "#F59E0B" }}>Warning (Temp Spikes)</strong>
+        </div>
+      </div>
+
+      {/* UHI Scale Overlay */}
+      <div style={{
+        position: "absolute",
+        bottom: "10px",
+        right: "10px",
+        background: "rgba(17, 34, 17, 0.75)",
+        backdropFilter: "blur(6px)",
+        border: "1px solid rgba(16, 185, 129, 0.2)",
+        borderRadius: "8px",
+        padding: "8px",
+        zIndex: 5,
+        pointerEvents: "none",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-end",
+        gap: "4px"
+      }}>
+        <div style={{ fontSize: "9px", color: "var(--text-dim)", fontWeight: 700, marginBottom: "2px" }}>UHI HEAT SCALE</div>
+        <div style={{ display: "flex", gap: "2px" }}>
+          <div style={{ width: "12px", height: "8px", background: "#10B981", borderRadius: "2px" }} title="Low"></div>
+          <div style={{ width: "12px", height: "8px", background: "#F59E0B", borderRadius: "2px" }} title="Moderate"></div>
+          <div style={{ width: "12px", height: "8px", background: "#EF4444", borderRadius: "2px" }} title="High"></div>
+          <div style={{ width: "12px", height: "8px", background: "#7F1D1D", borderRadius: "2px" }} title="Severe"></div>
+        </div>
+        <div style={{ display: "flex", width: "100%", justifyContent: "space-between", fontSize: "8px", color: "var(--text-secondary)", marginTop: "2px" }}>
+          <span>Low</span>
+          <span>Severe</span>
         </div>
       </div>
     </div>
