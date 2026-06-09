@@ -1,10 +1,10 @@
-const { useState, useEffect } = React;
+var { useState, useEffect } = window.React || React;
 
 function OrderTimeline({ status, language }) {
         const steps = [
-          { id: 'pending', label: language === 'bn' ? 'aª¬aºçaª¿aºìaªíaª+aªé' : 'Pending' },
-          { id: 'processing', label: language === 'bn' ? 'aª¬aºìaª¦aª+aºçaª+aª+aªé' : 'Processing' },
-          { id: 'completed', label: language === 'bn' ? 'aª+aª«aºìaª¬aª¿aºìaª¿' : 'Completed' }
+          { id: 'pending', label: language === 'bn' ? 'aï¿½ï¿½aï¿½ï¿½aï¿½ï¿½aï¿½ï¿½aï¿½ï¿½aï¿½+aï¿½ï¿½' : 'Pending' },
+          { id: 'processing', label: language === 'bn' ? 'aï¿½ï¿½aï¿½ï¿½aï¿½ï¿½aï¿½+aï¿½ï¿½aï¿½+aï¿½+aï¿½ï¿½' : 'Processing' },
+          { id: 'completed', label: language === 'bn' ? 'aï¿½+aï¿½ï¿½aï¿½ï¿½aï¿½ï¿½aï¿½ï¿½aï¿½ï¿½aï¿½ï¿½' : 'Completed' }
         ];
         
         const currentIndex = steps.findIndex(s => s.id === (status || 'pending'));

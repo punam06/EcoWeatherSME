@@ -1,4 +1,4 @@
-const { useState } = React;
+var { useState } = window.React || React;
 
 const UHI_ZONES = {
   "Old Dhaka":      { offset: 3.4, hazardClass: "A", color: "#EF4444" },

@@ -1,4 +1,4 @@
-const { useState, useEffect } = React;
+var { useState, useEffect } = window.React || React;
 
 function CheckoutDialog({ onClose, onComplete, totalItems, totalPrice, zone }) {
         const [stage, setStage] = useState(1);
@@ -18,7 +18,7 @@ function CheckoutDialog({ onClose, onComplete, totalItems, totalPrice, zone }) {
             <div style={{ background: "var(--bg-secondary)", borderRadius: 16, width: "90%", maxWidth: 480, border: "1px solid var(--border-primary)", boxShadow: "var(--shadow-card)", overflow: "hidden", animation: "fadeSlideIn 0.3s ease" }}>
               <div style={{ padding: "20px 24px", borderBottom: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--bg-primary)" }}>
                 <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "var(--text-primary)" }}>Secure Checkout</h3>
-                {stage < 3 && <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: 20 }}>+ù</button>}
+                {stage < 3 && <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", fontSize: 20 }}>+ï¿½</button>}
               </div>
               
               <div style={{ padding: 24 }}>
@@ -33,7 +33,7 @@ function CheckoutDialog({ onClose, onComplete, totalItems, totalPrice, zone }) {
                         color: stage > i ? "#0B0F19" : stage === i + 1 ? "#10B981" : "var(--text-secondary)",
                         border: `2px solid ${stage >= i + 1 ? "#10B981" : "var(--border-primary)"}`
                       }}>
-                        {stage > i ? "G£ô" : i + 1}
+                        {stage > i ? "Gï¿½ï¿½" : i + 1}
                       </div>
                       <span style={{ fontSize: 11, color: stage >= i + 1 ? "var(--text-primary)" : "var(--text-secondary)", fontWeight: stage === i + 1 ? 600 : 400 }}>{s}</span>
                     </div>
@@ -51,11 +51,11 @@ function CheckoutDialog({ onClose, onComplete, totalItems, totalPrice, zone }) {
                       <div style={{ padding: 16, background: "var(--bg-primary)", borderRadius: 8, border: "1px solid var(--border-primary)" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 13, color: "var(--text-secondary)" }}>
                           <span>Items ({totalItems})</span>
-                          <span style={{ color: "var(--text-primary)" }}>aº¦ {totalPrice.toLocaleString()}</span>
+                          <span style={{ color: "var(--text-primary)" }}>aï¿½ï¿½ {totalPrice.toLocaleString()}</span>
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 15, borderTop: "1px dashed var(--border-primary)", paddingTop: 8, color: "var(--text-primary)" }}>
                           <span>Total</span>
-                          <span style={{ color: "#10B981" }}>aº¦ {totalPrice.toLocaleString()}</span>
+                          <span style={{ color: "#10B981" }}>aï¿½ï¿½ {totalPrice.toLocaleString()}</span>
                         </div>
                       </div>
                     </div>

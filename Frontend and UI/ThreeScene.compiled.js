@@ -8,10 +8,10 @@
      animals) and responsive shader/particle systems directly in the client browser.
    ═══════════════════════════════════════════════════════════════ */
 
-const {
+var {
   useEffect,
   useRef
-} = React;
+} = window.React || React;
 function ThreeScene() {
   const containerRef = useRef(null);
   useEffect(() => {

@@ -406,7 +406,7 @@
 
     <!-- Keep the initialization logic that was at the bottom of the inline script -->
     <script type="text/babel">
-    const { useState, useEffect, useRef, useCallback } = React;
+    var { useState, useEffect, useRef, useCallback } = window.React || React;
 
 // Inline LanguageSelector Component
       function LanguageSelector() {
