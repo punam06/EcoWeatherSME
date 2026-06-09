@@ -1,4 +1,22 @@
-<!doctype html>
+const fs = require('fs');
+const path = require('path');
+
+const indexPath = path.resolve(__dirname, 'Frontend and UI', 'index.html');
+let content = fs.readFileSync(indexPath, 'utf8');
+
+// The file has a duplicate <head> and <body> block starting around line 388.
+// The raw CSS from line 405 to 584 shouldn't be there.
+// Let's just cleanly rewrite everything after </head>.
+
+const endOfStyleIndex = content.indexOf('</style>');
+const secondEndOfStyleIndex = content.indexOf('</style>', endOfStyleIndex + 1);
+
+// Looking at the view_file output, the original <style> ends at line 387.
+// Then there is <script src="jspdf..."></script>
+// Then </head>
+// Then <body>
+
+const cleanContent = `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -36,21 +54,21 @@
           errorDiv.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:#0F172A;color:#F87171;padding:40px;font-family:monospace;z-index:99999;overflow:auto;box-sizing:border-box;";
           document.body.appendChild(errorDiv);
         }
-        errorDiv.innerHTML = `<div style="max-width:900px;margin:0 auto;background:#1E293B;border:2px solid #EF4444;border-radius:12px;padding:30px;box-shadow:0 10px 30px rgba(0,0,0,0.5)">
+        errorDiv.innerHTML = \`<div style="max-width:900px;margin:0 auto;background:#1E293B;border:2px solid #EF4444;border-radius:12px;padding:30px;box-shadow:0 10px 30px rgba(0,0,0,0.5)">
           <h1 style="color:#EF4444;font-size:24px;margin-bottom:20px;border-bottom:1px solid #334155;padding-bottom:10px;">⚠️ CLimaLogix ClimateShield - Diagnostic Error Alert</h1>
           <p style="font-size:16px;color:#F1F5F9;margin-bottom:15px;">An error occurred while loading or compiling the frontend application. Below are the diagnostic details:</p>
           <table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:14px;color:#CBD5E1;">
-            <tr><td style="padding:8px;font-weight:bold;color:#F87171;width:120px;border-bottom:1px solid #334155;">Type:</td><td style="padding:8px;border-bottom:1px solid #334155;">${details.type}</td></tr>
-            <tr><td style="padding:8px;font-weight:bold;color:#F87171;border-bottom:1px solid #334155;">Message:</td><td style="padding:8px;border-bottom:1px solid #334155;color:#F1F5F9;">${details.message}</td></tr>
-            <tr><td style="padding:8px;font-weight:bold;color:#F87171;border-bottom:1px solid #334155;">File:</td><td style="padding:8px;border-bottom:1px solid #334155;">${details.source || "N/A"}</td></tr>
-            <tr><td style="padding:8px;font-weight:bold;color:#F87171;border-bottom:1px solid #334155;">Line / Col:</td><td style="padding:8px;border-bottom:1px solid #334155;">${details.line} : ${details.column}</td></tr>
+            <tr><td style="padding:8px;font-weight:bold;color:#F87171;width:120px;border-bottom:1px solid #334155;">Type:</td><td style="padding:8px;border-bottom:1px solid #334155;">\${details.type}</td></tr>
+            <tr><td style="padding:8px;font-weight:bold;color:#F87171;border-bottom:1px solid #334155;">Message:</td><td style="padding:8px;border-bottom:1px solid #334155;color:#F1F5F9;">\${details.message}</td></tr>
+            <tr><td style="padding:8px;font-weight:bold;color:#F87171;border-bottom:1px solid #334155;">File:</td><td style="padding:8px;border-bottom:1px solid #334155;">\${details.source || "N/A"}</td></tr>
+            <tr><td style="padding:8px;font-weight:bold;color:#F87171;border-bottom:1px solid #334155;">Line / Col:</td><td style="padding:8px;border-bottom:1px solid #334155;">\${details.line} : \${details.column}</td></tr>
           </table>
           <h3 style="color:#F1F5F9;margin-bottom:10px;">Stack Trace / Context:</h3>
-          <pre style="background:#0F172A;color:#94A3B8;padding:15px;border-radius:6px;overflow:auto;max-height:350px;white-space:pre-wrap;font-size:12px;border:1px solid #334155;">${details.stack}</pre>
+          <pre style="background:#0F172A;color:#94A3B8;padding:15px;border-radius:6px;overflow:auto;max-height:350px;white-space:pre-wrap;font-size:12px;border:1px solid #334155;">\${details.stack}</pre>
           <div style="margin-top:20px;text-align:right;">
             <button onclick="window.location.reload()" style="background:#EF4444;color:#FFF;border:none;padding:10px 20px;border-radius:6px;font-weight:bold;cursor:pointer;font-family:inherit;">🔄 Reload Page</button>
           </div>
-        </div>`;
+        </div>\`;
       }
     </script>
 
@@ -154,6 +172,12 @@
     
     <script src="./AuthPanel.js"></script>
     <script type="text/babel" src="./climalogix_dashboard.jsx"></script>
-
+    <script type="text/babel">
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<window.ErrorBoundary><CLimaLogixApp /></window.ErrorBoundary>);
+    </script>
   </body>
-</html>
+</html>`;
+
+fs.writeFileSync(indexPath, cleanContent);
+console.log("Completely clean index.html written!");

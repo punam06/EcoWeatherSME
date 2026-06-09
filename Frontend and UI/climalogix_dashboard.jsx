@@ -1,14 +1,4 @@
-
-const OrderTimeline = window.OrderTimeline;
-const CheckoutDialog = window.CheckoutDialog;
-const DhakaRouteMicroMap = window.DhakaRouteMicroMap;
-const ZoneDetailPanel = window.ZoneDetailPanel;
-const RouteExposureMapCard = window.RouteExposureMapCard;
-
-
-
-// Inline LanguageSelector Component
-      function LanguageSelector() {
+function LanguageSelector() {
         const [isOpen, setIsOpen] = useState(false);
         const [currentLang, setCurrentLang] = useState('en');
         const [supportedLangs, setSupportedLangs] = useState({});
@@ -55,7 +45,7 @@ const RouteExposureMapCard = window.RouteExposureMapCard;
               onClick={() => setIsOpen(!isOpen)}
               className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-green-700 hover:bg-green-600 rounded-md shadow-sm transition-colors"
             >
-              <span className="text-[18px]">🌐</span>
+              <span className="material-icons text-[18px]">language</span>
               <span className="uppercase">{currentLang}</span>
             </button>
 
@@ -84,6 +74,8 @@ const RouteExposureMapCard = window.RouteExposureMapCard;
       }
 
       window.LanguageSelector = LanguageSelector;
+
+
 
 const IS_STATIC_FILE_HTML = window.location.protocol === 'file:';
 // Backend API base URL. The production backend that the live dashboard talks
@@ -152,6 +144,11 @@ const ACCENT = {
   redLight: "#F87171",
   redBg: "rgba(239, 68, 68, 0.08)",
   redBorder: "rgba(239, 68, 68, 0.2)",
+  blue: "#3B82F6",
+  blueLight: "#60A5FA",
+  blueDark: "#1D4ED8",
+  blueBg: "rgba(59, 130, 246, 0.08)",
+  blueBorder: "rgba(59, 130, 246, 0.2)",
 };
 
 const UHI_ZONES = {
@@ -244,7 +241,7 @@ function getSolarHourMultiplier(hour) {
 function calcAdjustedTemp(baseTemp, zone, hour, windSpeed) {
   const uhi = UHI_ZONES[zone];
   const solarFactor = getSolarFactor(hour);
-  const windCooling = windSpeed > 15 ? 1.0 : 0.0;
+  const windCooling = windSpeed * 0.08;
   return baseTemp + (uhi.offset * solarFactor) - windCooling;
 }
 
@@ -421,6 +418,58 @@ function MetricBox({ label, value, color, icon }) {
       <div style={{ fontSize: 15, fontWeight: 700, color, fontFamily: "'JetBrains Mono', monospace" }}>{value}</div>
     </div>
   );
+}
+
+// ── Clipboard / Copy Utilities ────────────────────────────────────
+// Writes text to clipboard with fallback for HTTP (non-secure context).
+// Returns true on success, false otherwise.
+async function copyToClipboard(text) {
+  if (!text) return false;
+  try {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (_) { /* fall through */ }
+  // Fallback: create a hidden textarea, select, execCommand
+  try {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '-9999px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    var ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch (_) {
+    return false;
+  }
+}
+
+// Small inline copy button — shows a brief "copied" state.
+function CopyBtn({ text, label }) {
+  var [copied, setCopied] = React.useState(false);
+  var handleClick = async function () {
+    var ok = await copyToClipboard(text);
+    setCopied(true);
+    setTimeout(function () { setCopied(false); }, 1800);
+  };
+  return React.createElement('button', {
+    onClick: handleClick,
+    title: 'Copy ' + (label || 'text') + ' to clipboard',
+    style: {
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      padding: '2px 8px', borderRadius: 6, border: '1px solid var(--border-primary)',
+      background: copied ? 'rgba(16,185,129,0.15)' : 'var(--bg-input)',
+      color: copied ? '#10B981' : 'var(--text-muted)',
+      fontSize: 10, fontWeight: 600, cursor: 'pointer',
+      transition: 'all 0.2s ease', verticalAlign: 'middle', lineHeight: '20px',
+    }
+  }, copied ? '\u2713 Copied' : '\u{1F4CB} Copy');
 }
 
 function ThemeToggle({ theme, onToggle }) {
@@ -607,1167 +656,21 @@ function BatchVerificationForm({ onResult, onResultDetail, prefilledBatchId, pre
         } else {
           setRegisteredBatches([]);
         }
-      } catch (err) {
-        setRegisteredBatches([]);
+        if (window.supabase && !window.supabaseClient && window.SUPABASE_URL && window.SUPABASE_ANON_KEY) {
+          window.supabaseClient = window.supabase.createClient(
+            window.SUPABASE_URL,
+            window.SUPABASE_ANON_KEY
+          );
+        }
+      } catch (error) {
+        console.error("Failed to load batches:", error);
       }
     };
     loadBatches();
-  }, []);
-
-  // Sync state if pre-populated from AI chatbot agent
-  useEffect(() => {
-    if (prefilledBatchId) {
-      setSelectedBatchId(prefilledBatchId);
-      
-      const matched = registeredBatches.find(b => b.id === prefilledBatchId || b.batch_number === prefilledBatchId);
-      if (matched) {
-        setDispatchZone(matched.destination_zone || matched.dest || "Old Dhaka");
-      } else if (prefilledDispatchZone) {
-        setDispatchZone(prefilledDispatchZone);
-      }
-    }
-  }, [prefilledBatchId, prefilledDispatchZone, registeredBatches]);
-
-  const handleBatchSelect = (bId) => {
-    setSelectedBatchId(bId);
-    if (setPrefilledBatchId) setPrefilledBatchId(bId);
-    
-    const matched = registeredBatches.find(b => b.id === bId || b.batch_number === bId);
-    if (matched) {
-      const zone = matched.destination_zone || matched.dest || "Old Dhaka";
-      setDispatchZone(zone);
-      if (setPrefilledDispatchZone) setPrefilledDispatchZone(zone);
-    }
-  };
-
-  useEffect(() => {
-    const fetchTrustScore = async () => {
-      setIsLoading(true);
-      try {
-        let em1Ratio = 0.001;
-        if (ratio === "1:1:10") em1Ratio = 0.002;
-        else if (ratio === "1:1:20") em1Ratio = 0.002;
-        else if (ratio === "1:1:30") em1Ratio = 0.001;
-        else if (ratio === "1:1:40") em1Ratio = 0.0005;
-
-        let checkedCount = 0;
-        if (qaSource === 'manufacturer') {
-          checkedCount = Object.values(checkedItems).filter(Boolean).length;
-          if (checkedCount < 3) {
-            const lang = window.languageManager ? window.languageManager.getLanguage() : 'en';
-            if (window.showToast) {
-              window.showToast(
-                lang === 'bn'
-                  ? 'সতর্কতা: সব সম্মতি আইটেম চেক করা হয়নি।'
-                  : 'Warning: Not all compliance items are checked.',
-                'warning'
-              );
-            }
-          }
-        }
-
-        const json = await window.APIClient.getTrustScore({
-          category,
-          pH: conf.ph ? pH : 7.0,
-          ec: EC,
-          temperatureCelsius: temp,
-          em1Ratio,
-          fermentationDays: days,
-          manufacturerCheckedCount: checkedCount,
-          qaSource: qaSource
-        });
-        if (json.success && json.data) {
-          const result = json.data;
-          setTsResult(result);
-          setTs(result.score);
-          onResult(result.score);
-          if (typeof onResultDetail === "function") onResultDetail(result);
-        } else {
-          throw new Error(json.error || "Trust score endpoint returned no data");
-        }
-        setCertified(false);
-        setQrCodeImg(null);
-        setBatchNum("");
-      } catch (error) {
-        console.error("Failed to fetch trust score:", error);
-        // Display offline fallback error
-        const fallbackScore = 0;
-        setTs(fallbackScore);
-        const fallbackResult = {
-          score: fallbackScore,
-          grade: 'F',
-          isViable: false,
-          category: category,
-          breakdown: null,
-          reference: 'API-Offline',
-          notes: ['Backend unreachable — cannot compute score'],
-        };
-        setTsResult(fallbackResult);
-        onResult(fallbackScore);
-        if (typeof onResultDetail === "function") onResultDetail(fallbackResult);
-        setCertified(false);
-        setQrCodeImg(null);
-        setBatchNum("");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    
-    fetchTrustScore();
-  }, [category, pH, EC, temp, ratio, days, onResult, qaSource, checkedItems]);
+  }, [])
 
   return (
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 18 }}>
-        {/* NEW STATEFUL BATCH ID & DISPATCH ZONE SELECTIONS */}
-        <div style={{ gridColumn: "1 / -1" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            <div>
-              <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>Batch ID (Registered)</label>
-              <select 
-                value={selectedBatchId} 
-                onChange={e => handleBatchSelect(e.target.value)}
-                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
-              >
-                <option value="">Select registered batch</option>
-                {registeredBatches.map(b => (
-                  <option key={b.id || b.batch_number} value={b.id || b.batch_number}>
-                    {b.id || b.batch_number} - {b.product_name || b.product}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>Dispatch Zone</label>
-              <select 
-                value={dispatchZone} 
-                onChange={e => { setDispatchZone(e.target.value); if (setPrefilledDispatchZone) setPrefilledDispatchZone(e.target.value); }}
-                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
-              >
-                <option value="">Select zone</option>
-                {Object.keys(UHI_ZONES).map(z => <option key={z} value={z}>{z}</option>)}
-              </select>
-            </div>
-          </div>
-          {selectedBatchId && (
-            <div style={{ fontSize: 11, color: ACCENT.green, marginTop: 8, fontWeight: 600 }}>
-              📦 Selected Batch Product: {registeredBatches.find(b => b.id === selectedBatchId || b.batch_number === selectedBatchId)?.product_name || 'Registered Material'}
-            </div>
-          )}
-        </div>
-
-        {/* CATEGORY & QA SOURCE SELECTION */}
-        <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          <div>
-            <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>Product Category</label>
-            <select 
-              value={category} 
-              onChange={e => handleCategoryChange(e.target.value)}
-              style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
-            >
-              <option value="organic">Organic Biofertilizer (BARI EM-1)</option>
-              <option value="retail">Retail FMCG / Packaged Goods</option>
-              <option value="pharma">Pharmaceuticals (DGDA)</option>
-              <option value="dairy">Dairy / Pasteurized Milk</option>
-              <option value="manufacturing">Industrial Manufacturing</option>
-            </select>
-          </div>
-          <div>
-            <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>QA Source</label>
-            <select 
-              value={qaSource} 
-              onChange={e => {
-                setQaSource(e.target.value);
-                if (e.target.value !== 'inspector') {
-                  setBstiCredential('');
-                  setInspectorNotes('');
-                }
-              }}
-              style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
-            >
-              <option value="iot">📡 IoT Sensors</option>
-              <option value="inspector">👮 Certified Inspector</option>
-              <option value="manufacturer">🏭 Manufacturer Declaration</option>
-            </select>
-          </div>
-        </div>
-
-
-        {qaSource === 'manufacturer' && (
-          <div style={{ gridColumn: "1 / -1", background: "rgba(255,255,255,0.03)", padding: 16, borderRadius: 8, border: "1px solid rgba(16,185,129,0.2)", marginBottom: 16 }}>
-            <p style={{ color: "#F9FAFB", fontSize: 14, fontWeight: 600, margin: "0 0 12px" }}>
-              {window.languageManager ? window.languageManager.getLanguage() : 'en' === 'bn' ? 'সম্মতি যাচাইতালিকা' : 'Compliance Checklist'}
-            </p>
-            {CHECKLIST_ITEMS.map(item => (
-              <label key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={checkedItems[item.id] || false}
-                  onChange={() => toggleItem(item.id)}
-                  style={{ accentColor: '#10B981', width: 16, height: 16 }}
-                />
-                <span style={{ color: '#9CA3AF', fontSize: 13 }}>{window.languageManager ? window.languageManager.getLanguage() : 'en' === 'bn' ? item.bn : item.en}</span>
-              </label>
-            ))}
-          </div>
-        )}
-
-        {qaSource === 'iot' && (
-          <div className="iot-sliders-group" style={{ display: 'contents' }}>
-        {conf.ph ? (
-          <div>
-            <SliderRow label={conf.ph.label} min={conf.ph.min} max={conf.ph.max} step={conf.ph.step} value={pH} onChange={setPH} color={ACCENT.green} />
-            <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: {conf.ph.optimal}</div>
-          </div>
-        ) : null}
-        <div>
-          <SliderRow label={conf.ec.label} min={conf.ec.min} max={conf.ec.max} step={conf.ec.step} value={EC} onChange={setEC} unit={conf.ec.unit} color={ACCENT.green} />
-          <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: {conf.ec.optimal}</div>
-        </div>
-        <div>
-          <SliderRow label={conf.temp.label} min={conf.temp.min} max={conf.temp.max} step={conf.temp.step} value={temp} onChange={setTemp} unit={conf.temp.unit} color={temp > conf.tempRange[1] ? ACCENT.red : ACCENT.amber} />
-          <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: {conf.temp.optimal}</div>
-        </div>
-        
-        {conf.hasRatio ? (
-          <div>
-            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>Treatment Ratio</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-              {["1:1:10", "1:1:20", "1:1:30", "1:1:40"].map(v => (
-                <button key={v} onClick={() => setRatio(v)}
-                  style={{
-                    padding: "7px 4px", borderRadius: 8,
-                    border: `1px solid ${ratio === v ? ACCENT.green : "var(--border-primary)"}`,
-                    background: ratio === v ? ACCENT.greenBg : "var(--bg-input)",
-                    color: ratio === v ? ACCENT.green : "var(--text-muted)",
-                    fontSize: 11, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace",
-                    fontWeight: ratio === v ? 600 : 400,
-                    transition: "all 0.25s ease",
-                  }}>
-                  {v}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        <div style={{ gridColumn: conf.ph ? "1 / -1" : "auto" }}>
-          <SliderRow label={conf.days.label} min={conf.days.min} max={conf.days.max} step={conf.days.step} value={days} onChange={setDays} unit={conf.days.unit} color={ACCENT.green} />
-          <div style={{ fontSize: 10, color: "var(--text-dim)" }}>Optimal: {conf.days.optimal}</div>
-        </div>
-
-                  </div>
-        )}
-        {/* Dynamic Multi-Source Inputs */}
-        <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, borderTop: "1px solid var(--border-primary)", paddingTop: 14, marginTop: 6 }}>
-          {(qaSource === 'inspector' || conf.requiresBSTI) && (
-            <div>
-              <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>
-                BSTI Credential ID {conf.requiresBSTI && <span style={{ color: ACCENT.red }}>*</span>}
-              </label>
-              <input 
-                type="text" 
-                placeholder="e.g. BSTI-1234" 
-                value={bstiCredential}
-                onChange={e => setBstiCredential(e.target.value)}
-                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none", fontFamily: "'JetBrains Mono', monospace" }}
-              />
-              <div style={{ fontSize: 9, color: "var(--text-dim)", marginTop: 4 }}>Format: BSTI-XXXX (minimum 4 digits)</div>
-            </div>
-          )}
-
-          {(qaSource === 'inspector' || qaSource === 'manufacturer') && (
-            <div style={{ gridColumn: qaSource === 'inspector' && !conf.requiresBSTI ? "1 / -1" : "auto" }}>
-              <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>Signed By</label>
-              <input 
-                type="text" 
-                placeholder="e.g. Dr. Zaman, Quality Manager" 
-                value={signedBy}
-                onChange={e => setSignedBy(e.target.value)}
-                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none" }}
-              />
-            </div>
-          )}
-
-          {qaSource === 'inspector' && (
-            <div style={{ gridColumn: "1 / -1" }}>
-              <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500 }}>
-                Inspector Notes <span style={{ color: ACCENT.red }}>*</span>
-              </label>
-              <textarea 
-                placeholder="Record physical inspection remarks, packaging compliance and seals..." 
-                value={inspectorNotes}
-                onChange={e => setInspectorNotes(e.target.value)}
-                rows={2}
-                style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", fontSize: 13, outline: "none", resize: "none" }}
-              />
-            </div>
-          )}
-        </div>
-      </div>
-
-      {formError && (
-        <div style={{ marginBottom: 12, padding: 10, borderRadius: 8, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: ACCENT.red, fontSize: 12 }}>
-          ❌ {formError}
-        </div>
-      )}
-
-      <button 
-        onClick={async () => { 
-          setFormError("");
-          if (!selectedBatchId) {
-            setFormError("Please select a registered batch ID.");
-            return;
-          }
-          if (conf.requiresBSTI || (qaSource === 'inspector' && (category === 'pharma' || category === 'dairy' || category === 'manufacturing'))) {
-            if (!bstiCredential) {
-              setFormError("BSTI Credential ID is required for inspector reports in this category.");
-              return;
-            }
-            if (!/^BSTI-\d{4,}$/.test(bstiCredential)) {
-              setFormError("BSTI Credential must match format 'BSTI-XXXX' (at least 4 digits).");
-              return;
-            }
-          }
-          if (qaSource === 'inspector' && !inspectorNotes) {
-            setFormError("Inspector notes are required for inspector reports.");
-            return;
-          }
-
-          if (ts >= 60) {
-            setIsCertifying(true);
-            try {
-              let em1Ratio = 0.001;
-              if (ratio === "1:1:10") em1Ratio = 0.002;
-              else if (ratio === "1:1:20") em1Ratio = 0.002;
-              else if (ratio === "1:1:30") em1Ratio = 0.001;
-              else if (ratio === "1:1:40") em1Ratio = 0.0005;
-
-              const metrics = {
-                pH: conf.ph ? parseFloat(pH) : 7.0,
-                ec: parseFloat(EC),
-                temp: parseFloat(temp),
-                em1Ratio,
-                fermentationDays: parseInt(days, 10),
-              };
-
-              // Sign metrics
-              const canonical = canonicalize(metrics);
-              const signature = await sha256(canonical);
-
-              // 1. Submit QA Ingestion report
-              const qaPayload = {
-                batch_id: selectedBatchId,
-                source: qaSource,
-                category: category,
-                metrics: metrics,
-                bstiCredential: bstiCredential || undefined,
-                inspectorNotes: inspectorNotes || undefined,
-                signed_by: signedBy || undefined,
-                signature: signature
-              };
-
-              const qaRes = await window.APIClient.submitQAReport(qaPayload);
-              if (!qaRes.success) {
-                throw new Error(qaRes.error || "QA report submission failed.");
-              }
-
-              // 2. Certify Batch (QR)
-              const res = await window.APIClient.certifyBatch({ 
-                batchId: selectedBatchId,
-                trustScore: ts
-              });
-
-              if (res.success) {
-                setQrCodeImg(res.data.qrCodeDataUrl);
-                setBatchNum(res.data.batchId);
-                setCertified(true);
-                
-                // Sync list states locally
-                const updateLocalBatch = b => {
-                  if (b.id === res.data.batchId || b.batch_number === res.data.batchId) {
-                    return { ...b, status: 'certified', trust_score: ts };
-                  }
-                  return b;
-                };
-                
-                setRegisteredBatches(prev => prev.map(updateLocalBatch));
-              } else {
-                throw new Error(res.error || "Batch certification failed.");
-              }
-            } catch (err) {
-              console.error("Verification and certification failed:", err);
-              setFormError(err.message || "An error occurred during submission.");
-            } finally {
-              setIsCertifying(false);
-            }
-          } 
-        }}
-        disabled={ts < 60 || isLoading || isCertifying}
-        style={{
-          width: "100%", padding: "12px", borderRadius: 10,
-          border: `1px solid ${ts >= 60 ? ACCENT.green : "var(--border-primary)"}`,
-          background: ts >= 60 ? ACCENT.greenBg : "var(--bg-input)",
-          color: ts >= 60 ? ACCENT.green : "var(--text-dim)",
-          cursor: ts >= 60 && !isLoading && !isCertifying ? "pointer" : "not-allowed",
-          fontSize: 13, fontWeight: 600, letterSpacing: "0.05em",
-          transition: "all 0.3s ease",
-          boxShadow: ts >= 60 ? ACCENT.greenBg : "none",
-          opacity: isLoading || isCertifying ? 0.7 : 1,
-        }}>
-        {isCertifying ? "⏳ Generating Cryptographic QR..." : (isLoading ? "⏳ Calculating..." : ts >= 60 ? "✦ Certify Batch & Generate QR Certificate" : "Trust Score too low to certify")}
-      </button>
-      {certified && qrCodeImg && (
-        <div style={{
-          marginTop: 14, padding: 14, borderRadius: 10,
-          border: `1px solid ${ACCENT.greenBorder}`, background: ACCENT.greenBg,
-          animation: "fadeSlideIn 0.4s ease",
-        }}>
-          <div style={{ fontSize: 11, color: ACCENT.green, fontWeight: 700, marginBottom: 10 }}>✓ BATCH CERTIFIED — Certificate Generated</div>
-          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-            <div style={{
-              width: 100, height: 100, background: "var(--bg-primary)", borderRadius: 8,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              border: `1px solid ${ACCENT.greenBorder}`, flexShrink: 0, overflow: "hidden"
-            }}>
-              <img 
-                src={qrCodeImg} 
-                alt="Cryptographic QR Code" 
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-              />
-            </div>
-            <div style={{ fontSize: 10, color: "var(--text-secondary)", lineHeight: 1.9 }}>
-              <div><span style={{ color: ACCENT.green }}>Batch #:</span> {batchNum}</div>
-              <div><span style={{ color: ACCENT.green }}>Category:</span> {STANDARDS_CONFIG[category].displayName}</div>
-              <div><span style={{ color: ACCENT.green }}>Source:</span> {qaSource === 'iot' ? 'IoT Sensors' : qaSource === 'inspector' ? 'Certified Inspector' : 'Manufacturer Declaration'}</div>
-              {bstiCredential && <div><span style={{ color: ACCENT.green }}>BSTI ID:</span> {bstiCredential}</div>}
-              {signedBy && <div><span style={{ color: ACCENT.green }}>Signed By:</span> {signedBy}</div>}
-              <div><span style={{ color: ACCENT.green }}>Trust Score:</span> {ts}/100</div>
-              <div><span style={{ color: ACCENT.green }}>Parameters:</span> pH: {conf.ph ? pH : "N/A"} / EC: {EC} / Temp: {temp}°C</div>
-              <div><span style={{ color: ACCENT.green }}>Ratio / Days:</span> {conf.hasRatio ? ratio : "N/A"} / {days}</div>
-            </div>
-          </div>
-          <button
-            onClick={() => {
-              const { jsPDF } = window.jspdf;
-              const doc = new jsPDF({
-                orientation: 'portrait',
-                unit: 'mm',
-                format: 'a4'
-              });
-              
-              doc.setDrawColor(46, 125, 50);
-              doc.setLineWidth(1.5);
-              doc.rect(5, 5, 200, 287);
-              
-              doc.setFont("helvetica", "bold");
-              doc.setFontSize(22);
-              doc.setTextColor(46, 125, 50);
-              doc.text("CLimaLogix AI", 105, 30, { align: "center" });
-              
-              doc.setFontSize(14);
-              doc.setTextColor(15, 23, 42);
-              doc.text("CLIMATESHIELD BATCH CERTIFICATE", 105, 42, { align: "center" });
-              
-              doc.setDrawColor(200, 200, 200);
-              doc.setLineWidth(0.5);
-              doc.line(20, 48, 190, 48);
-              
-              doc.setFont("helvetica", "normal");
-              doc.setFontSize(12);
-              doc.setTextColor(51, 65, 85);
-              
-              const matched = registeredBatches.find(b => b.id === batchNum || b.batch_number === batchNum);
-              const pName = matched ? (matched.product_name || matched.product) : "Organic Product";
-              const pZone = dispatchZone || (matched ? (matched.destination_zone || matched.dest) : "Old Dhaka");
-
-              let y = 60;
-              doc.setFont("helvetica", "bold");
-              doc.text("Batch ID:", 30, y);
-              doc.setFont("helvetica", "normal");
-              doc.text(batchNum, 75, y);
-              
-              y += 10;
-              doc.setFont("helvetica", "bold");
-              doc.text("Category:", 30, y);
-              doc.setFont("helvetica", "normal");
-              doc.text(STANDARDS_CONFIG[category].displayName, 75, y);
-
-              y += 10;
-              doc.setFont("helvetica", "bold");
-              doc.text("QA Source:", 30, y);
-              doc.setFont("helvetica", "normal");
-              doc.text(qaSource === 'iot' ? 'IoT Sensors' : qaSource === 'inspector' ? 'Certified Inspector' : 'Manufacturer Declaration', 75, y);
-
-              if (bstiCredential) {
-                y += 10;
-                doc.setFont("helvetica", "bold");
-                doc.text("BSTI ID:", 30, y);
-                doc.setFont("helvetica", "normal");
-                doc.text(bstiCredential, 75, y);
-              }
-
-              if (signedBy) {
-                y += 10;
-                doc.setFont("helvetica", "bold");
-                doc.text("Signed By:", 30, y);
-                doc.setFont("helvetica", "normal");
-                doc.text(signedBy, 75, y);
-              }
-
-              y += 10;
-              doc.setFont("helvetica", "bold");
-              doc.text("Product Name:", 30, y);
-              doc.setFont("helvetica", "normal");
-              doc.text(pName, 75, y);
-
-              y += 10;
-              doc.setFont("helvetica", "bold");
-              doc.text("Dispatch Zone:", 30, y);
-              doc.setFont("helvetica", "normal");
-              doc.text(pZone, 75, y);
-
-              y += 10;
-              doc.setFont("helvetica", "bold");
-              doc.text("BARI Trust Score:", 30, y);
-              doc.setFont("helvetica", "normal");
-              doc.text(`${ts} / 100`, 75, y);
-              
-              y += 10;
-              doc.setFont("helvetica", "bold");
-              doc.text("Parameters:", 30, y);
-              doc.setFont("helvetica", "normal");
-              doc.text(`pH: ${conf.ph ? pH : 'N/A'}  |  EC: ${EC}  |  Temp: ${temp} C`, 75, y);
-              
-              y += 10;
-              doc.setFont("helvetica", "bold");
-              doc.text("Treatment Ratio:", 30, y);
-              doc.setFont("helvetica", "normal");
-              doc.text(conf.hasRatio ? ratio : 'N/A', 75, y);
-              
-              y += 10;
-              doc.setFont("helvetica", "bold");
-              doc.text("Fermentation Days:", 30, y);
-              doc.setFont("helvetica", "normal");
-              doc.text(`${days} Days`, 75, y);
-              
-              y += 10;
-              doc.setFont("helvetica", "bold");
-              doc.text("Verification Status:", 30, y);
-              doc.setFont("helvetica", "normal");
-              doc.setTextColor(46, 125, 50);
-              doc.text("VERIFIED COMPLIANT", 75, y);
-              doc.setTextColor(51, 65, 85);
-              
-              if (qrCodeImg) {
-                try {
-                  doc.addImage(qrCodeImg, 'PNG', 75, y + 12, 50, 50);
-                } catch (e) {
-                  console.error("Failed to add QR image to PDF:", e);
-                }
-              }
-              
-              y += 75;
-              doc.setDrawColor(200, 200, 200);
-              doc.line(20, y, 190, y);
-              
-              y += 10;
-              doc.setFont("helvetica", "italic");
-              doc.setFontSize(10);
-              doc.setTextColor(100, 116, 139);
-              doc.text("CLimaLogix AI ClimateShield — Decentralized Circular SME Compliance Network", 105, y, { align: "center" });
-              
-              doc.save(`CLimaLogix_Certificate_${batchNum}.pdf`);
-            }}
-            style={{
-              marginTop: 14, width: "100%", padding: "10px", borderRadius: 8,
-              border: `1px solid ${ACCENT.green}`, background: ACCENT.greenBg,
-              color: ACCENT.green, cursor: "pointer", fontSize: 12, fontWeight: 700,
-              transition: "all 0.25s ease", textAlign: "center", display: "block"
-            }}
-          >
-            📥 Download PDF Certificate
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   CLAIM VERIFIER
-   ──────────────────────────────────────────────────────────────
-   Looks up an existing batch by ID (or a full verification URL
-   extracted from a QR code) and calls GET /api/verify/:batch_id.
-   Surfaces the on-chain signature, certified-at timestamp, and
-   trust score so buyers can confirm a claim is genuine. Falls
-   back to a friendly placeholder when the route is missing.
-   ═══════════════════════════════════════════════════════════════ */
-function ClaimVerifier({ onSelectBatch }) {
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("idle"); // idle | loading | ok | missing | error
-  const [result, setResult] = useState(null);
-  const [errorMsg, setErrorMsg] = useState("");
-
-  const extractBatchId = (raw) => {
-    if (!raw) return "";
-    const trimmed = raw.trim();
-    // Accept full URLs like https://ecoweathersme.onrender.com/verify/BCH-123
-    const urlMatch = trimmed.match(/\/verify\/([^/?#]+)/i);
-    if (urlMatch) return urlMatch[1];
-    return trimmed;
-  };
-
-  const handleVerify = async () => {
-    const id = extractBatchId(query);
-    if (!id) { setStatus("error"); setErrorMsg("Enter a batch ID or verification URL."); return; }
-    setStatus("loading");
-    setErrorMsg("");
-    setResult(null);
-    try {
-      if (!window.APIClient || !window.APIClient.verifyClaim) {
-        throw new Error("verifyClaim API is not available in this build.");
-      }
-      const r = await window.APIClient.verifyClaim(id);
-      // accept both envelope ({success, data}) and flat shapes
-      const payload = r && r.success === false ? null : (r && r.data ? r.data : r);
-      if (!payload || (payload.verified === false)) {
-        setStatus("missing");
-        setResult({ batchId: id, ...(payload || {}) });
-      } else {
-        setStatus("ok");
-        setResult({ batchId: id, ...payload });
-        if (onSelectBatch) onSelectBatch(id);
-      }
-    } catch (e) {
-      // Route 404 (not yet deployed) — degrade gracefully.
-      const msg = String(e && e.message || e);
-      if (msg.includes("HTTP 404") || msg.includes("Failed to fetch")) {
-        setStatus("missing");
-        setErrorMsg("Live verification endpoint not yet deployed. Showing structural preview only.");
-        setResult({ batchId: id, preview: true });
-      } else {
-        setStatus("error");
-        setErrorMsg(msg);
-      }
-    }
-  };
-
-  return (
-    <div>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") handleVerify(); }}
-          placeholder="Paste batch ID (e.g. BCH-123456) or full verification URL"
-          style={{
-            flex: 1, padding: "10px 12px", fontSize: 13,
-            background: "var(--bg-input)", color: "var(--text-primary)",
-            border: "1px solid var(--border-primary)", borderRadius: 8,
-            fontFamily: "'JetBrains Mono', monospace", outline: "none",
-          }}
-        />
-        <button
-          onClick={handleVerify}
-          disabled={status === "loading"}
-          style={{
-            padding: "10px 18px", fontSize: 12, fontWeight: 700,
-            background: ACCENT.greenBg, color: ACCENT.green,
-            border: `1px solid ${ACCENT.greenBorder}`, borderRadius: 8,
-            cursor: status === "loading" ? "wait" : "pointer",
-            letterSpacing: "0.06em", fontFamily: "inherit",
-          }}
-        >
-          {status === "loading" ? "VERIFYING…" : "🪪 VERIFY CLAIM"}
-        </button>
-      </div>
-
-      {status === "ok" && result && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ padding: 14, borderRadius: 8, background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.35)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-              <span style={{ fontSize: 16 }}>✅</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: ACCENT.green, letterSpacing: "0.05em" }}>CLAIM VERIFIED · GENUINE</span>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 12px", fontSize: 11, color: "var(--text-secondary)" }}>
-              <span style={{ color: "var(--text-dim)" }}>Batch ID</span>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", color: "var(--text-primary)" }}>{result.batchId || result.batch_id || "—"}</span>
-              {result.trust && result.trust.score != null && (<><span style={{ color: "var(--text-dim)" }}>Trust Score</span><span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{result.trust.score}</span></>)}
-              {result.trust && result.trust.grade && (<><span style={{ color: "var(--text-dim)" }}>Grade</span><span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{result.trust.grade}</span></>)}
-              {result.certifiedAt && (<><span style={{ color: "var(--text-dim)" }}>Certified At</span><span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{result.certifiedAt}</span></>)}
-              {result.signature && (<><span style={{ color: "var(--text-dim)" }}>Signature</span><span style={{ fontFamily: "'JetBrains Mono', monospace", wordBreak: "break-all" }}>{String(result.signature).slice(0, 40)}…</span></>)}
-              {result.zone && (<><span style={{ color: "var(--text-dim)" }}>Zone</span><span style={{ fontFamily: "'JetBrains Mono', monospace" }}>{result.zone}</span></>)}
-            </div>
-          </div>
-
-          {result.chain && (
-            <div style={{ marginTop: 6 }}>
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "8px 12px",
-                borderRadius: 8,
-                background: result.chain.verified ? "rgba(16,185,129,0.06)" : "rgba(239,68,68,0.06)",
-                border: `1px solid ${result.chain.verified ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
-                color: result.chain.verified ? ACCENT.green : ACCENT.red,
-                fontSize: 11,
-                fontWeight: 700,
-                marginBottom: 12
-              }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  {result.chain.verified ? "🔒 PROVENANCE SECURED" : "🚨 INTEGRITY BREACHED (TAMPERED)"}
-                </span>
-                <span style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", opacity: 0.7 }}>SHA-256 HASH CHAIN</span>
-              </div>
-              
-              <div style={{ display: "flex", flexDirection: "column", gap: 14, position: "relative", paddingLeft: 18 }}>
-                {/* Visual Line */}
-                <div style={{
-                  position: "absolute",
-                  left: 6,
-                  top: 8,
-                  bottom: 8,
-                  width: 2,
-                  borderLeft: `2px dashed ${result.chain.verified ? "rgba(16, 185, 129, 0.3)" : "rgba(239, 68, 68, 0.3)"}`
-                }}></div>
-                
-                {result.chain.events && result.chain.events.map((e, idx) => {
-                  const eventType = e.event_type || e.type || "qa";
-                  const actor = e.actor || "system";
-                  const eventData = e.event_data || e.data || {};
-                  const prevHash = e.prev_hash || "0000000000000000000000000000000000000000000000000000000000000000";
-                  const currentHash = e.current_hash || "";
-                  const timestamp = e.timestamp || e.signed_at || new Date().toISOString();
-                  
-                  let icon = "📋";
-                  let title = "QA REPORT INGESTED";
-                  if (eventType === "genesis") { icon = "🌱"; title = "GENESIS EVENT"; }
-                  else if (eventType === "dispatch" || eventType === "dispatched") { icon = "🚚"; title = "DISPATCHED"; }
-                  else if (eventType === "delivery" || eventType === "delivered" || eventType === "receipt") { icon = "📦"; title = "DELIVERED"; }
-                  
-                  return (
-                    <div key={idx} style={{ position: "relative" }}>
-                      {/* Circle Dot */}
-                      <div style={{
-                        position: "absolute",
-                        left: -16,
-                        top: 5,
-                        width: 8,
-                        height: 8,
-                        borderRadius: "50%",
-                        background: result.chain.verified ? ACCENT.green : ACCENT.red,
-                        border: "2px solid var(--bg-secondary)",
-                      }}></div>
-                      
-                      <div style={{ background: "var(--bg-input)", padding: 10, borderRadius: 8, border: "1px solid var(--border-primary)" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 6 }}>
-                            <span>{icon}</span> {title}
-                          </span>
-                          <span style={{ fontSize: 9, color: "var(--text-dim)", fontFamily: "'JetBrains Mono', monospace" }}>
-                            {new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                        
-                        <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 6 }}>
-                          <div><span style={{ color: "var(--text-dim)" }}>Actor:</span> {actor}</div>
-                          {eventType === "qa" && (
-                            <>
-                              <div><span style={{ color: "var(--text-dim)" }}>Category:</span> {eventData.category || "Organic"}</div>
-                              {eventData.metrics_summary && (
-                                <div><span style={{ color: "var(--text-dim)" }}>Metrics:</span> pH {eventData.metrics_summary.pH} | EC {eventData.metrics_summary.EC} | Temp {eventData.metrics_summary.temp}°C</div>
-                              )}
-                              {eventData.metrics && (
-                                <div><span style={{ color: "var(--text-dim)" }}>Metrics:</span> pH {eventData.metrics.pH || "N/A"} | EC {eventData.metrics.ec} | Temp {eventData.metrics.temp}°C</div>
-                              )}
-                            </>
-                          )}
-                          {eventType === "genesis" && (
-                            <div><span style={{ color: "var(--text-dim)" }}>Detail:</span> {eventData.note || "Batch created in system"}</div>
-                          )}
-                          {(eventType === "dispatch" || eventType === "dispatched") && (
-                            <>
-                              <div><span style={{ color: "var(--text-dim)" }}>From:</span> {eventData.from || "Processing Plant"}</div>
-                              <div><span style={{ color: "var(--text-dim)" }}>To:</span> {eventData.to || "Mirpur Warehouse"}</div>
-                              {eventData.driver && <div><span style={{ color: "var(--text-dim)" }}>Driver:</span> {eventData.driver}</div>}
-                            </>
-                          )}
-                          {(eventType === "delivery" || eventType === "delivered" || eventType === "receipt") && (
-                            <>
-                              <div><span style={{ color: "var(--text-dim)" }}>Received By:</span> {eventData.received_by || eventData.receiver || "Warehouse Manager"}</div>
-                              <div><span style={{ color: "var(--text-dim)" }}>Condition:</span> {eventData.condition || "good"}</div>
-                            </>
-                          )}
-                        </div>
-                        
-                        <div style={{
-                          fontSize: 8,
-                          fontFamily: "'JetBrains Mono', monospace",
-                          background: "var(--bg-primary)",
-                          padding: "4px 6px",
-                          borderRadius: 4,
-                          color: "var(--text-dim)",
-                          wordBreak: "break-all",
-                          lineHeight: 1.3
-                        }}>
-                          <div><span style={{ color: ACCENT.blue }}>PREV:</span> {prevHash.slice(0, 32)}...</div>
-                          <div><span style={{ color: ACCENT.green }}>HASH:</span> {currentHash.slice(0, 32)}...</div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {status === "missing" && result && (
-        <div style={{ padding: 14, borderRadius: 8, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.35)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <span style={{ fontSize: 16 }}>⚠️</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: "#f59e0b", letterSpacing: "0.05em" }}>
-              {result.preview ? "VERIFICATION ENDPOINT OFFLINE" : "NO CLAIM FOUND"}
-            </span>
-          </div>
-          <div style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.5 }}>
-            {errorMsg || `No certified batch found for ID "${result.batchId}". Make sure you scanned the right QR code.`}
-          </div>
-        </div>
-      )}
-
-      {status === "error" && (
-        <div style={{ padding: 12, borderRadius: 8, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.35)", color: "#ef4444", fontSize: 12 }}>
-          ❌ {errorMsg}
-        </div>
-      )}
-
-      {status === "idle" && (
-        <div style={{ fontSize: 11, color: "var(--text-dim)", lineHeight: 1.5 }}>
-          🔍 Paste any batch ID or scan a QR code's URL to confirm a claim is genuine.
-          Verification chain: <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>GET /api/verify/:batch_id</span> → signature check → ESG cross-check.
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TrackingView({ prefilledId }) {
-  const [batchId, setBatchId] = useState("");
-  const [status, setStatus] = useState("idle"); // idle | loading | ok | missing | error
-  const [result, setResult] = useState(null);
-  const [scans, setScans] = useState([]);
-  const [errorMsg, setErrorMsg] = useState("");
-
-  const extractBatchId = (raw) => {
-    if (!raw) return "";
-    const trimmed = raw.trim();
-    const urlMatch = trimmed.match(/\/verify\/([^/?#]+)/i);
-    if (urlMatch) return urlMatch[1];
-    const paramMatch = trimmed.match(/[?&]batch=([^&]+)/i);
-    if (paramMatch) return paramMatch[1];
-    return trimmed;
-  };
-
-  const handleFetchTracking = async (id) => {
-    const cleanId = extractBatchId(id);
-    if (!cleanId) {
-      setStatus("error");
-      setErrorMsg("Please enter a valid batch ID.");
-      return;
-    }
-    setStatus("loading");
-    setErrorMsg("");
-    setResult(null);
-    setScans([]);
-    try {
-      if (!window.APIClient || !window.APIClient.verifyClaim) {
-        throw new Error("verifyClaim API is not available.");
-      }
-      const r = await window.APIClient.verifyClaim(cleanId);
-      const payload = r && r.success === false ? null : (r && r.data ? r.data : r);
-      
-      if (!payload) {
-        setStatus("missing");
-      } else {
-        setStatus("ok");
-        setResult(payload);
-        
-        // Fetch scans history in parallel
-        try {
-          if (window.APIClient.getBatchScans) {
-            const scansRes = await window.APIClient.getBatchScans(cleanId);
-            const scansData = scansRes && scansRes.success ? (scansRes.data?.scans || scansRes.data || []) : [];
-            setScans(scansData);
-          }
-        } catch (scanErr) {
-          console.warn("Could not fetch scan history:", scanErr);
-        }
-      }
-    } catch (e) {
-      setStatus("error");
-      setErrorMsg(e.message || String(e));
-    }
-  };
-
-  useEffect(() => {
-    if (prefilledId) {
-      setBatchId(prefilledId);
-      handleFetchTracking(prefilledId);
-      return;
-    }
-    const params = new URLSearchParams(window.location.search);
-    const urlBatch = params.get("batch");
-    if (urlBatch) {
-      setBatchId(urlBatch);
-      handleFetchTracking(urlBatch);
-    }
-  }, [prefilledId]);
-
-  return (
-    <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
-      <SectionLabel icon="🔍" text="Consumer Provenance & Scan Tracking" />
-      <Card>
-        {!prefilledId && (
-          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16 }}>
-            <input
-              value={batchId}
-              onChange={(e) => setBatchId(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") handleFetchTracking(batchId); }}
-              placeholder="Enter Batch ID (e.g. BCH-123) or paste QR URL"
-              style={{
-                flex: 1, padding: "12px 14px", fontSize: 13,
-                background: "var(--bg-input)", color: "var(--text-primary)",
-                border: "1px solid var(--border-primary)", borderRadius: 8,
-                fontFamily: "'JetBrains Mono', monospace", outline: "none",
-              }}
-            />
-            <button
-              onClick={() => handleFetchTracking(batchId)}
-              disabled={status === "loading"}
-              style={{
-                padding: "12px 20px", fontSize: 12, fontWeight: 700,
-                background: ACCENT.blueBg, color: ACCENT.blue,
-                border: `1px solid ${ACCENT.blueBorder}`, borderRadius: 8,
-                cursor: status === "loading" ? "wait" : "pointer",
-                letterSpacing: "0.06em",
-              }}
-            >
-              {status === "loading" ? "LOADING..." : "TRACK BATCH"}
-            </button>
-          </div>
-        )}
-
-        {status === "loading" && (
-          <div style={{ textAlign: "center", padding: "40px 0" }}>
-            <span style={{ fontSize: 24 }}>⏳</span>
-            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 8 }}>Verifying cryptographic chain and loading telemetry...</div>
-          </div>
-        )}
-
-        {status === "missing" && (
-          <div style={{ padding: 14, borderRadius: 8, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.35)", color: "#f59e0b", fontSize: 12 }}>
-            ⚠️ No certified batch found matching the query. Please verify the Batch ID.
-          </div>
-        )}
-
-        {status === "error" && (
-          <div style={{ padding: 12, borderRadius: 8, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.35)", color: "#ef4444", fontSize: 12 }}>
-            ❌ {errorMsg}
-          </div>
-        )}
-
-        {status === "ok" && result && (
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
-            {/* Left Column: Provenance Chain */}
-            <div>
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "10px 14px",
-                borderRadius: 8,
-                background: result.chain?.verified ? "rgba(16,185,129,0.06)" : "rgba(239,68,68,0.06)",
-                border: `1px solid ${result.chain?.verified ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
-                color: result.chain?.verified ? ACCENT.green : ACCENT.red,
-                fontSize: 12,
-                fontWeight: 700,
-                marginBottom: 16
-              }}>
-                <span>{result.chain?.verified ? "🔒 CRYPTOGRAPHIC CHAIN SECURED" : "🚨 HASH CHAIN MISMATCH (TAMPERED)"}</span>
-                <span style={{ fontSize: 9, fontFamily: "'JetBrains Mono', monospace", opacity: 0.7 }}>SHA-256 VALIDATED</span>
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 16, position: "relative", paddingLeft: 20 }}>
-                <div style={{
-                  position: "absolute",
-                  left: 6,
-                  top: 8,
-                  bottom: 8,
-                  width: 2,
-                  borderLeft: `2px dashed ${result.chain?.verified ? "rgba(16, 185, 129, 0.3)" : "rgba(239, 68, 68, 0.3)"}`
-                }}></div>
-
-                {result.chain?.events && result.chain.events.map((e, idx) => {
-                  const eventType = e.event_type || e.type || "qa";
-                  const actor = e.actor || "system";
-                  const eventData = e.event_data || e.data || {};
-                  const timestamp = e.timestamp || e.signed_at || new Date().toISOString();
-
-                  let icon = "📋";
-                  let title = "QA INTAKE REPORT";
-                  if (eventType === "genesis") { icon = "🌱"; title = "GENESIS REGISTRATION"; }
-                  else if (eventType === "dispatch" || eventType === "dispatched") { icon = "🚚"; title = "DISPATCH COMPLETED"; }
-                  else if (eventType === "delivery" || eventType === "delivered" || eventType === "receipt") { icon = "📦"; title = "DELIVERY RECEIPT CONFIRMED"; }
-
-                  return (
-                    <div key={idx} style={{ position: "relative" }}>
-                      <div style={{
-                        position: "absolute",
-                        left: -18,
-                        top: 5,
-                        width: 8,
-                        height: 8,
-                        borderRadius: "50%",
-                        background: result.chain?.verified ? ACCENT.green : ACCENT.red,
-                        border: "2px solid var(--bg-secondary)",
-                      }}></div>
-
-                      <div style={{ background: "var(--bg-input)", padding: 12, borderRadius: 8, border: "1px solid var(--border-primary)" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 6 }}>
-                            <span>{icon}</span> {title}
-                          </span>
-                          <span style={{ fontSize: 10, color: "var(--text-dim)", fontFamily: "'JetBrains Mono', monospace" }}>
-                            {new Date(timestamp).toLocaleString()}
-                          </span>
-                        </div>
-                        
-                        <div style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.5 }}>
-                          <div><span style={{ color: "var(--text-dim)" }}>Operator/Actor:</span> {actor}</div>
-                          {eventType === "genesis" && (
-                            <>
-                              <div><span style={{ color: "var(--text-dim)" }}>Feedstock Type:</span> {eventData.feedstock_type || eventData.product_type || "Bio-Slurry"}</div>
-                              <div><span style={{ color: "var(--text-dim)" }}>Weight:</span> {eventData.weight_kg || 0} kg</div>
-                            </>
-                          )}
-                          {eventType === "qa" && (
-                            <>
-                              <div><span style={{ color: "var(--text-dim)" }}>QA Metrics:</span> pH {eventData.pH || eventData.ph} | EC {eventData.EC || eventData.ec} | Temp {eventData.temperature || eventData.temp}°C</div>
-                              <div><span style={{ color: "var(--text-dim)" }}>EM-1 Inoculation Ratio:</span> {eventData.em1_ratio || "1:1:20"}</div>
-                              <div><span style={{ color: "var(--text-dim)" }}>Fermentation Window:</span> {eventData.fermentation_days || 0} days</div>
-                            </>
-                          )}
-                          {(eventType === "dispatch" || eventType === "dispatched") && (
-                            <>
-                              <div><span style={{ color: "var(--text-dim)" }}>Destination Zone:</span> {eventData.destination_zone || eventData.to || "Mirpur"}</div>
-                              <div><span style={{ color: "var(--text-dim)" }}>Vehicle Details:</span> {eventData.vehicle || "DHK-1234"} (Driver: {eventData.driver || "Rakib"})</div>
-                            </>
-                          )}
-                          {(eventType === "delivery" || eventType === "delivered") && (
-                            <>
-                              <div><span style={{ color: "var(--text-dim)" }}>Receiver Signature:</span> {eventData.received_by || eventData.receiver || "Warehouse Manager"}</div>
-                              <div><span style={{ color: "var(--text-dim)" }}>Cargo Condition:</span> {eventData.condition || "good"}</div>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Right Column: Scan History & Stats */}
-            <div>
-              {result.trust && (
-                <div style={{
-                  background: "var(--bg-input)", padding: 16, borderRadius: 10, border: "1px solid var(--border-primary)", marginBottom: 16
-                }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", letterSpacing: "0.08em", marginBottom: 12 }}>
-                    BARI CERTIFICATION & TRUST
-                  </div>
-                  <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-                    <ScoreGauge value={result.trust.score} label="Trust Score" size={90} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>
-                        Grade {result.trust.grade} · {result.trust.isViable ? "VIABLE" : "NON-VIABLE"}
-                      </div>
-                      <div style={{ fontSize: 10, color: "var(--text-secondary)", marginTop: 4, lineHeight: 1.4 }}>
-                        {result.trust.isViable
-                          ? "✓ Verified safe by BARI MERM algorithm. Protected against thermal degradation."
-                          : "✗ Safety threshold exceeded. High risk of feedstock spoilage."}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ background: "var(--bg-input)", padding: 16, borderRadius: 10, border: "1px solid var(--border-primary)", marginBottom: 16 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", letterSpacing: "0.08em", marginBottom: 12 }}>
-                  VERIFIED SCAN AUDIT
-                </div>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                  <span style={{ fontSize: 36, fontWeight: 800, color: ACCENT.green }}>{result.scanCount || scans.length || 0}</span>
-                  <span style={{ fontSize: 12, color: "var(--text-dim)" }}>Total Consumer Scans</span>
-                </div>
-              </div>
-
-              <div style={{ background: "var(--bg-input)", padding: 16, borderRadius: 10, border: "1px solid var(--border-primary)", maxHeight: 400, overflowY: "auto" }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", letterSpacing: "0.08em", marginBottom: 12 }}>
-                  SCAN ANTECEDENCE FEED
-                </div>
-                {scans.length === 0 ? (
-                  <div style={{ fontSize: 11, color: "var(--text-dim)", padding: "10px 0" }}>No scan records registered yet.</div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {scans.map((s, sIdx) => (
-                      <div key={sIdx} style={{ fontSize: 10, padding: 8, borderRadius: 6, background: "var(--bg-primary)", border: "1px solid var(--border-primary)" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-primary)", fontWeight: 600, marginBottom: 4 }}>
-                          <span>📱 {s.ipHash}</span>
-                          <span>{new Date(s.scannedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                        </div>
-                        <div style={{ color: "var(--text-dim)", wordBreak: "break-all" }}>{s.userAgent}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   TAB 2: MICROCLIMATE INTELLIGENCE (MERM Pipeline)
-   ═══════════════════════════════════════════════════════════════ */
-function DispatchCalendar({ baseTemp, zone, trustScore, windSpeed, packaging }) {
-  const hours = Array.from({ length: 24 }, (_, h) => {
-    const { dvs } = calcBARIDVS({ trustScore, zone, packaging, hour: h, baseTemp, windSpeed, routeDuration: 0 });
-    return { h, dvs };
-  });
-  return (
-    <div style={{ marginTop: 14 }}>
-      <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 8, fontWeight: 500 }}>24-Hour Dispatch Safety Window</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(24, 1fr)", gap: 2, height: 36 }}>
-        {hours.map(({ h, dvs }) => {
-          const col = dvs >= 75 ? ACCENT.green : dvs >= 55 ? ACCENT.amber : ACCENT.red;
-          return (
-            <div key={h} title={`${h}:00 — DVS ${dvs}`}
-              style={{
-                background: col + "33", border: `1px solid ${col}55`, borderRadius: 4,
-                cursor: "default", transition: "all 0.3s ease",
-              }}
-            />
-          );
-        })}
-      </div>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "var(--text-dim)", marginTop: 4 }}>
         {[0, 6, 12, 18, 23].map(h => <span key={h}>{h}:00</span>)}
       </div>
@@ -1835,6 +738,13 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
       }
     }
   }, [liveWeather]);
+
+  // Live recalculate adjusted temp and thermal risk whenever input parameters change
+  useEffect(() => {
+    const live = calcAdjustedTemp(baseTemp, zone, hour, windSpeed);
+    setAdjustedTemp(live);
+    setThermalRisk(calcThermalRisk(live));
+  }, [baseTemp, zone, hour, windSpeed]);
 
   // Fallback auto-fetch if run in standalone mode (no parent liveWeather props)
   useEffect(() => {
@@ -2288,6 +1198,16 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
                 <div style={{ fontSize: 24, marginBottom: 12 }}>⏳</div>
                 <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>Analyzing microclimate...</div>
               </div>
+            ) : !hasCalculated ? (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 250, gap: 12 }}>
+                <div style={{ fontSize: 24, marginBottom: 4 }}>🌡️</div>
+                <div style={{ fontSize: 13, color: "var(--text-secondary)", textAlign: "center" }}>
+                  Adjusted Temp: <strong style={{ color: "var(--text-primary)" }}>{adjustedTemp.toFixed(1)}°C</strong>
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-dim)", textAlign: "center", maxWidth: 220 }}>
+                  Adjust parameters above, then press <strong>Calculate Viability Score</strong> for DVS, TST &amp; Trust Score.
+                </div>
+              </div>
             ) : (
               <>
                 <div style={{ display: "flex", gap: 24, justifyContent: "center", alignItems: "center", width: "100%", marginBottom: 16 }}>
@@ -2334,33 +1254,38 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
             )}
           </div>
 
-          <div style={{ padding: "20px 24px", background: "var(--bg-input)", borderRadius: 12, border: "1px solid var(--border-primary)" }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 16, letterSpacing: "0.05em" }}>TST FORMULA (MERM)</div>
-            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: "var(--text-primary)", lineHeight: 1.8 }}>
-              <div style={{ color: "var(--text-secondary)" }}>TST = (Trust × Insulation)</div>
-              <div style={{ color: "var(--text-secondary)", marginLeft: 24 }}>÷ (Hazard × Solar)</div>
-              <div style={{ borderBottom: "1px solid var(--border-primary)", margin: "12px 0" }}></div>
-              <div>= ({trustScore} × {(packaging==="thermal"?4:packaging==="insulated"?2:1).toFixed(1)})</div>
-              <div>÷ ({uhi.hazardMultiplier.toFixed(1)} × {solarFactor.toFixed(1)})</div>
-              <div style={{ color: ACCENT.green, fontWeight: 600 }}>≈ {tst} min</div>
+          {hasCalculated && (
+            <div style={{ padding: "20px 24px", background: "var(--bg-input)", borderRadius: 12, border: "1px solid var(--border-primary)" }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 16, letterSpacing: "0.05em" }}>TST FORMULA (MERM)</div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: "var(--text-primary)", lineHeight: 1.8 }}>
+                <div style={{ color: "var(--text-secondary)" }}>TST = (Trust × Insulation)</div>
+                <div style={{ color: "var(--text-secondary)", marginLeft: 24 }}>÷ (Hazard × Solar)</div>
+                <div style={{ borderBottom: "1px solid var(--border-primary)", margin: "12px 0" }}></div>
+                <div>= ({trustScore} × {(packaging==="thermal"?4:packaging==="insulated"?2:1).toFixed(1)})</div>
+                <div>÷ ({uhi.hazardMultiplier.toFixed(1)} × {solarFactor.toFixed(1)})</div>
+                <div style={{ color: ACCENT.green, fontWeight: 600 }}>≈ {tst} min</div>
+              </div>
             </div>
+          )}
+        </div>
+      </div>
+
+      {hasCalculated && (
+        <>
+          <div style={{
+            marginTop: 14, padding: 14, borderRadius: 10,
+            border: `1px solid ${dvsColor}33`, background: dvsColor + "0A",
+            transition: "all 0.4s ease",
+          }}>
+            <div style={{ fontSize: 11, color: dvsColor, fontWeight: 700, marginBottom: 5 }}>
+              {dvs >= 75 ? "✓ Smart Dispatch Advice" : dvs >= 55 ? "⚠ Smart Dispatch Advice" : "✕ High Risk Advisory"}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text-primary)", lineHeight: 1.7 }}>{advice}</div>
           </div>
-        </div>
-      </div>
 
-      {/* Advisory */}
-      <div style={{
-        marginTop: 14, padding: 14, borderRadius: 10,
-        border: `1px solid ${dvsColor}33`, background: dvsColor + "0A",
-        transition: "all 0.4s ease",
-      }}>
-        <div style={{ fontSize: 11, color: dvsColor, fontWeight: 700, marginBottom: 5 }}>
-          {dvs >= 75 ? "✓ Smart Dispatch Advice" : dvs >= 55 ? "⚠ Smart Dispatch Advice" : "✕ High Risk Advisory"}
-        </div>
-        <div style={{ fontSize: 12, color: "var(--text-primary)", lineHeight: 1.7 }}>{advice}</div>
-      </div>
-
-      <DispatchCalendar baseTemp={baseTemp} zone={zone} trustScore={trustScore} windSpeed={windSpeed} packaging={packaging} />
+          <DispatchCalendar baseTemp={baseTemp} zone={zone} trustScore={trustScore} windSpeed={windSpeed} packaging={packaging} />
+        </>
+      )}
     </div>
   );
 }
@@ -3077,6 +2002,386 @@ function PageHeader({ title, subtitle, action }) {
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   SME INVENTORY TRACKER — QR Scan + Climate Advisory
+   ═══════════════════════════════════════════════════════════════ */
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const BATCH_ID_RE = /^BCH-\d{6,}$/i;
+
+function translateSaleWindowToBangla(enText, daysViable, riskLevel) {
+  const hours = Math.max(6, Math.round(daysViable * 24));
+  const days = Math.max(1, Math.ceil(daysViable));
+  if (daysViable <= 2 || riskLevel === "EXTREME") {
+    return `আগামী ${hours} ঘণ্টার মধ্যে বিক্রি সম্পন্ন করুন — অতিরিক্ত তাপমাত্রার ঝুঁকি রয়েছে। সক্রিয় জৈব যৌগ দ্রুত হ্রাস পেতে পারে।`;
+  }
+  if (daysViable <= 7 || riskLevel === "HIGH") {
+    return `আগামী ${days} দিনের মধ্যে বিক্রি করুন — আপনার এলাকায় উচ্চ তাপমাত্রার চাপ রয়েছে।`;
+  }
+  if (daysViable <= 10 || riskLevel === "MEDIUM") {
+    return `আগামী ${days} দিনের মধ্যে বিক্রি করার পরামর্শ দেওয়া হচ্ছে — মাঝারি জলবায়ু ঝুঁকি বিবেচনায়।`;
+  }
+  return `ছায়াযুক্ত অবস্থায় ${Math.floor(daysViable)} দিন পর্যন্ত নিরাপদ সংরক্ষণ সম্ভব। তবুও তাপমাত্রা পর্যবেক্ষণ করুন।`;
+}
+
+function compoundLifespanPct(daysViable) {
+  return Math.max(4, Math.min(100, Math.round((daysViable / 14) * 100)));
+}
+
+function riskMeterColor(riskLevel, pct) {
+  if (riskLevel === "EXTREME" || pct < 25) return ACCENT.red;
+  if (riskLevel === "HIGH" || pct < 45) return "#F97316";
+  if (riskLevel === "MEDIUM" || pct < 70) return ACCENT.amber;
+  return ACCENT.green;
+}
+
+function ClimateAdvisoryCard({ recommendations, banglaText, onSpeak, isSpeaking }) {
+  if (!recommendations) return null;
+  const pct = compoundLifespanPct(recommendations.days_viable);
+  const meterColor = riskMeterColor(recommendations.risk_level, pct);
+
+  return (
+    <Card style={{ marginTop: 20, border: `1px solid ${meterColor}33`, boxShadow: `0 0 24px ${meterColor}18` }}>
+      <SectionLabel icon="🌡️" text="Climate Advisory Card" />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 20 }}>
+        <div>
+          <div style={{ fontSize: 11, color: "var(--text-dim)", letterSpacing: "0.08em", fontWeight: 600, marginBottom: 10 }}>
+            ACTIVE COMPOUND LIFESPAN
+          </div>
+          <div style={{ position: "relative", height: 18, borderRadius: 999, overflow: "hidden", background: "var(--gauge-track)", marginBottom: 8 }}>
+            <div style={{
+              position: "absolute", inset: 0,
+              background: `linear-gradient(90deg, ${ACCENT.red} 0%, ${ACCENT.amber} 45%, ${ACCENT.green} 100%)`,
+              opacity: 0.85,
+            }} />
+            <div style={{
+              position: "absolute", top: 0, bottom: 0, left: `${pct}%`,
+              width: 3, background: "#fff", boxShadow: "0 0 8px rgba(255,255,255,0.8)",
+              transform: "translateX(-50%)", transition: "left 0.6s ease",
+            }} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-dim)", marginBottom: 14 }}>
+            <span style={{ color: ACCENT.red }}>Critical</span>
+            <span style={{ color: ACCENT.amber }}>Caution</span>
+            <span style={{ color: ACCENT.green }}>Stable</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: 36, fontWeight: 800, color: meterColor, fontFamily: "'JetBrains Mono', monospace" }}>{pct}%</span>
+            <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>estimated viability</span>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span style={{
+              fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 6,
+              background: meterColor + "18", color: meterColor, border: `1px solid ${meterColor}44`,
+              letterSpacing: "0.06em",
+            }}>{recommendations.risk_level} RISK</span>
+            <span style={{
+              fontSize: 10, padding: "4px 10px", borderRadius: 6,
+              background: "var(--bg-input)", color: "var(--text-secondary)",
+              border: "1px solid var(--border-primary)", fontFamily: "'JetBrains Mono', monospace",
+            }}>{recommendations.days_viable} days viable</span>
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, lineHeight: 1.5 }}>
+            {recommendations.best_sale_window}
+          </div>
+          <label style={{
+            display: "block", fontSize: 11, fontWeight: 700, color: ACCENT.green,
+            letterSpacing: "0.06em", marginBottom: 8,
+          }}>
+            আপনার জন্য পরামর্শ (AI Recommendation)
+          </label>
+          <div style={{
+            padding: "14px 16px", borderRadius: 10, minHeight: 88,
+            background: "linear-gradient(135deg, rgba(6,95,70,0.12), rgba(16,185,129,0.06))",
+            border: `1px solid ${ACCENT.greenBorder}`,
+            fontSize: 15, lineHeight: 1.65, color: "var(--text-primary)",
+            fontFamily: "'Inter', sans-serif",
+          }}>
+            {banglaText}
+          </div>
+          <button
+            onClick={onSpeak}
+            title="Read recommendation aloud (Bangla)"
+            style={{
+              marginTop: 12, display: "inline-flex", alignItems: "center", gap: 8,
+              padding: "10px 16px", borderRadius: 8, cursor: "pointer",
+              background: isSpeaking ? ACCENT.amberBg : ACCENT.greenBg,
+              border: `1px solid ${isSpeaking ? ACCENT.amberBorder : ACCENT.greenBorder}`,
+              color: isSpeaking ? ACCENT.amber : ACCENT.green,
+              fontWeight: 600, fontSize: 13,
+            }}
+          >
+            <span style={{ fontSize: 18 }}>{isSpeaking ? "🔊" : "🔈"}</span>
+            {isSpeaking ? "পড়া হচ্ছে…" : "শুনুন (Text-to-Speech)"}
+          </button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function SMEInventoryTracker({ activeZone = "Mirpur" }) {
+  const [batchUuid, setBatchUuid] = useState("");
+  const [isScanning, setIsScanning] = useState(false);
+  const [isClaiming, setIsClaiming] = useState(false);
+  const [cameraOn, setCameraOn] = useState(false);
+  const [claimResult, setClaimResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const scanTimerRef = useRef(null);
+
+  useEffect(() => () => {
+    if (scanTimerRef.current) clearTimeout(scanTimerRef.current);
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get("batch");
+    const fromGlobal = typeof window !== "undefined" ? window.__QR_PRODUCT__ : null;
+    const candidate = fromUrl || fromGlobal;
+    if (candidate && (UUID_RE.test(candidate) || BATCH_ID_RE.test(candidate))) setBatchUuid(candidate);
+  }, []);
+
+  const banglaText = claimResult?.recommendations
+    ? translateSaleWindowToBangla(
+        claimResult.recommendations.best_sale_window,
+        claimResult.recommendations.days_viable,
+        claimResult.recommendations.risk_level,
+      )
+    : "";
+
+  const resolveGps = () => new Promise((resolve) => {
+    if (!navigator.geolocation) { resolve({}); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({
+        gps_latitude: pos.coords.latitude,
+        gps_longitude: pos.coords.longitude,
+      }),
+      () => resolve({}),
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
+    );
+  });
+
+  const executeClaim = async (uuid) => {
+    const trimmed = (uuid || "").trim();
+    if (!UUID_RE.test(trimmed) && !BATCH_ID_RE.test(trimmed)) {
+      setError("Enter a valid Batch UUID or BCH- batch number (e.g. BCH-202659).");
+      return;
+    }
+    setError(null);
+    setIsClaiming(true);
+    setClaimResult(null);
+    try {
+      const gps = await resolveGps();
+      const json = await window.APIClient.claimSMEInventory(trimmed, {
+        zone: activeZone,
+        storage_condition: "shaded",
+        ...gps,
+      });
+      if (!json.success || !json.recommendations) {
+        throw new Error(json.error || "SME claim failed");
+      }
+      setClaimResult(json);
+      if (typeof window.showToast === "function") {
+        window.showToast("✅ Batch saved to SME inventory successfully!", "success");
+      }
+    } catch (err) {
+      const msg = err?.message || "Failed to claim batch";
+      setError(msg);
+      if (typeof window.showToast === "function") {
+        window.showToast(msg, "error");
+      }
+    } finally {
+      setIsClaiming(false);
+      setIsScanning(false);
+      setCameraOn(false);
+    }
+  };
+
+  const handleSimulateScan = () => {
+    if (isScanning || isClaiming) return;
+    setError(null);
+    setCameraOn(true);
+    setIsScanning(true);
+    scanTimerRef.current = setTimeout(() => {
+      executeClaim(batchUuid);
+    }, 1600);
+  };
+
+  const handleManualClaim = () => executeClaim(batchUuid);
+
+  const handleSpeak = () => {
+    if (!banglaText || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(banglaText);
+    utter.lang = "bn-BD";
+    utter.rate = 0.88;
+    utter.pitch = 1;
+    const voices = window.speechSynthesis.getVoices();
+    const bnVoice = voices.find(v => v.lang && v.lang.startsWith("bn"));
+    if (bnVoice) utter.voice = bnVoice;
+    utter.onstart = () => setIsSpeaking(true);
+    utter.onend = () => setIsSpeaking(false);
+    utter.onerror = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(utter);
+  };
+
+  useEffect(() => {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = () => {};
+    }
+  }, []);
+
+  return (
+    <div style={{ animation: "fadeSlideIn 0.35s ease" }}>
+      <PageHeader
+        title="SME Inventory Intake"
+        subtitle="Scan a producer QR code to claim custody and receive AI climate sale-window guidance"
+      />
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 20 }}>
+        <Card hover={false}>
+          <SectionLabel icon="📷" text="Camera Scan Simulation" />
+          <div style={{
+            position: "relative", borderRadius: 14, overflow: "hidden",
+            aspectRatio: "4/3", background: "#0a0f1a",
+            border: `2px solid ${isScanning ? ACCENT.green : "var(--border-primary)"}`,
+            boxShadow: isScanning ? `0 0 30px ${ACCENT.green}33` : "none",
+            transition: "all 0.3s ease",
+          }}>
+            <div style={{
+              position: "absolute", inset: 0,
+              background: "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(16,185,129,0.03) 2px, rgba(16,185,129,0.03) 4px)",
+            }} />
+            <div style={{
+              position: "absolute", inset: "12%", border: `2px dashed ${isScanning ? ACCENT.green : "rgba(255,255,255,0.2)"}`,
+              borderRadius: 12, transition: "border-color 0.3s",
+            }}>
+              <div style={{ position: "absolute", top: -2, left: -2, width: 20, height: 20, borderTop: `3px solid ${ACCENT.green}`, borderLeft: `3px solid ${ACCENT.green}` }} />
+              <div style={{ position: "absolute", top: -2, right: -2, width: 20, height: 20, borderTop: `3px solid ${ACCENT.green}`, borderRight: `3px solid ${ACCENT.green}` }} />
+              <div style={{ position: "absolute", bottom: -2, left: -2, width: 20, height: 20, borderBottom: `3px solid ${ACCENT.green}`, borderLeft: `3px solid ${ACCENT.green}` }} />
+              <div style={{ position: "absolute", bottom: -2, right: -2, width: 20, height: 20, borderBottom: `3px solid ${ACCENT.green}`, borderRight: `3px solid ${ACCENT.green}` }} />
+            </div>
+            {isScanning && (
+              <div style={{
+                position: "absolute", left: "12%", right: "12%", height: 2,
+                background: `linear-gradient(90deg, transparent, ${ACCENT.green}, transparent)`,
+                boxShadow: `0 0 12px ${ACCENT.green}`,
+                animation: "scanLine 1.6s ease-in-out infinite",
+                top: "30%",
+              }} />
+            )}
+            <div style={{
+              position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center", gap: 8,
+              color: cameraOn ? ACCENT.greenLight : "var(--text-dim)",
+            }}>
+              <span style={{ fontSize: 42 }}>{cameraOn ? "📡" : "📷"}</span>
+              <span style={{ fontSize: 12, letterSpacing: "0.1em", fontWeight: 600 }}>
+                {isScanning ? "SCANNING QR…" : cameraOn ? "CAMERA LIVE (MOCK)" : "MOCK WEBCAM READY"}
+              </span>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 16 }}>
+            <label style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, letterSpacing: "0.06em", display: "block", marginBottom: 8 }}>
+              BATCH UUID (SIMULATED SCAN PAYLOAD)
+            </label>
+            <input
+              type="text"
+              value={batchUuid}
+              onChange={(e) => setBatchUuid(e.target.value)}
+              placeholder="e.g. 3fa85f64-5717-4562-b3fc-2c963f66afa6"
+              style={{
+                width: "100%", padding: "12px 14px", borderRadius: 8, boxSizing: "border-box",
+                background: "var(--bg-input)", border: "1px solid var(--border-primary)",
+                color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace", fontSize: 13,
+              }}
+            />
+          </div>
+
+          <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+            <button
+              onClick={handleSimulateScan}
+              disabled={!batchUuid.trim() || isScanning || isClaiming}
+              style={{
+                flex: 1, minWidth: 160, padding: "12px 18px", borderRadius: 8, border: "none", cursor: "pointer",
+                background: ACCENT.greenDark, color: "#fff", fontWeight: 700, fontSize: 13,
+                opacity: (!batchUuid.trim() || isScanning || isClaiming) ? 0.5 : 1,
+              }}
+            >
+              {isScanning ? "⏳ Scanning…" : "📲 Simulate QR Scan"}
+            </button>
+            <button
+              onClick={handleManualClaim}
+              disabled={!batchUuid.trim() || isClaiming}
+              style={{
+                padding: "12px 18px", borderRadius: 8, cursor: "pointer",
+                background: "var(--bg-input)", border: "1px solid var(--border-primary)",
+                color: "var(--text-secondary)", fontWeight: 600, fontSize: 13,
+                opacity: (!batchUuid.trim() || isClaiming) ? 0.5 : 1,
+              }}
+            >
+              Claim Directly
+            </button>
+          </div>
+
+          {error && (
+            <div style={{
+              marginTop: 12, padding: "10px 14px", borderRadius: 8,
+              background: ACCENT.redBg, border: `1px solid ${ACCENT.redBorder}`,
+              color: ACCENT.red, fontSize: 12,
+            }}>{error}</div>
+          )}
+        </Card>
+
+        <Card hover={false}>
+          <SectionLabel icon="📍" text="Intake Context" />
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {[
+              { label: "SME Zone (MERM)", value: activeZone, icon: "🗺️" },
+              { label: "Storage Default", value: "Shaded warehouse", icon: "🏪" },
+              { label: "API Endpoint", value: "POST /api/qr/sme-claim/:id", icon: "🔗" },
+            ].map((row) => (
+              <div key={row.label} style={{
+                padding: "12px 14px", borderRadius: 10,
+                background: "var(--bg-input)", border: "1px solid var(--border-primary)",
+                display: "flex", alignItems: "center", gap: 12,
+              }}>
+                <span style={{ fontSize: 20 }}>{row.icon}</span>
+                <div>
+                  <div style={{ fontSize: 10, color: "var(--text-dim)", letterSpacing: "0.08em", fontWeight: 600 }}>{row.label.toUpperCase()}</div>
+                  <div style={{ fontSize: 13, color: "var(--text-primary)", fontWeight: 500, marginTop: 2 }}>{row.value}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{
+            marginTop: 16, padding: 14, borderRadius: 10,
+            background: "rgba(16,185,129,0.06)", border: `1px solid ${ACCENT.greenBorder}`,
+            fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.55,
+          }}>
+            Scanning triggers inventory save (<code style={{ color: ACCENT.green }}>sme_inventory</code>), logs GPS/IP to the custody ledger, and runs the predictive sale-window engine using live weather + UHI offsets.
+          </div>
+        </Card>
+      </div>
+
+      {claimResult?.product_saved && (
+        <ClimateAdvisoryCard
+          recommendations={claimResult.recommendations}
+          banglaText={banglaText}
+          onSpeak={handleSpeak}
+          isSpeaking={isSpeaking}
+        />
+      )}
+    </div>
+  );
+}
+
 function DashboardView({ onNewBatch }) {
   const [dashData, setDashData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -3086,7 +2391,8 @@ function DashboardView({ onNewBatch }) {
   const fetchDashboard = async (isManual = false) => {
     if (isManual) setIsRefreshing(true);
     try {
-      const json = await window.apiCall('/api/dashboard');
+      const res = await fetch(`${BACKEND_URL}/api/dashboard`);
+      
       if (json.success && json.data) {
         setDashData(json.data);
         setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
@@ -3844,7 +3150,10 @@ function BatchRegistry({ onNewBatch }) {
                 onClick={async () => {
                   if (confirm(`Are you sure you want to delete batch ${selectedBatch.id || selectedBatch.batch_number}? This action cannot be undone.`)) {
                     try {
-                      const result = await window.apiCall(`/api/batches/${selectedBatch.id || selectedBatch.batch_number}`, 'DELETE');
+                      const res = await fetch(`${BACKEND_URL}/api/batches/${selectedBatch.id || selectedBatch.batch_number}`, {
+                        method: "DELETE"
+                      });
+                      const result = await res.json();
                       if (result.success) {
                         setBatches(prev => prev.filter(b => b.id !== selectedBatch.id && b.batch_number !== selectedBatch.id));
                         
@@ -3924,7 +3233,10 @@ function RegisterBatch({ onCancel }) {
     };
 
     try {
-      const result = await window.apiCall('/api/batches', 'POST', {
+      const response = await fetch(`${BACKEND_URL}/api/batches`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           batch_number:    localBatch.id,
           feedstock_type:  productType,   // ← required by backend schema
           product_name:    productName,
@@ -3934,13 +3246,17 @@ function RegisterBatch({ onCancel }) {
           destination_zone: destinationZone,
           weight_kg:        localBatch.weight_kg,
           packaging_type:   packagingType,
-        });
+        }),
+      });
 
-      if (result.success && result.data) {
-        localBatch.id = result.data.id || result.data.batch_number || localBatch.id;
-        localBatch.trust_score = result.data.trust_score ?? 0;
-        localBatch.status = result.data.status || "pending";
-        localBatch.created_at = result.data.created_at || localBatch.created_at;
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data) {
+          localBatch.id = result.data.id || result.data.batch_number || localBatch.id;
+          localBatch.trust_score = result.data.trust_score ?? 0;
+          localBatch.status = result.data.status || "pending";
+          localBatch.created_at = result.data.created_at || localBatch.created_at;
+        }
       }
       // Always add to local seed (whether backend succeeded or not)
       
@@ -4084,15 +3400,6 @@ function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerific
   // ── Session memory: persists across all messages in this tab ──
   const [chatSessionId, setChatSessionId] = useState(null);
   const fileInputRef = useRef(null);
-  const [ttsEnabled, setTtsEnabled] = useState(false);
-  const speak = (text) => {
-    if (!ttsEnabled || !('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = speechLang;
-    window.speechSynthesis.speak(utterance);
-  };
-
 
   // Initialize a backend session when the chatbot page mounts
   useEffect(() => {
@@ -4100,7 +3407,12 @@ function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerific
       try {
         const userStr = localStorage.getItem("user") || localStorage.getItem("farmer");
         const user = userStr ? JSON.parse(userStr) : null;
-        const data = await window.apiCall('/api/ai/chat/start', 'POST', { farmerId: user ? user.id : undefined });
+        const res = await fetch(`${BACKEND_URL}/api/ai/chat/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ farmerId: user ? user.id : undefined })
+        });
+        const data = await res.json();
         if (data.success && data.data && data.data.sessionId) {
           setChatSessionId(data.data.sessionId);
           console.log("[ChatbotView] Session started:", data.data.sessionId);
@@ -4164,9 +3476,13 @@ function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerific
         const user = userStr ? JSON.parse(userStr) : null;
         
         setIsVoiceProcessing(true);
-        const voiceData = await window.apiCall('/api/checkout/voice', 'POST', { transcript: text });
+        const voiceRes = await fetch(`${BACKEND_URL}/api/checkout/voice`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transcript: transcript })
+        });
+        const voiceData = await voiceRes.json();
         if (voiceData.success && voiceData.data) {
-          if (ttsEnabled) speak(voiceData.data.message);
           setMessages(prev => [...prev, {
             role: "system",
             content: voiceData.data.message,
@@ -4191,13 +3507,18 @@ function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerific
       // Always send the current sessionId so the backend maintains conversation history
       const currentSessionId = chatSessionId || undefined;
       
-      const data = await window.apiCall('/api/agent/message', 'POST', {
+      const res = await fetch(`${BACKEND_URL}/api/agent/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           query: text,
           language: speechLang.startsWith("bn") ? "bn" : "en",
           sessionId: currentSessionId,
           farmerId: user ? user.id : undefined,
           customProducts: products.filter(p => p.isCustom)
-        });
+        })
+      });
+      const data = await res.json();
       if (data.success && data.data) {
         const agentResponse = data.data;
         
@@ -4206,7 +3527,6 @@ function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerific
           setChatSessionId(agentResponse.sessionId);
         }
 
-        if (ttsEnabled) speak(agentResponse.message);
         setMessages(prev => [...prev, {
           role: "system",
           content: agentResponse.message,
@@ -4399,12 +3719,6 @@ function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerific
               <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Listening ({speechLang})...</span>
             </div>
           )}
-          {isVoiceProcessing && (
-            <div className="voice-order-spinner" style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", fontSize: 13, color: ACCENT.green, background: "var(--bg-input)", borderRadius: "18px 18px 18px 0", width: "fit-content", border: `1px solid ${ACCENT.greenBorder}` }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
-              Processing voice order...
-            </div>
-          )}
           {!speechSupported && (
             <div style={{ padding: "12px 18px", fontSize: 12, color: ACCENT.amber, background: "var(--bg-input)", borderRadius: "18px 18px 18px 0", width: "fit-content", border: `1px solid ${ACCENT.amberBorder}` }}>
               Microphone not supported in this browser.
@@ -4592,50 +3906,27 @@ function MarketplaceView({ products = [], isLoading = false }) {
     return Math.round((baseShipping + tempPenalty) * zoneMultiplier);
   };
 
-  const generateDispatchSlip = (product, orderId) => {
-    if (typeof window.jspdf === 'undefined') return;
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    doc.setFontSize(22);
-    doc.setTextColor(16, 185, 129);
-    doc.text("CLimaLogix AI - Dispatch Slip", 20, 20);
-    
-    doc.setFontSize(12);
-    doc.setTextColor(50, 50, 50);
-    doc.text(`Order ID: ${orderId}`, 20, 40);
-    doc.text(`Product: ${product.name}`, 20, 50);
-    doc.text(`Seller: ${product.seller}`, 20, 60);
-    doc.text(`DVS Score: ${product.dvs}`, 20, 70);
-    doc.text(`Trust Score: ${product.trust_score || 'N/A'}`, 20, 80);
-    doc.text(`Date: ${new Date().toLocaleString()}`, 20, 90);
-    
-    doc.text("This batch has been certified viable for dispatch.", 20, 110);
-    
-    doc.save(`Dispatch_Slip_${orderId}_${product.id}.pdf`);
-  };
-
   const handleCheckout = () => {
     setIsCheckingOut(true);
-  };
-
-  const handleCheckoutComplete = () => {
-    const orderId = `ord-${crypto.randomUUID().slice(0,8)}`;
-    const txHash = "0x" + Array.from(crypto.getRandomValues(new Uint8Array(20))).map(b => b.toString(16).padStart(2, '0')).join('');
-    
-    setCheckoutSuccess({
-      orderId,
-      txHash,
-      totalItems: cart.reduce((sum, item) => sum + item.quantity, 0),
-      totalPrice: cart.reduce((sum, item) => {
-        const rawPrice = Number((item.product.price || "").replace(/[৳\s,]/g, ""));
-        const isClearance = item.product.dvs < 75;
-        const price = isClearance ? Math.round(rawPrice * 0.7) : rawPrice;
-        return sum + (price * item.quantity);
-      }, 0) + getShippingCost(),
-      zone: selectedZone.replace(/_/g, " ").toUpperCase(),
-    });
-    setCart([]);
-    setIsCheckingOut(false);
+    setTimeout(() => {
+      const orderId = `ord-${Math.floor(100000 + Math.random() * 900000)}`;
+      const txHash = "0x" + Array.from({length: 40}, () => Math.floor(Math.random()*16).toString(16)).join("");
+      
+      setCheckoutSuccess({
+        orderId,
+        txHash,
+        totalItems: cart.reduce((sum, item) => sum + item.quantity, 0),
+        totalPrice: cart.reduce((sum, item) => {
+          const rawPrice = Number((item.product.price || "").replace(/[৳\s,]/g, ""));
+          const isClearance = item.product.dvs < 75;
+          const price = isClearance ? Math.round(rawPrice * 0.7) : rawPrice;
+          return sum + (price * item.quantity);
+        }, 0) + getShippingCost(),
+        zone: selectedZone.replace(/_/g, " ").toUpperCase(),
+      });
+      setCart([]);
+      setIsCheckingOut(false);
+    }, 2000);
   };
 
   const cartTotal = cart.reduce((sum, item) => {
@@ -5085,17 +4376,6 @@ function MarketplaceView({ products = [], isLoading = false }) {
         </div>
       </div>
 
-      {/* ── CHECKOUT DIALOG MODAL ────────────────────────────── */}
-      {isCheckingOut && (
-        <CheckoutDialog 
-          onClose={() => setIsCheckingOut(false)}
-          onComplete={handleCheckoutComplete}
-          totalItems={cart.reduce((sum, item) => sum + item.quantity, 0)}
-          totalPrice={cartTotal + getShippingCost()}
-          zone={selectedZone.replace(/_/g, " ").toUpperCase()}
-        />
-      )}
-
       {/* ── CHECKOUT SUCCESS MODAL ────────────────────────────── */}
       {checkoutSuccess && (
         <div style={{
@@ -5500,7 +4780,12 @@ function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerifica
       const userStr = localStorage.getItem("user") || localStorage.getItem("farmer");
       const user = userStr ? JSON.parse(userStr) : null;
       
-      const resData = await window.apiCall('/api/ai/chat/start', 'POST', { farmerId: user ? user.id : undefined });
+      const response = await fetch(`${BACKEND_URL}/api/ai/chat/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ farmerId: user ? user.id : undefined })
+      });
+      const resData = await response.json();
       if (resData.success && resData.data) {
         setSessionId(resData.data.sessionId);
       }
@@ -5513,7 +4798,11 @@ function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerifica
   const endSession = async () => {
     if (!sessionId) return;
     try {
-      await window.apiCall('/api/ai/chat/end', 'DELETE', { sessionId });
+      await fetch(`${BACKEND_URL}/api/ai/chat/end`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId })
+      });
       setSessionId("");
     } catch (err) {
       console.warn("Failed to end session:", err);
@@ -5539,7 +4828,12 @@ function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerifica
     if (endpoint === 'receipt' && window.APIClient?.confirmOrderReceipt) {
       return window.APIClient.confirmOrderReceipt(orderId, payload);
     }
-    const data = await window.apiCall(`/api/orders/${orderId}/${endpoint}`, 'POST', payload);
+    const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}/${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
     if (!res.ok || !data.success) {
       throw new Error(data.error || data.message || `HTTP ${res.status}`);
     }
@@ -5604,13 +4898,18 @@ function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerifica
       const userStr = localStorage.getItem("user") || localStorage.getItem("farmer");
       const user = userStr ? JSON.parse(userStr) : null;
 
-      const resData = await window.apiCall('/api/agent/message', 'POST', {
+      const response = await fetch(`${BACKEND_URL}/api/agent/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           query: text,
           language,
           sessionId: sessionId || undefined,
           farmerId: user ? user.id : undefined,
           customProducts: products.filter(p => p.isCustom)
-        });
+        })
+      });
+      const resData = await response.json();
 
       if (resData.success && resData.data) {
         const agentData = resData.data;
@@ -5976,7 +5275,9 @@ function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerifica
                     >
                       <div>🎉 {msg.content}</div>
                       {msg.orderId && isValidOrderUuid(msg.orderId) && (
-                        <OrderTimeline status={msg.orderStatus || "pending"} language={language} />
+                        <div style={{ fontSize: 11, opacity: 0.9 }}>
+                          {language === "bn" ? "স্ট্যাটাস" : "Status"}: {msg.orderStatus || "pending"}
+                        </div>
                       )}
                       {msg.orderId && isValidOrderUuid(msg.orderId) && (msg.orderStatus === "pending" || !msg.orderStatus) && (
                         <button
@@ -7154,839 +6455,566 @@ const TABS = [
   { id: "marketplace",  label: "Marketplace",             icon: "🛒", layer: "L3" }
 ];
 
-function LandingView({ onGetStarted }) {
-  const [searchId, setSearchId] = useState("");
-  const [activeSearchId, setActiveSearchId] = useState("");
+function HeroLandingPage({ onLogin, onRegister }) {
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [temp, setTemp] = React.useState(32);
+
+  React.useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+        }
+      });
+    }, { threshold: 0.08 });
+
+    document.querySelectorAll('.scroll-animate').forEach(el => {
+      observer.observe(el);
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Live Demo Math
+  const routeRisk = temp >= 40 ? "CRITICAL" : temp >= 33 ? "MODERATE" : "LOW";
+  const riskColor = temp >= 40 ? "#EF4444" : temp >= 33 ? "#F59E0B" : "#10B981";
   
-  // Contact Form State
-  const [contactName, setContactName] = useState("");
-  const [contactEmail, setContactEmail] = useState("");
-  const [contactOrg, setContactOrg] = useState("");
-  const [contactMessage, setContactMessage] = useState("");
-  const [contactSubmitted, setContactSubmitted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    if (searchId.trim()) {
-      setActiveSearchId(searchId.trim());
-    }
-  };
-
-  const handleContactSubmit = (e) => {
-    e.preventDefault();
-    if (!contactName || !contactEmail || !contactMessage) {
-      showToast("Please fill in all required fields.", "warning");
-      return;
-    }
-    setSubmitting(true);
-    setTimeout(() => {
-      setSubmitting(false);
-      setContactSubmitted(true);
-      // Reset form
-      setContactName("");
-      setContactEmail("");
-      setContactOrg("");
-      setContactMessage("");
-    }, 1200);
-  };
+  // TST Calculation: TST (minutes) = Math.max(10, Math.round((Trust Score * Packaging Factor * Base Survival Multiplier) / (Hazard Multiplier * Solar Hour Multiplier) * 60))
+  // For demo: Trust Score=85, Insulated Packaging=2.0, Base Survival=1.0. Hazard rises with temp.
+  const hazardFactor = temp >= 40 ? 1.8 : temp >= 33 ? 1.3 : 0.8;
+  const calculatedTst = Math.max(10, Math.round(((85 * 2.0 * 1.0) / (hazardFactor * 1.2)) * 60));
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#0B0F19",
-      backgroundImage: "radial-gradient(circle at top right, rgba(16, 185, 129, 0.08), transparent 40%), radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.05), transparent 45%)",
-      color: "#F9FAFB",
-      fontFamily: "'Inter', sans-serif",
-      display: "flex",
-      flexDirection: "column",
-      justifyContent: "space-between"
-    }}>
-      <header style={{
-        padding: "20px 40px",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
-        background: "rgba(11, 15, 25, 0.6)",
-        position: "sticky",
-        top: 0,
-        zIndex: 100
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <span style={{ fontSize: "24px" }}>🌱</span>
-          <span style={{ fontWeight: 800, fontSize: "20px", letterSpacing: "0.05em", color: "#10B981" }}>ClimaLogix AI</span>
-        </div>
-        <button
-          onClick={onGetStarted}
-          style={{
-            background: "#10B981",
-            color: "#0B0F19",
-            border: "none",
-            borderRadius: "8px",
-            padding: "10px 20px",
-            fontSize: "13px",
-            fontWeight: 700,
-            cursor: "pointer",
-            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-            boxShadow: "0 0 15px rgba(16, 185, 129, 0.3)"
-          }}
-          onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.05)"; e.currentTarget.style.boxShadow = "0 0 25px rgba(16, 185, 129, 0.5)"; }}
-          onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.boxShadow = "0 0 15px rgba(16, 185, 129, 0.3)"; }}
-        >
-          GET STARTED
-        </button>
-      </header>
+    <div style={{ background: "#0B0F19", color: "#F9FAFB", fontFamily: "'Inter', sans-serif", minHeight: "100vh", overflowX: "hidden" }}>
+      <style>{`
+        .scroll-animate {
+          opacity: 0;
+          transform: translateY(30px);
+          transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .scroll-animate.visible {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        .delay-100 { transition-delay: 100ms; }
+        .delay-200 { transition-delay: 200ms; }
+        .delay-300 { transition-delay: 300ms; }
+        .delay-400 { transition-delay: 400ms; }
+        .delay-500 { transition-delay: 500ms; }
 
-      <main style={{ flex: 1, padding: "60px 20px", maxWidth: "1200px", margin: "0 auto", width: "100%" }}>
-        {/* HERO SECTION */}
-        <div style={{ textAlign: "center", marginBottom: "80px" }}>
-          <div style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "8px",
-            background: "rgba(16, 185, 129, 0.08)",
-            border: "1px solid rgba(16, 185, 129, 0.25)",
-            padding: "6px 16px",
-            borderRadius: "999px",
-            fontSize: "12px",
-            fontWeight: 600,
-            color: "#10B981",
-            marginBottom: "24px",
-            letterSpacing: "0.05em"
+        .hero-title span {
+          background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
+
+        .cta-primary {
+          background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+          box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+          transition: all 0.25s ease;
+        }
+        .cta-primary:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+          filter: brightness(1.1);
+        }
+
+        .cta-secondary {
+          border: 1px solid rgba(52, 211, 153, 0.65);
+          background: rgba(255, 255, 255, 0.05);
+          color: #34D399;
+          transition: all 0.25s ease;
+        }
+        .cta-secondary:hover {
+          background: rgba(52, 211, 153, 0.15);
+          border-color: #34D399;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 14px rgba(52, 211, 153, 0.25);
+        }
+
+        .glass-panel {
+          background: rgba(17, 24, 39, 0.75);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          border: 1px solid rgba(16, 185, 129, 0.18);
+          border-radius: 16px;
+        }
+
+        .problem-card {
+          border-left: 4px solid #10B981;
+        }
+
+        .feature-num {
+          font-family: 'JetBrains Mono', monospace;
+          color: #10B981;
+          text-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+        }
+
+        .map-zone {
+          transition: fill 0.5s ease;
+        }
+
+        .logo-badge {
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 9999px;
+          padding: 8px 18px;
+          font-size: 13px;
+          font-family: 'JetBrains Mono', monospace;
+          color: #94A3B8;
+        }
+
+        .mobile-drawer {
+          transform: translateX(100%);
+          transition: transform 0.3s ease-in-out;
+        }
+        .mobile-drawer.open {
+          transform: translateX(0);
+        }
+      `}</style>
+
+      {/* NAVIGATION BAR */}
+      <nav style={{
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 50,
+        background: "rgba(11, 15, 25, 0.85)", backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)", borderBottom: "1px solid rgba(16, 185, 129, 0.15)",
+        height: "64px", display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "0 24px"
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+          <span style={{ fontSize: "22px" }}>🌍</span>
+          <span style={{ fontFamily: "Inter", fontWeight: "800", fontSize: "19px", letterSpacing: "-0.02em", color: "#F9FAFB" }}>
+            ClimaLogix<span style={{ color: "#10B981" }}>.ai</span>
+          </span>
+        </div>
+
+        {/* Desktop Nav Links */}
+        <div className="hidden-mobile" style={{ display: "flex", alignItems: "center", gap: "28px" }}>
+          <a href="#features" style={{ color: "#94A3B8", textDecoration: "none", fontSize: "14px", fontWeight: "500", transition: "color 0.2s" }} onMouseOver={e=>e.target.style.color="#10B981"} onMouseOut={e=>e.target.style.color="#94A3B8"}>Features</a>
+          <a href="#demo" style={{ color: "#94A3B8", textDecoration: "none", fontSize: "14px", fontWeight: "500", transition: "color 0.2s" }} onMouseOver={e=>e.target.style.color="#10B981"} onMouseOut={e=>e.target.style.color="#94A3B8"}>Demo</a>
+          <a href="#testimonials" style={{ color: "#94A3B8", textDecoration: "none", fontSize: "14px", fontWeight: "500", transition: "color 0.2s" }} onMouseOver={e=>e.target.style.color="#10B981"} onMouseOut={e=>e.target.style.color="#94A3B8"}>Pricing</a>
+          <a href="#docs" style={{ color: "#94A3B8", textDecoration: "none", fontSize: "14px", fontWeight: "500", transition: "color 0.2s" }} onMouseOver={e=>e.target.style.color="#10B981"} onMouseOut={e=>e.target.style.color="#94A3B8"}>Docs</a>
+          
+          <button onClick={onLogin} style={{
+            background: "transparent", border: "1px solid #10B981", borderRadius: "8px",
+            color: "#10B981", padding: "8px 16px", cursor: "pointer", fontSize: "14px", fontWeight: "600",
+            transition: "all 0.2s"
+          }} onMouseOver={e=>{e.target.style.background="rgba(16, 185, 129, 0.1)"}} onMouseOut={e=>e.target.style.background="transparent"}>
+            Login
+          </button>
+          
+          <button onClick={onRegister} className="cta-primary" style={{
+            border: "none", borderRadius: "8px", color: "#0B0F19", padding: "8px 18px",
+            cursor: "pointer", fontSize: "14px", fontWeight: "700"
           }}>
-            <span>🔒</span> CRYPTOGRAPHICALLY VERIFIED COLD CHAIN & LOGISTICS
+            Get Started
+          </button>
+        </div>
+
+        {/* Mobile Hamburger Button */}
+        <button 
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className="visible-mobile-only"
+          style={{ background: "transparent", border: "none", color: "#F9FAFB", cursor: "pointer", fontSize: "24px" }}
+        >
+          {mobileMenuOpen ? "✕" : "☰"}
+        </button>
+
+        {/* Mobile Drawer */}
+        <div className={`mobile-drawer ${mobileMenuOpen ? 'open' : ''}`} style={{
+          position: "fixed", top: "64px", right: 0, bottom: 0, width: "260px",
+          background: "#0B0F19", borderLeft: "1px solid rgba(16, 185, 129, 0.15)",
+          display: "flex", flexDirection: "column", padding: "24px", gap: "20px", zIndex: 49,
+          boxShadow: "-10px 0 30px rgba(0,0,0,0.5)"
+        }}>
+          <a href="#features" onClick={()=>setMobileMenuOpen(false)} style={{ color: "#F9FAFB", textDecoration: "none", fontSize: "16px", fontWeight: "600" }}>Features</a>
+          <a href="#demo" onClick={()=>setMobileMenuOpen(false)} style={{ color: "#F9FAFB", textDecoration: "none", fontSize: "16px", fontWeight: "600" }}>Demo</a>
+          <a href="#testimonials" onClick={()=>setMobileMenuOpen(false)} style={{ color: "#F9FAFB", textDecoration: "none", fontSize: "16px", fontWeight: "600" }}>Pricing</a>
+          <a href="#docs" onClick={()=>setMobileMenuOpen(false)} style={{ color: "#F9FAFB", textDecoration: "none", fontSize: "16px", fontWeight: "600" }}>Docs</a>
+          <hr style={{ border: "none", borderTop: "1px solid rgba(255,255,255,0.08)" }} />
+          <button onClick={() => { setMobileMenuOpen(false); onLogin(); }} style={{
+            background: "transparent", border: "1px solid #10B981", borderRadius: "8px",
+            color: "#10B981", padding: "12px", cursor: "pointer", fontSize: "15px", fontWeight: "600"
+          }}>
+            Login
+          </button>
+          <button onClick={() => { setMobileMenuOpen(false); onRegister(); }} className="cta-primary" style={{
+            border: "none", borderRadius: "8px", color: "#0B0F19", padding: "12px",
+            cursor: "pointer", fontSize: "15px", fontWeight: "700"
+          }}>
+            Get Started
+          </button>
+        </div>
+      </nav>
+
+      {/* SECTION 1 — HERO SECTION */}
+      <section style={{
+        minHeight: "100vh", display: "grid", gridTemplateColumns: "1.2fr 1fr",
+        padding: "100px 40px 40px", gap: "40px", alignItems: "center",
+        maxWidth: "1400px", margin: "0 auto", boxSizing: "border-box"
+      }} className="stack-mobile">
+        {/* Left Column */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+          <div className="scroll-animate" style={{ alignSelf: "flex-start" }}>
+            <span style={{
+              background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.3)",
+              borderRadius: "9999px", padding: "6px 14px", fontSize: "11px", fontWeight: "700",
+              color: "#10B981", letterSpacing: "0.05em", textTransform: "uppercase"
+            }}>
+              📡 AI-Powered Climate Logistics
+            </span>
           </div>
-          <h1 style={{
-            fontSize: "48px",
-            fontWeight: 800,
-            lineHeight: 1.15,
-            marginBottom: "24px",
-            letterSpacing: "-0.03em",
-            background: "linear-gradient(135deg, #FFFFFF 40%, #34D399 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent"
-          }}>
-            Predictive Climate-Resilient Agricultural Supply Chains
+
+          <h1 className="hero-title scroll-animate delay-100" style={{ fontSize: "clamp(32px, 5vw, 52px)", fontWeight: "800", lineHeight: "1.1", letterSpacing: "-0.03em" }}>
+            Protect Your Supply Chain from the <span>Heat</span>
           </h1>
-          <p style={{
-            fontSize: "17px",
-            color: "#9CA3AF",
-            maxWidth: "750px",
-            margin: "0 auto 36px auto",
-            lineHeight: 1.6
-          }}>
-            Synchronizing hardware IoT microclimate telemetry, AI-driven thermal hazard routing, and cryptographic ledger verification to assure crop provenance and combat dynamic transit degradation.
+
+          <p className="scroll-animate delay-200" style={{ fontSize: "17px", color: "#D1D5DB", lineHeight: "1.6", maxWidth: "600px" }}>
+            ClimaLogix AI monitors real-time thermal conditions, optimizes heat-safe routes, and shields SME logistics in climate-vulnerable regions like Bangladesh.
           </p>
-          <div style={{ display: "flex", justifyContent: "center", gap: "16px" }}>
-            <button
-              onClick={onGetStarted}
-              style={{
-                background: "linear-gradient(135deg, #10B981, #059669)",
-                color: "#FFFFFF",
-                border: "none",
-                borderRadius: "10px",
-                padding: "14px 32px",
-                fontSize: "14px",
-                fontWeight: 700,
-                cursor: "pointer",
-                transition: "all 0.2s",
-                boxShadow: "0 4px 20px rgba(16, 185, 129, 0.25)"
-              }}
-              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; }}
-            >
-              Access Platform Portal
+
+          <div className="scroll-animate delay-300" style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginTop: "8px" }}>
+            <button onClick={onRegister} className="cta-primary" style={{
+              border: "none", borderRadius: "10px", color: "#0B0F19", padding: "14px 28px",
+              cursor: "pointer", fontSize: "15px", fontWeight: "700"
+            }}>
+              Get Started Free
             </button>
-            <a
-              href="#trace"
-              style={{
-                background: "rgba(255, 255, 255, 0.04)",
-                border: "1px solid rgba(255, 255, 255, 0.08)",
-                borderRadius: "10px",
-                padding: "14px 32px",
-                fontSize: "14px",
-                fontWeight: 700,
-                color: "#F3F4F6",
-                cursor: "pointer",
-                textDecoration: "none",
-                display: "inline-block",
-                transition: "all 0.2s"
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "rgba(255, 255, 255, 0.04)"; }}
-            >
-              Instant Provenance Tracer
+            <a href="#demo" className="cta-secondary" style={{
+              borderRadius: "10px", padding: "14px 28px", textDecoration: "none",
+              textAlign: "center", fontSize: "15px", fontWeight: "700", display: "inline-block"
+            }}>
+              Watch Demo
             </a>
           </div>
 
-          <div style={{ marginTop: "48px", position: "relative", borderRadius: "16px", overflow: "hidden", border: "1px solid rgba(255, 255, 255, 0.08)", boxShadow: "0 20px 40px rgba(0, 0, 0, 0.4)" }}>
-            <img src="./farm_banner.png" alt="Sustainable Agricultural Logistics Hub" style={{ width: "100%", height: "auto", maxHeight: "400px", objectFit: "cover", display: "block" }} />
-            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(to top, rgba(11, 15, 25, 0.9) 0%, rgba(11, 15, 25, 0) 100%)", padding: "24px 32px", textAlign: "left" }}>
-              <div style={{ fontSize: "11px", fontWeight: 700, color: "#10B981", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "4px" }}>Active Staging & Operations</div>
-              <div style={{ fontSize: "16px", fontWeight: 700, color: "#FFFFFF" }}>ClimaLogix-Enabled Farm Cooperatives</div>
-            </div>
-          </div>
-        </div>
-
-        {/* PROVENANCE LOOKUP TOOL */}
-        <div id="trace" style={{
-          background: "rgba(17, 24, 39, 0.65)",
-          backdropFilter: "blur(20px)",
-          border: "1px solid rgba(16, 185, 129, 0.15)",
-          borderRadius: "16px",
-          padding: "32px",
-          boxShadow: "0 10px 40px rgba(0, 0, 0, 0.3)",
-          marginBottom: "80px"
-        }}>
-          <h2 style={{ fontSize: "20px", fontWeight: 700, marginBottom: "12px", color: "#F9FAFB", display: "flex", alignItems: "center", gap: "8px" }}>
-            <span>🔍</span> Global Provenance Verification
-          </h2>
-          <p style={{ fontSize: "13px", color: "#9CA3AF", marginBottom: "20px" }}>
-            Query real-time batch telemetry, thermal preservation indicators, and BARI trust certs directly. Secure, immediate, and authorization-free.
-          </p>
-
-          <form onSubmit={handleSearchSubmit} style={{ display: "flex", gap: "10px", marginBottom: "24px" }}>
-            <input
-              type="text"
-              value={searchId}
-              onChange={e => setSearchId(e.target.value)}
-              placeholder="Input Batch Signature (e.g. BCH-3180) or paste cryptographic hash..."
-              style={{
-                flex: 1,
-                padding: "14px 16px",
-                fontSize: "13px",
-                background: "rgba(255, 255, 255, 0.03)",
-                border: "1px solid rgba(255, 255, 255, 0.08)",
-                borderRadius: "10px",
-                color: "#FFFFFF",
-                fontFamily: "'JetBrains Mono', monospace",
-                outline: "none"
-              }}
-            />
-            <button
-              type="submit"
-              style={{
-                background: "rgba(59, 130, 246, 0.12)",
-                color: "#3B82F6",
-                border: "1px solid rgba(59, 130, 246, 0.35)",
-                borderRadius: "10px",
-                padding: "14px 28px",
-                fontSize: "13px",
-                fontWeight: 700,
-                cursor: "pointer",
-                transition: "all 0.2s"
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = "rgba(59, 130, 246, 0.2)"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "rgba(59, 130, 246, 0.12)"; }}
-            >
-              VERIFY BATCH
-            </button>
-          </form>
-
-          {activeSearchId && (
-            <div style={{ borderTop: "1px solid rgba(255, 255, 255, 0.06)", paddingTop: "24px", marginTop: "10px" }}>
-              <TrackingView prefilledId={activeSearchId} />
-            </div>
-          )}
-        </div>
-
-        {/* SECTION: INTEGRATED ECOSYSTEM COHORTS (Who are the users) */}
-        <div style={{ marginBottom: "80px" }}>
-          <div style={{ textAlign: "center", marginBottom: "40px" }}>
-            <span style={{ fontSize: "11px", fontWeight: 700, color: "#10B981", letterSpacing: "0.15em", textTransform: "uppercase" }}>Ecosystem Integration</span>
-            <h2 style={{ fontSize: "28px", fontWeight: 800, marginTop: "8px", color: "#FFFFFF" }}>Coordinated Supply Chain Stakeholders</h2>
-            <p style={{ fontSize: "14px", color: "#9CA3AF", marginTop: "10px" }}>Assuring quality and transparency for every role in the agricultural logistics cycle.</p>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "24px" }}>
-            <div style={{ background: "rgba(17, 24, 39, 0.4)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "14px", padding: "24px" }}>
-              <img src="./harvest.png" alt="Harvest Operations" style={{ width: "100%", height: "130px", objectFit: "cover", borderRadius: "10px", marginBottom: "16px", border: "1px solid rgba(255,255,255,0.04)" }} />
-              <div style={{ fontSize: "28px", marginBottom: "8px", display: "none" }}>👩‍🌾</div>
-              <h3 style={{ fontSize: "17px", fontWeight: 700, color: "#FFFFFF", marginBottom: "10px" }}>Primary Producers</h3>
-              <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
-                Agricultural cooperatives and local farms log immediate crop specifications, microclimate data, and GPS signatures directly at harvest origin.
-              </p>
-            </div>
-            <div style={{ background: "rgba(17, 24, 39, 0.4)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "14px", padding: "24px" }}>
-              <img src="./logistics_driver.png" alt="Logistics Tracking" style={{ width: "100%", height: "130px", objectFit: "cover", borderRadius: "10px", marginBottom: "16px", border: "1px solid rgba(255,255,255,0.04)" }} />
-              <div style={{ fontSize: "28px", marginBottom: "8px", display: "none" }}>🚛</div>
-              <h3 style={{ fontSize: "17px", fontWeight: 700, color: "#FFFFFF", marginBottom: "10px" }}>Fleet Operators</h3>
-              <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
-                Logistics managers monitor transit corridors, receiving heatwave alerts and dynamic routing suggestions to avoid severe urban heat hazard vectors.
-              </p>
-            </div>
-            <div style={{ background: "rgba(17, 24, 39, 0.4)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "14px", padding: "24px" }}>
-              <img src="./industrial_processors.png" alt="Industrial Processors" style={{ width: "100%", height: "130px", objectFit: "cover", borderRadius: "10px", marginBottom: "16px", border: "1px solid rgba(255,255,255,0.04)" }} />
-              <div style={{ fontSize: "28px", marginBottom: "8px", display: "none" }}>🏭</div>
-              <h3 style={{ fontSize: "17px", fontWeight: 700, color: "#FFFFFF", marginBottom: "10px" }}>Industrial Processors</h3>
-              <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
-                Food and biochemical manufacturers retrieve complete temperature preservation logs and chemical metrics to guarantee feedstock integrity.
-              </p>
-            </div>
-            <div style={{ background: "rgba(17, 24, 39, 0.4)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "14px", padding: "24px" }}>
-              <img src="./inspector.png" alt="Quality Inspection" style={{ width: "100%", height: "130px", objectFit: "cover", borderRadius: "10px", marginBottom: "16px", border: "1px solid rgba(255,255,255,0.04)" }} />
-              <div style={{ fontSize: "28px", marginBottom: "8px", display: "none" }}>🕵️‍♂️</div>
-              <h3 style={{ fontSize: "17px", fontWeight: 700, color: "#FFFFFF", marginBottom: "10px" }}>Quality Inspectors</h3>
-              <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
-                Regulatory officers and certification agencies inspect IoT ledgers to grant BARI-compliant quality seals and approve compliance certifications.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* SECTION: STRATEGIC OUTCOMES (What benefits will they get) */}
-        <div style={{ marginBottom: "80px" }}>
-          <div style={{ textAlign: "center", marginBottom: "40px" }}>
-            <span style={{ fontSize: "11px", fontWeight: 700, color: "#3B82F6", letterSpacing: "0.15em", textTransform: "uppercase" }}>Operational Excellence</span>
-            <h2 style={{ fontSize: "28px", fontWeight: 800, marginTop: "8px", color: "#FFFFFF" }}>Measurable Supply Chain Outcomes</h2>
-            <p style={{ fontSize: "14px", color: "#9CA3AF", marginTop: "10px" }}>Realizing tangible mitigation and trust indexes across high-value cold chains.</p>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "24px" }}>
-            <div style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.03), rgba(17,24,39,0.6))", border: "1px solid rgba(16,185,129,0.15)", borderRadius: "14px", padding: "28px" }}>
-              <div style={{ fontSize: "11px", fontWeight: 700, color: "#10B981", letterSpacing: "0.1em", marginBottom: "12px" }}>LOSS MINIMIZATION</div>
-              <h3 style={{ fontSize: "18px", fontWeight: 700, color: "#FFFFFF", marginBottom: "10px" }}>~35% Spoilage Reduction</h3>
-              <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
-                Bypassing microclimatic thermal pockets and urban heat islands ensures sensitive organic inputs remain inside safe temperature thresholds.
-              </p>
-            </div>
-            <div style={{ background: "linear-gradient(135deg, rgba(59,130,246,0.03), rgba(17,24,39,0.6))", border: "1px solid rgba(59,130,246,0.15)", borderRadius: "14px", padding: "28px" }}>
-              <div style={{ fontSize: "11px", fontWeight: 700, color: "#3B82F6", letterSpacing: "0.1em", marginBottom: "12px" }}>PREVENTATIVE ANALYTICS</div>
-              <h3 style={{ fontSize: "18px", fontWeight: 700, color: "#FFFFFF", marginBottom: "10px" }}>Dynamic Viability Scoring</h3>
-              <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
-                Continuous calculation of product decay velocities (DVS) enables real-time updates to delivery routes and inventory prioritize.
-              </p>
-            </div>
-            <div style={{ background: "linear-gradient(135deg, rgba(245,158,11,0.03), rgba(17,24,39,0.6))", border: "1px solid rgba(245,158,11,0.15)", borderRadius: "14px", padding: "28px" }}>
-              <div style={{ fontSize: "11px", fontWeight: 700, color: "#F59E0B", letterSpacing: "0.1em", marginBottom: "12px" }}>BRAND EQUITY</div>
-              <h3 style={{ fontSize: "18px", fontWeight: 700, color: "#FFFFFF", marginBottom: "10px" }}>Cryptographic Trust Validation</h3>
-              <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
-                Equipping products with verifiable public records of origin builds customer trust and matches requirements for organic certifications.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* SECTION: ARCHITECTURAL ADVANTAGES (Competitive advantages) */}
-        <div style={{ marginBottom: "80px" }}>
-          <div style={{ textAlign: "center", marginBottom: "40px" }}>
-            <span style={{ fontSize: "11px", fontWeight: 700, color: "#F59E0B", letterSpacing: "0.15em", textTransform: "uppercase" }}>Core Differentiation</span>
-            <h2 style={{ fontSize: "28px", fontWeight: 800, marginTop: "8px", color: "#FFFFFF" }}>Next-Generation Technology Integration</h2>
-            <p style={{ fontSize: "14px", color: "#9CA3AF", marginTop: "10px" }}>Why enterprise operators deploy ClimaLogix over traditional logistics systems.</p>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "24px" }} className="stack-mobile">
-            <div style={{ padding: "20px", borderLeft: "3px solid #10B981", background: "rgba(255,255,255,0.01)" }}>
-              <h4 style={{ fontSize: "15px", fontWeight: 700, color: "#FFFFFF", marginBottom: "8px" }}>Direct IoT Ledger Binding</h4>
-              <p style={{ fontSize: "12.5px", color: "#9CA3AF", lineHeight: 1.5 }}>
-                Sensor measurements are written directly from field modems into cryptographic records, preventing data alteration or manual spreadsheet errors.
-              </p>
-            </div>
-            <div style={{ padding: "20px", borderLeft: "3px solid #3B82F6", background: "rgba(255,255,255,0.01)" }}>
-              <h4 style={{ fontSize: "15px", fontWeight: 700, color: "#FFFFFF", marginBottom: "8px" }}>Urban Heat Island (UHI) Mapping</h4>
-              <p style={{ fontSize: "12.5px", color: "#9CA3AF", lineHeight: 1.5 }}>
-                Resolving micro-scale thermal pockets within built city environments, compared to standard regional atmospheric models.
-              </p>
-            </div>
-            <div style={{ padding: "20px", borderLeft: "3px solid #F59E0B", background: "rgba(255,255,255,0.01)" }}>
-              <h4 style={{ fontSize: "15px", fontWeight: 700, color: "#FFFFFF", marginBottom: "8px" }}>BARI-Calibrated Calculations</h4>
-              <p style={{ fontSize: "12.5px", color: "#9CA3AF", lineHeight: 1.5 }}>
-                Product expiration curves utilize mathematical formulations validated by regional scientific agricultural research institutes.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* SECTION: ENTERPRISE CONSULTATION PORTAL (Contact Us) */}
-        <div style={{
-          background: "linear-gradient(180deg, rgba(17, 24, 39, 0.4) 0%, rgba(17, 24, 39, 0.8) 100%)",
-          border: "1px solid rgba(255, 255, 255, 0.06)",
-          borderRadius: "20px",
-          padding: "40px",
-          boxShadow: "0 20px 50px rgba(0, 0, 0, 0.4)",
-          marginBottom: "40px"
-        }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "40px" }} className="stack-mobile">
+          <div className="scroll-animate delay-400" style={{ display: "flex", gap: "24px", flexWrap: "wrap", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "28px", marginTop: "16px" }}>
             <div>
-              <span style={{ fontSize: "11px", fontWeight: 700, color: "#10B981", letterSpacing: "0.1em", textTransform: "uppercase" }}>Pilot Programs & Partners</span>
-              <h2 style={{ fontSize: "26px", fontWeight: 800, marginTop: "8px", marginBottom: "16px", color: "#FFFFFF" }}>Initiate a Staging Trial</h2>
-              <p style={{ fontSize: "13.5px", color: "#9CA3AF", lineHeight: 1.6, marginBottom: "20px" }}>
-                Integrate ClimaLogix AI into your existing logistics platforms or register your cooperative farm clusters. Our solution architects will construct a custom dashboard mapping your thermal zones.
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", color: "#10B981", fontSize: "24px", fontWeight: "700" }}>2,400+</div>
+              <div style={{ color: "#CBD5E1", fontSize: "12px", marginTop: "2px" }}>SMEs Protected</div>
+            </div>
+            <div style={{ width: "1px", background: "rgba(255,255,255,0.1)" }}></div>
+            <div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", color: "#10B981", fontSize: "24px", fontWeight: "700" }}>98.7%</div>
+              <div style={{ color: "#CBD5E1", fontSize: "12px", marginTop: "2px" }}>Route Accuracy</div>
+            </div>
+            <div style={{ width: "1px", background: "rgba(255,255,255,0.1)" }}></div>
+            <div>
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", color: "#10B981", fontSize: "24px", fontWeight: "700" }}>12+</div>
+              <div style={{ color: "#CBD5E1", fontSize: "12px", marginTop: "2px" }}>Districts Active</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column (3D Interactive Canvas) */}
+        <div className="scroll-animate delay-300" style={{ height: "100%", minHeight: "450px", position: "relative" }}>
+          {window.ThreeScene ? <window.ThreeScene /> : <div style={{ color: "#10B981" }}>Loading 3D Atmosphere Scene...</div>}
+        </div>
+      </section>
+
+      {/* SECTION 2 — PROBLEM STATEMENT */}
+      <section id="features" style={{ background: "#111827", padding: "100px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+        <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
+          <div className="scroll-animate" style={{ textAlign: "center", marginBottom: "64px" }}>
+            <h2 style={{ fontSize: "clamp(26px, 4vw, 36px)", fontWeight: "800", maxWidth: "800px", margin: "0 auto 18px", lineHeight: "1.2" }}>
+              Bangladesh Loses Billions to Heat-Damaged Goods Every Year
+            </h2>
+            <p style={{ color: "#94A3B8", fontSize: "16px", maxWidth: "600px", margin: "0 auto" }}>
+              Traditional shipping models fail to protect delicate assets during seasonal heat spikes in urban logistics paths.
+            </p>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "28px" }} className="stack-mobile">
+            {/* Card 1 */}
+            <div className="glass-panel problem-card scroll-animate" style={{ padding: "32px" }}>
+              <div style={{ fontSize: "32px", marginBottom: "16px" }}>🌡️</div>
+              <h3 style={{ fontSize: "18px", fontWeight: "700", marginBottom: "12px" }}>Extreme Heat Events</h3>
+              <p style={{ color: "#94A3B8", fontSize: "14px", lineHeight: "1.6" }}>
+                Temperature spikes above 42°C devastate perishable agricultural and biological goods without real-time microclimate monitoring.
               </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontSize: "12.5px", color: "#CBD5E1" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span>📧</span> <span>solutions@climalogix.ai</span>
+            </div>
+
+            {/* Card 2 */}
+            <div className="glass-panel problem-card scroll-animate delay-150" style={{ padding: "32px" }}>
+              <div style={{ fontSize: "32px", marginBottom: "16px" }}>🚛</div>
+              <h3 style={{ fontSize: "18px", fontWeight: "700", marginBottom: "12px" }}>Blind Route Planning</h3>
+              <p style={{ color: "#94A3B8", fontSize: "14px", lineHeight: "1.6" }}>
+                Drivers navigate without corridor-specific thermal risk data, exposing high-value shipments to critical temperature zones.
+              </p>
+            </div>
+
+            {/* Card 3 */}
+            <div className="glass-panel problem-card scroll-animate delay-300" style={{ padding: "32px" }}>
+              <div style={{ fontSize: "32px", marginBottom: "16px" }}>📦</div>
+              <h3 style={{ fontSize: "18px", fontWeight: "700", marginBottom: "12px" }}>No Cold-Chain Visibility</h3>
+              <p style={{ color: "#94A3B8", fontSize: "14px", lineHeight: "1.6" }}>
+                SMEs lack affordable IoT analytics to track batch quality degradation, insulation metrics, and precise spoilage risk.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 3 — SOLUTIONS / FEATURES */}
+      <section style={{ padding: "100px 40px", maxWidth: "1200px", margin: "0 auto" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "60px" }} className="stack-mobile">
+          {/* Left Column (Sticky Title) */}
+          <div style={{ position: "sticky", top: "100px", height: "fit-content" }}>
+            <div className="scroll-animate">
+              <span style={{ color: "#10B981", fontSize: "11px", fontWeight: "700", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                Proven Protection
+              </span>
+              <h2 style={{ fontSize: "clamp(26px, 4vw, 36px)", fontWeight: "800", margin: "12px 0 18px", lineHeight: "1.2" }}>
+                How ClimaLogix Protects You
+              </h2>
+              <p style={{ color: "#94A3B8", fontSize: "15px", lineHeight: "1.6" }}>
+                ClimaLogix AI equips local merchants and transport networks with the exact computational tools needed to bypass urban heat islands and log certified batch health.
+              </p>
+            </div>
+          </div>
+
+          {/* Right Column (Feature List) */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "36px" }}>
+            {[
+              { num: "01", icon: "🛰️", title: "Real-Time Heat Monitoring", desc: "OpenWeather + local IoT integration delivers live microclimate telemetry across your entire transit route." },
+              { num: "02", icon: "🧭", title: "AI Route Optimization", desc: "Dynamic heat-risk scores predict UHI hotspots and automatically redirect drivers before thermal damage occurs." },
+              { num: "03", icon: "📊", title: "TST Analytics Engine", desc: "Our proprietary Thermal Survival Time algorithm models packaging ratings to forecast shipment stability windows." },
+              { num: "04", icon: "🔔", title: "Instant Smart Alerts", desc: "Push notifications trigger when temperature parameters cross set safety thresholds. Never risk a cargo blindly." },
+              { num: "05", icon: "🗣", title: "Multilingual Voice Assistant", desc: "Fully integrated voice portal translates spoken Bangla and English commands for local drivers in transit." }
+            ].map((f, i) => (
+              <div key={i} className="glass-panel scroll-animate" style={{ padding: "24px", display: "flex", gap: "20px", alignItems: "flex-start" }}>
+                <div className="feature-num" style={{ fontSize: "22px", fontWeight: "700" }}>{f.num}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <h3 style={{ fontSize: "17px", fontWeight: "700", display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span>{f.icon}</span> {f.title}
+                  </h3>
+                  <p style={{ color: "#94A3B8", fontSize: "14px", lineHeight: "1.6" }}>{f.desc}</p>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span>🏢</span> <span>Global Headquarters: Innovation Hub Tower, Dhaka</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 4 — LIVE DEMO SIMULATION */}
+      <section id="demo" style={{ background: "#111827", padding: "100px 40px", borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+        <div style={{ maxWidth: "1000px", margin: "0 auto" }}>
+          <div className="scroll-animate" style={{ textAlign: "center", marginBottom: "50px" }}>
+            <h2 style={{ fontSize: "clamp(26px, 4vw, 36px)", fontWeight: "800", marginBottom: "14px" }}>See It in Action</h2>
+            <p style={{ color: "#94A3B8", fontSize: "15px" }}>Drag the slider to adjust outside temperature and watch ClimaLogix model route hazards in real-time.</p>
+          </div>
+
+          <div className="glass-panel scroll-animate stack-mobile" style={{ padding: "36px", display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "40px" }}>
+            {/* Controls */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
+                  <span style={{ fontSize: "14px", fontWeight: "600", color: "#94A3B8" }}>Outside Ambient Temperature:</span>
+                  <span style={{ fontFamily: "monospace", fontSize: "18px", fontWeight: "700", color: riskColor }}>{temp}°C</span>
+                </div>
+                <input 
+                  type="range" min="20" max="50" value={temp} 
+                  onChange={e => setTemp(parseInt(e.target.value))}
+                  style={{ width: "100%", accentColor: "#10B981" }} 
+                />
+              </div>
+
+              <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "12px", padding: "20px" }}>
+                <div style={{ fontSize: "12px", color: "#64748B", textTransform: "uppercase", fontWeight: "600", letterSpacing: "0.05em" }}>Analysis Result</div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "12px" }}>
+                  <span style={{ fontSize: "14px", color: "#94A3B8" }}>Hazard Risk Level:</span>
+                  <span style={{ color: riskColor, fontWeight: "800", fontSize: "14px", background: `${riskColor}15`, border: `1px solid ${riskColor}30`, borderRadius: "9999px", padding: "4px 14px", letterSpacing: "0.05em" }}>
+                    {routeRisk}
+                  </span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "16px" }}>
+                  <span style={{ fontSize: "14px", color: "#94A3B8" }}>Calculated TST:</span>
+                  <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: "700", color: "#F9FAFB", fontSize: "17px" }}>
+                    {calculatedTst} minutes
+                  </span>
                 </div>
               </div>
             </div>
 
-            <div>
-              {contactSubmitted ? (
-                <div style={{
-                  background: "rgba(16, 185, 129, 0.08)",
-                  border: "1px solid rgba(16, 185, 129, 0.25)",
-                  borderRadius: "12px",
-                  padding: "24px",
-                  textAlign: "center"
-                }}>
-                  <div style={{ fontSize: "32px", marginBottom: "12px" }}>✉️</div>
-                  <h3 style={{ fontSize: "18px", fontWeight: 700, color: "#FFFFFF", marginBottom: "8px" }}>Consultation Request Submitted</h3>
-                  <p style={{ fontSize: "13px", color: "#9CA3AF", lineHeight: 1.5 }}>
-                    Thank you. A logistics integration specialist will respond to your corporate email within 24 business hours to coordinate telemetry mapping.
-                  </p>
-                </div>
-              ) : (
-                <form onSubmit={handleContactSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }} className="stack-mobile">
-                    <div>
-                      <label style={{ display: "block", fontSize: "11px", color: "#9CA3AF", marginBottom: "6px", fontWeight: 600 }}>Full Name *</label>
-                      <input
-                        type="text"
-                        required
-                        value={contactName}
-                        onChange={e => setContactName(e.target.value)}
-                        placeholder="Sarah Jenkins"
-                        style={{
-                          width: "100%", padding: "10px 12px", fontSize: "13px",
-                          background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
-                          borderRadius: "8px", color: "#FFFFFF", outline: "none"
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ display: "block", fontSize: "11px", color: "#9CA3AF", marginBottom: "6px", fontWeight: 600 }}>Corporate Email *</label>
-                      <input
-                        type="email"
-                        required
-                        value={contactEmail}
-                        onChange={e => setContactEmail(e.target.value)}
-                        placeholder="s.jenkins@enterprise.com"
-                        style={{
-                          width: "100%", padding: "10px 12px", fontSize: "13px",
-                          background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
-                          borderRadius: "8px", color: "#FFFFFF", outline: "none"
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: "11px", color: "#9CA3AF", marginBottom: "6px", fontWeight: 600 }}>Organization Name</label>
-                    <input
-                      type="text"
-                      value={contactOrg}
-                      onChange={e => setContactOrg(e.target.value)}
-                      placeholder="BioFoods International Ltd"
-                      style={{
-                        width: "100%", padding: "10px 12px", fontSize: "13px",
-                        background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
-                        borderRadius: "8px", color: "#FFFFFF", outline: "none"
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: "11px", color: "#9CA3AF", marginBottom: "6px", fontWeight: 600 }}>Project Details & Fleet Requirements *</label>
-                    <textarea
-                      required
-                      value={contactMessage}
-                      onChange={e => setContactMessage(e.target.value)}
-                      placeholder="Outline your fleet zones, sensor configurations, or specific feedstock verification needs..."
-                      rows={3}
-                      style={{
-                        width: "100%", padding: "10px 12px", fontSize: "13px", fontFamily: "inherit",
-                        background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
-                        borderRadius: "8px", color: "#FFFFFF", outline: "none", resize: "vertical"
-                      }}
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    style={{
-                      background: submitting ? "rgba(16, 185, 129, 0.4)" : "linear-gradient(135deg, #10B981, #059669)",
-                      color: "#0B0F19",
-                      border: "none",
-                      borderRadius: "8px",
-                      padding: "12px 24px",
-                      fontSize: "13px",
-                      fontWeight: 700,
-                      cursor: submitting ? "not-allowed" : "pointer",
-                      transition: "all 0.2s",
-                      textAlign: "center"
-                    }}
-                  >
-                    {submitting ? "PROCESSING REQUEST..." : "SUBMIT CONSULTATION REQUEST"}
-                  </button>
-                </form>
-              )}
+            {/* Map Placeholder */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px" }}>
+              <div style={{ fontSize: "12px", color: "#64748B", textTransform: "uppercase", fontWeight: "600" }}>Bangladesh Route Hazard Map</div>
+              <svg width="180" height="240" viewBox="0 0 200 280" style={{ filter: "drop-shadow(0 10px 20px rgba(0,0,0,0.5))" }}>
+                {/* Simplified outline of Bangladesh Map */}
+                <path d="M 60 20 L 100 10 L 140 30 L 150 70 L 170 120 L 190 180 L 160 220 L 170 270 L 120 270 L 100 240 L 90 260 L 50 240 L 30 200 L 20 150 L 40 100 L 30 70 Z" fill="rgba(16, 185, 129, 0.05)" stroke="rgba(16, 185, 129, 0.2)" strokeWidth="2" />
+                
+                {/* Zone 1: Dhaka (North) */}
+                <circle cx="95" cy="110" r="14" className="map-zone" fill={temp >= 40 ? "#EF444455" : temp >= 33 ? "#F59E0B55" : "#10B98155"} stroke={temp >= 40 ? "#EF4444" : temp >= 33 ? "#F59E0B" : "#10B981"} strokeWidth="2" />
+                <text x="95" y="114" fill="#FFF" fontSize="9" fontWeight="700" textAnchor="middle">Zone A</text>
+
+                {/* Zone 2: Chittagong (South-East) */}
+                <circle cx="145" cy="200" r="14" className="map-zone" fill={temp >= 44 ? "#EF444455" : temp >= 35 ? "#F59E0B55" : "#10B98155"} stroke={temp >= 44 ? "#EF4444" : temp >= 35 ? "#F59E0B" : "#10B981"} strokeWidth="2" />
+                <text x="145" y="204" fill="#FFF" fontSize="9" fontWeight="700" textAnchor="middle">Zone B</text>
+
+                {/* Zone 3: Khulna (South-West) */}
+                <circle cx="55" cy="210" r="14" className="map-zone" fill={temp >= 38 ? "#EF444455" : temp >= 30 ? "#F59E0B55" : "#10B98155"} stroke={temp >= 38 ? "#EF4444" : temp >= 30 ? "#F59E0B" : "#10B981"} strokeWidth="2" />
+                <text x="55" y="214" fill="#FFF" fontSize="9" fontWeight="700" textAnchor="middle">Zone C</text>
+              </svg>
             </div>
           </div>
         </div>
-      </main>
+      </section>
 
-      <footer style={{
-        borderTop: "1px solid rgba(255, 255, 255, 0.06)",
-        padding: "20px 40px",
-        textAlign: "center",
-        fontSize: "11px",
-        color: "#6B7280"
-      }}>
-        CLIMALOGIX AI CLIMATESHIELD · INFINITY AI BUILDFEST 2026 · TEAM GLIDERS · ALL RIGHTS RESERVED
+      {/* SECTION 5 — SOCIAL PROOF & TESTIMONIALS */}
+      <section id="testimonials" style={{ padding: "100px 40px", maxWidth: "1200px", margin: "0 auto" }}>
+        <div className="scroll-animate" style={{ textAlign: "center", marginBottom: "64px" }}>
+          <span style={{ color: "#10B981", fontSize: "11px", fontWeight: "700", letterSpacing: "0.1em", textTransform: "uppercase" }}>Testimonials</span>
+          <h2 style={{ fontSize: "clamp(26px, 4vw, 36px)", fontWeight: "800", marginTop: "12px" }}>Trusted by SMEs Across Bangladesh</h2>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "28px" }} className="stack-mobile">
+          {/* Card 1 */}
+          <div className="glass-panel scroll-animate" style={{ padding: "30px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "#1E293B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>🧔</div>
+              <div>
+                <div style={{ fontWeight: "700", fontSize: "14px" }}>Anwar Hossain</div>
+                <div style={{ fontSize: "11px", color: "#64748B" }}>Agro-Biologicals Supplier, Savar</div>
+              </div>
+            </div>
+            <div style={{ color: "#10B981", fontSize: "12px" }}>★★★★★</div>
+            <p style={{ color: "#CBD5E1", fontSize: "13.5px", lineHeight: "1.6", fontStyle: "italic" }}>
+              "Before ClimaLogix, we lost up to 30% of organic fertilizer active bio-cultures during Dhaka midday heat spikes. Now we route dispatch based on live TST projections."
+            </p>
+          </div>
+
+          {/* Card 2 */}
+          <div className="glass-panel scroll-animate delay-150" style={{ padding: "30px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "#1E293B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>👩</div>
+              <div>
+                <div style={{ fontWeight: "700", fontSize: "14px" }}>Fariha Rahman</div>
+                <div style={{ fontSize: "11px", color: "#64748B" }}>Perishable Retail Merchant</div>
+              </div>
+            </div>
+            <div style={{ color: "#10B981", fontSize: "12px" }}>★★★★★</div>
+            <p style={{ color: "#CBD5E1", fontSize: "13.5px", lineHeight: "1.6", fontStyle: "italic" }}>
+              "The dynamic heat route calculations are highly precise. We haven't had a single batch cargo spoil since transitioning our delivery maps."
+            </p>
+          </div>
+
+          {/* Card 3 */}
+          <div className="glass-panel scroll-animate delay-300" style={{ padding: "30px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "#1E293B", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>👨</div>
+              <div>
+                <div style={{ fontWeight: "700", fontSize: "14px" }}>Sabbir Ahmed</div>
+                <div style={{ fontSize: "11px", color: "#64748B" }}>Chemical Distribution Manager</div>
+              </div>
+            </div>
+            <div style={{ color: "#10B981", fontSize: "12px" }}>★★★★★</div>
+            <p style={{ color: "#CBD5E1", fontSize: "13.5px", lineHeight: "1.6", fontStyle: "italic" }}>
+              "The voice command integration in local Bangla makes it easy for drivers to fetch live weather warnings. Highly recommend ClimaLogix."
+            </p>
+          </div>
+        </div>
+
+        {/* Company Logos Strip */}
+        <div className="scroll-animate" style={{ display: "flex", justifyContent: "center", gap: "16px", flexWrap: "wrap", marginTop: "64px" }}>
+          <span className="logo-badge">SAVAR_AGRO_LTD</span>
+          <span className="logo-badge">BENGAL_CHEM</span>
+          <span className="logo-badge">DHAKA_DISTRIB</span>
+          <span className="logo-badge">GREEN_MERCHANTS</span>
+        </div>
+      </section>
+
+      {/* SECTION 6 — CTA FOOTER BAND */}
+      <section style={{ background: "linear-gradient(135deg, #10B981 0%, #059669 100%)", padding: "80px 40px", textAlign: "center" }}>
+        <div style={{ maxWidth: "800px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "20px" }}>
+          <h2 style={{ fontSize: "clamp(26px, 5vw, 42px)", fontWeight: "800", color: "#0B0F19", lineHeight: "1.1", letterSpacing: "-0.02em" }}>
+            Start Protecting Your Shipments Today
+          </h2>
+          <p style={{ color: "rgba(11, 15, 25, 0.8)", fontSize: "16px", fontWeight: "500", maxWidth: "600px", margin: "0 auto" }}>
+            Free tier available. No credit card required. Deploy in minutes.
+          </p>
+          <div style={{ marginTop: "16px" }}>
+            <button onClick={onRegister} style={{
+              background: "#0B0F19", border: "none", borderRadius: "10px", color: "#10B981",
+              padding: "16px 36px", cursor: "pointer", fontSize: "16px", fontWeight: "800",
+              boxShadow: "0 10px 25px rgba(0,0,0,0.25)", transition: "transform 0.2s"
+            }} onMouseOver={e=>e.target.style.transform="scale(1.05)"} onMouseOut={e=>e.target.style.transform="scale(1)"}>
+              Create Free Account
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer style={{ background: "#0B0F19", borderTop: "1px solid rgba(255,255,255,0.04)", padding: "24px", textAlign: "center" }}>
+        <p style={{ color: "#475569", fontSize: "12px" }}>
+          © {new Date().getFullYear()} ClimaLogix AI. All rights reserved. Dhaka, Bangladesh.
+        </p>
       </footer>
     </div>
   );
 }
 
-function NotificationsView({ onSelectBatch }) {
-  const [notifications, setNotifications] = useState([
-    { id: 1, batchId: "BCH-1082", zone: "Kamrangirchar", feedstock: "Bio-Slurry", status: "pending", time: "10 mins ago" },
-    { id: 2, batchId: "BCH-2144", zone: "Mirpur", feedstock: "Organic Fertilizer", status: "pending", time: "1 hour ago" },
-    { id: 3, batchId: "BCH-0941", zone: "Old Dhaka", feedstock: "Liquid Compost", status: "completed", time: "Yesterday" }
-  ]);
+window.HeroLandingPage = HeroLandingPage;
 
-  const handleAction = (batchId, zone) => {
-    onSelectBatch(batchId, zone);
-  };
-
-  return (
-    <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
-      <SectionLabel icon="🔔" text="Pending Verification Requests" />
-      <Card>
-        <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "20px" }}>
-          Inspectors receive batch registration requests from manufacturers and SMEs. Review telemetry logs and verify parameters.
-        </p>
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {notifications.map(n => (
-            <div key={n.id} style={{
-              background: "var(--bg-input)",
-              border: "1px solid var(--border-primary)",
-              borderRadius: "10px",
-              padding: "16px",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center"
-            }}>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                  <span style={{ fontWeight: 700, fontSize: "14px", fontFamily: "'JetBrains Mono', monospace", color: "var(--text-primary)" }}>{n.batchId}</span>
-                  <span style={{
-                    fontSize: "9px",
-                    fontWeight: 700,
-                    padding: "2px 6px",
-                    borderRadius: "4px",
-                    background: n.status === "pending" ? "rgba(245, 158, 11, 0.12)" : "rgba(16, 185, 129, 0.12)",
-                    color: n.status === "pending" ? "#F59E0B" : "#10B981"
-                  }}>{n.status.toUpperCase()}</span>
-                </div>
-                <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                  Feedstock: <strong>{n.feedstock}</strong> | Zone: <strong>{n.zone}</strong> | Registered: {n.time}
-                </div>
-              </div>
-              {n.status === "pending" && (
-                <button
-                  onClick={() => handleAction(n.batchId, n.zone)}
-                  style={{
-                    background: "#10B981",
-                    color: "#0B0F19",
-                    border: "none",
-                    borderRadius: "8px",
-                    padding: "8px 16px",
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    transition: "all 0.2s"
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.05)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}
-                >
-                  INSPECT BATCH
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-function SettingsView() {
-  const [name, setName] = useState("Demo User");
-  const [badgeId, setBadgeId] = useState("INS-8422-CLX");
-  const [prefZone, setPrefZone] = useState("Mirpur");
-  const [heatwaveAlerts, setHeatwaveAlerts] = useState(true);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const json = await window.apiCall(`/api/profile`);
-        if (json.success && json.data) {
-          setName(json.data.full_name || "Demo User");
-          setBadgeId(json.data.badge_id || "INS-8422-CLX");
-          setPrefZone(json.data.pref_zone || "Mirpur");
-          setHeatwaveAlerts(json.data.heatwave_alerts !== false);
-        }
-      } catch (err) {
-        console.error("Failed to fetch profile:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    if (window.SUPABASE_SESSION_TOKEN || localStorage.getItem("sb-token")) {
-      fetchProfile();
-    } else {
-      setIsLoading(false);
+// Safe component renderer — prevents ReferenceError crashes when a component
+// definition is missing (e.g. not yet ported from climalogix_dashboard.jsx).
+// Uses window[name] string lookup instead of direct reference to avoid
+// ReferenceError on undeclared identifiers.
+function safeComponent(name, props, displayName) {
+  var Component;
+  try {
+    Component = window[name];
+  } catch (e) {
+    Component = undefined;
+  }
+  if (typeof Component === 'function') {
+    return React.createElement(Component, props);
+  }
+  var label = displayName || name;
+  return React.createElement('div', {
+    style: {
+      padding: 40, textAlign: 'center',
+      background: 'var(--bg-input)', borderRadius: 12,
+      border: '1px solid var(--border-primary)', margin: 20,
     }
-  }, []);
-
-  const handleSave = async (e) => {
-    e.preventDefault();
-    try {
-      const json = await window.apiCall(`/api/profile`, { method: "PUT", body: JSON.stringify({
-          full_name: name,
-          badge_id: badgeId,
-          pref_zone: prefZone,
-          heatwave_alerts: heatwaveAlerts
-        })
-      });
-      
-      if (json.success) {
-        showToast("Profile settings successfully saved!", "success");
-      } else {
-        showToast("Failed to save profile: " + (json.error || "Unknown"), "error");
-      }
-    } catch (err) {
-      console.error("Failed to update profile:", err);
-      showToast("Server error during save", "error");
-    }
-  };
-
-  return (
-    <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
-      <SectionLabel icon="⚙️" text="Profile & Inspector Settings" />
-      <Card>
-        <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: "16px", maxWidth: "480px" }}>
-          <div>
-            <label style={{ display: "block", fontSize: "12px", color: "var(--text-secondary)", marginBottom: "6px" }}>Full Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              style={{
-                width: "100%", padding: "10px 12px", background: "var(--bg-input)",
-                border: "1px solid var(--border-primary)", borderRadius: "8px",
-                color: "var(--text-primary)", fontSize: "13px"
-              }}
-            />
-          </div>
-          <div>
-            <label style={{ display: "block", fontSize: "12px", color: "var(--text-secondary)", marginBottom: "6px" }}>Inspector Badge ID / Organization</label>
-            <input
-              type="text"
-              value={badgeId}
-              onChange={e => setBadgeId(e.target.value)}
-              style={{
-                width: "100%", padding: "10px 12px", background: "var(--bg-input)",
-                border: "1px solid var(--border-primary)", borderRadius: "8px",
-                color: "var(--text-primary)", fontSize: "13px", fontFamily: "'JetBrains Mono', monospace"
-              }}
-            />
-          </div>
-          <div>
-            <label style={{ display: "block", fontSize: "12px", color: "var(--text-secondary)", marginBottom: "6px" }}>Primary Observation Zone</label>
-            <select
-              value={prefZone}
-              onChange={e => setPrefZone(e.target.value)}
-              style={{
-                width: "100%", padding: "10px 12px", background: "var(--bg-input)",
-                border: "1px solid var(--border-primary)", borderRadius: "8px",
-                color: "var(--text-primary)", fontSize: "13px"
-              }}
-            >
-              {Object.keys(UHI_ZONES).map(z => (
-                <option key={z} value={z}>{z}</option>
-              ))}
-            </select>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "8px" }}>
-            <input
-              type="checkbox"
-              checked={heatwaveAlerts}
-              onChange={e => setHeatwaveAlerts(e.target.checked)}
-              id="hw-alerts"
-              style={{ cursor: "pointer" }}
-            />
-            <label htmlFor="hw-alerts" style={{ fontSize: "13px", color: "var(--text-secondary)", cursor: "pointer" }}>
-              Enable heatwave and UHI microclimate alerts
-            </label>
-          </div>
-          <button
-            type="submit"
-            style={{
-              marginTop: "12px", padding: "12px", background: "#10B981", color: "#0B0F19",
-              border: "none", borderRadius: "8px", fontWeight: 700, cursor: "pointer", fontSize: "13px"
-            }}
-          >
-            SAVE SETTINGS
-          </button>
-        </form>
-      </Card>
-    </div>
-  );
-}
-
-
-;
-
-function DeliveryView({ userRole, onUpdateTrustScore }) {
-  const [shipments, setShipments] = useState([]);
-  const [optLog, setOptLog] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchDeliveries = async () => {
-      try {
-        const json = await window.apiCall('/api/deliveries');
-          if (json.success && json.data) {
-          setShipments(json.data);
-        }
-      } catch (err) {
-        console.error("Failed to fetch deliveries:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    if (window.SUPABASE_SESSION_TOKEN || localStorage.getItem("sb-token")) {
-      fetchDeliveries();
-    } else {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const handleOptimize = async (shipmentId) => {
-    setShipments(prev => prev.map(s => s.id === shipmentId ? { ...s, optimized: true, temp: "26.5°C", eta: "50 mins" } : s));
-    setOptLog(`[AI OPTIMIZATION] Re-routed shipment ${shipmentId} away from Hazaribagh thermal corridor (+3.5°C) to greenbelt bypass path. Dynamic decay risk reduced!`);
-    
-    try {
-      await window.apiCall(`/api/deliveries/${shipmentId}/optimize`, { method: "PUT" });
-    } catch (err) {
-      console.error("Failed to optimize delivery:", err);
-    }
-  };
-
-  const handleAcknowledge = async (shipmentId) => {
-    setShipments(prev => prev.map(s => s.id === shipmentId ? { ...s, status: "delivered", eta: "completed" } : s));
-    if (onUpdateTrustScore) onUpdateTrustScore(prev => Math.min(100, prev + 4));
-    
-    try {
-      const json = await window.apiCall(`/api/deliveries/${shipmentId}/acknowledge`, { method: "PUT" });
-      if (json.success) {
-        showToast(`Delivery acknowledged! BARI Trust Score increased due to chain-of-custody confirmation.`, "success");
-      } else {
-        showToast("Failed to acknowledge: " + (json.error || "Unknown"), "error");
-      }
-    } catch (err) {
-      console.error("Failed to acknowledge delivery:", err);
-      showToast("Server error during acknowledgment", "error");
-    }
-  };
-
-
-  return (
-    <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
-      <SectionLabel icon="🚚" text="Logistics & Climate-Resilient Routing" />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-        
-        {/* Left Side: Active Shipments */}
-        <div>
-          <Card>
-            <div style={{ fontSize: "14px", fontWeight: 700, marginBottom: "16px" }}>Active Shipments</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              {isLoading ? <div style={{padding: "20px", color: "var(--text-secondary)"}}>Loading deliveries...</div> : shipments.map(s => (
-                <div key={s.id} style={{
-                  background: "var(--bg-input)", border: "1px solid var(--border-primary)",
-                  borderRadius: "10px", padding: "16px"
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                    <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace" }}>{s.id} ({s.batchId})</span>
-                    <span style={{
-                      fontSize: "9px", fontWeight: 700, padding: "2px 6px", borderRadius: "4px",
-                      background: s.status === "delivered" ? "rgba(16, 185, 129, 0.12)" : "rgba(59, 130, 246, 0.12)",
-                      color: s.status === "delivered" ? "#10B981" : "#3B82F6"
-                    }}>{s.status.toUpperCase()}</span>
-                  </div>
-                  
-                  <div style={{ fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: "12px" }}>
-                    <div>Origin: <strong>{s.origin}</strong></div>
-                    <div>Destination: <strong>{s.dest}</strong></div>
-                    <div>ETA: <strong style={{ color: ACCENT.green }}>{s.eta}</strong></div>
-                    <div>Internal Temp: <strong style={{ color: parseFloat(s.temp) > 28 ? ACCENT.amber : ACCENT.green }}>{s.temp}</strong></div>
-                    {s.optimized && <div style={{ color: "#3B82F6", fontWeight: "bold", fontSize: "10px", marginTop: "4px" }}>⚡ UHI CORRIDOR AVOIDED</div>}
-                  </div>
-
-                  <div style={{ display: "flex", gap: "8px" }}>
-                    {s.status === "in-transit" && !s.optimized && (
-                      <button
-                        onClick={() => handleOptimize(s.id)}
-                        style={{
-                          flex: 1, padding: "8px 12px", background: "rgba(59, 130, 246, 0.12)", color: "#3B82F6",
-                          border: "1px solid rgba(59, 130, 246, 0.3)", borderRadius: "6px", fontSize: "11px", fontWeight: 700, cursor: "pointer"
-                        }}
-                      >
-                        OPTIMIZE ROUTE
-                      </button>
-                    )}
-                    {s.status === "in-transit" && (userRole === "buyer" || userRole === "sme") && (
-                      <button
-                        onClick={() => handleAcknowledge(s.id)}
-                        style={{
-                          flex: 1, padding: "8px 12px", background: "rgba(16, 185, 129, 0.12)", color: "#10B981",
-                          border: "1px solid rgba(16, 185, 129, 0.3)", borderRadius: "6px", fontSize: "11px", fontWeight: 700, cursor: "pointer"
-                        }}
-                      >
-                        ACKNOWLEDGE RECEIPT
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-
-        {/* Right Side: Map Simulation & Logs */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          <Card>
-            <div style={{ fontSize: "14px", fontWeight: 700, marginBottom: "16px" }}>Dynamic Route Optimization Map</div>
-            <div style={{
-              height: "180px", background: "rgba(0,0,0,0.3)", border: "1px solid var(--border-primary)",
-              borderRadius: "10px", position: "relative", overflow: "hidden"
-            }}>
-              <DhakaRouteMicroMap />
-            </div>
-          </Card>
-
-          {optLog && (
-            <div style={{
-              background: "rgba(59, 130, 246, 0.08)", border: "1px solid rgba(59, 130, 246, 0.2)",
-              borderRadius: "8px", padding: "12px", fontSize: "11.5px", color: "#3B82F6", fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.4
-            }}>
-              {optLog}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+  },
+    React.createElement('div', { style: { fontSize: 24, marginBottom: 12 } }, '\u{1F6A7}'),
+    React.createElement('div', { style: { fontSize: 13, color: 'var(--text-dim)' } },
+      '\u201C' + label + '\u201D component is not loaded yet.'
+    ),
+    React.createElement('div', { style: { fontSize: 11, color: 'var(--text-muted)', marginTop: 8 } },
+      'This feature will be available in a future update.'
+    )
   );
 }
 
 function CLimaLogixApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [isLanding, setIsLanding] = useState(true);
+  const [showAuthOverlay, setShowAuthOverlay] = useState(false);
+  const [authOverlayMode, setAuthOverlayMode] = useState("login");
+  const [loginWelcome, setLoginWelcome] = useState(null); // { name, role, label }
+
+  // Returns the first (default) tab id for a given role
+  const getDefaultTabForRole = (role) => {
+    if (role === "admin" || role === "inspector") return "notifications";
+    if (role === "processor" || role === "manufacturer") return "batches";
+    return "dashboard"; // buyer / sme / default
+  };
+
+  // Returns a human-friendly role label
+  const getRoleLabel = (role) => {
+    const labels = {
+      admin: "Administrator",
+      inspector: "Quality Inspector",
+      processor: "Producer / Processor",
+      manufacturer: "Manufacturer",
+      buyer: "SME Buyer",
+      sme: "SME Owner",
+      sme_owner: "SME Owner",
+    };
+    return labels[role] || "Member";
+  };
 
   useEffect(() => {
     if (!window.supabaseClient) {
@@ -7998,6 +7026,12 @@ function CLimaLogixApp() {
       if (session) {
         setCurrentUser(session.user);
         window.SUPABASE_SESSION_TOKEN = session.access_token;
+      } else {
+        // Fallback: check for a custom JWT from a previous local login
+        const storedToken = localStorage.getItem("climaLogix_token");
+        if (storedToken) {
+          window.SUPABASE_SESSION_TOKEN = storedToken;
+        }
       }
       setAuthLoading(false);
     }).catch(() => {
@@ -8010,7 +7044,10 @@ function CLimaLogixApp() {
         window.SUPABASE_SESSION_TOKEN = session.access_token;
       } else {
         setCurrentUser(null);
-        window.SUPABASE_SESSION_TOKEN = null;
+        // Fallback: check for a custom JWT from a previous local login
+        const storedToken = localStorage.getItem("climaLogix_token");
+        window.SUPABASE_SESSION_TOKEN = storedToken || null;
+        setLoginWelcome(null);
       }
       setAuthLoading(false);
     });
@@ -8020,12 +7057,7 @@ function CLimaLogixApp() {
     };
   }, []);
 
-  const navigate = window.ReactRouterDOM ? useNavigate() : null;
-  const location = window.ReactRouterDOM ? useLocation() : null;
-  const activeTab = location ? (location.pathname.substring(1) || "dashboard") : "dashboard";
-  const setActiveTab = (tab) => {
-    if (navigate) navigate(`/${tab}`);
-  };
+  const [activeTab, setActiveTab] = useState("dashboard");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [trustScore, setTrustScore] = useState(84);
   // Full deterministic trust score envelope from /api/batch/trust-score
@@ -8035,29 +7067,12 @@ function CLimaLogixApp() {
   const [theme, setTheme] = useState("dark");
   const [dvs, setDvs] = useState(72);
   const [productsList, setProductsList] = useState([]); const [isLoadingProducts, setIsLoadingProducts] = useState(true); useEffect(() => { const fetchProducts = async () => { try { const json = await window.apiCall(`/api/products`); if (json.success && json.data) { setProductsList(json.data); } else { setProductsList([]); } } catch (err) { console.error("Failed to fetch products:", err); } finally { setIsLoadingProducts(false); } }; fetchProducts(); }, []);
-  useEffect(() => {
-    const fetchGlobalStats = async () => {
-      try {
-        const json = await window.apiCall('/api/dashboard');
-        if (json.success && json.data && json.data.stats) {
-          const avgScore = json.data.stats.avgTrustScore;
-          if (typeof avgScore === "number" && avgScore > 0) {
-            setTrustScore(Math.round(avgScore));
-          }
-        }
-      } catch (err) {
-        console.error("Failed to fetch global stats for header:", err);
-      }
-    };
-    fetchGlobalStats();
-    const interval = setInterval(fetchGlobalStats, 30000);
-    return () => clearInterval(interval);
-  }, []);
   const [selectedSme, setSelectedSme] = useState("green_refineries");
   const [customSmeName, setCustomSmeName] = useState("My Custom SME");
   const [verificationBatchId, setVerificationBatchId] = useState("");
   const [verificationDispatchZone, setVerificationDispatchZone] = useState("");
   const [activeZone, setActiveZone] = useState("Mirpur");
+  const [gpsError, setGpsError] = useState(null);
 
   const setTab = (target) => {
     if (typeof target === "number") {
@@ -8065,7 +7080,7 @@ function CLimaLogixApp() {
         0: "dashboard",
         1: "batches",
         2: "verification",
-        3: "microclimate",
+        3: "bi",
         4: "demand",
         5: "bi",
         6: "esg",
@@ -8252,13 +7267,13 @@ function CLimaLogixApp() {
   const currentHour = new Date().getHours();
   const activeUhi = UHI_ZONES[activeZone] || { offset: 0 };
   const solarFactor = getSolarFactor(currentHour);
-  const windCooling = (liveWeather?.windSpeed ?? 8) > 15 ? 1.0 : 0.0;
+  const windCooling = (liveWeather?.windSpeed ?? 8) * 0.08;
   const adjustedHeaderTemp = (liveWeather?.rawTemp ?? liveWeather?.temp ?? 31) + (activeUhi.offset * solarFactor) - windCooling;
 
   const themeVars = THEMES[theme];
 
   const getTabsForRole = (role) => {
-    const isSme = role === "buyer" || role === "sme";
+    const isSme = role === "buyer" || role === "sme" || role === "sme_owner";
     const isInspector = role === "admin" || role === "inspector";
     const isManufacturer = role === "processor" || role === "manufacturer";
 
@@ -8280,6 +7295,7 @@ function CLimaLogixApp() {
     } else {
       return [
         { id: "dashboard",    label: "Overall Dashboard",     icon: "⊞",  layer: "L0" },
+        { id: "inventory",    label: "SME Inventory",         icon: "📲", layer: "L3" },
         { id: "bi",           label: "Microclimate Intel",    icon: "🧠", layer: "L2" },
         { id: "tracking",     label: "Consumer Tracking",     icon: "🔍", layer: "L3" },
         { id: "batches",      label: "Batches",               icon: "📦", layer: "L1" },
@@ -8293,17 +7309,30 @@ function CLimaLogixApp() {
 
   const userRole = currentUser?.user_metadata?.role || currentUser?.role || "buyer";
   const activeTabs = getTabsForRole(userRole);
-  if (selectedSme === "custom_sme" && (userRole === "buyer" || userRole === "sme")) {
+  if (selectedSme === "custom_sme" && (userRole === "buyer" || userRole === "sme" || userRole === "sme_owner")) {
     activeTabs.push({ id: "configurator", label: "SME Configurator", icon: "🛠️" });
   }
   activeTabs.push({ id: "docs", label: "System Docs", icon: "📖" });
 
   useEffect(() => {
     if (currentUser) {
-      const allowed = getTabsForRole(currentUser.user_metadata?.role || currentUser.role);
-      if (allowed.length > 0 && !allowed.find(t => t.id === activeTab)) {
+      const role = currentUser.user_metadata?.role || currentUser.role || "buyer";
+      const defaultTab = getDefaultTabForRole(role);
+      const allowed = getTabsForRole(role);
+      // Always route to the role-specific default tab on (re)login
+      if (allowed.find(t => t.id === defaultTab)) {
+        setActiveTab(defaultTab);
+      } else if (allowed.length > 0) {
         setActiveTab(allowed[0].id);
       }
+      // Show a welcome toast with the user's name and role
+      const name = currentUser.user_metadata?.name ||
+                   currentUser.user_metadata?.full_name ||
+                   (currentUser.email ? currentUser.email.split("@")[0] : "User");
+      setLoginWelcome({ name, role, label: getRoleLabel(role) });
+      // Auto-dismiss welcome toast after 6 seconds
+      const timer = setTimeout(() => setLoginWelcome(null), 6000);
+      return () => clearTimeout(timer);
     }
   }, [currentUser]);
 
@@ -8340,10 +7369,28 @@ function CLimaLogixApp() {
   }
 
   if (!currentUser) {
-    if (isLanding) {
-      return <LandingView onGetStarted={() => setIsLanding(false)} />;
-    }
-    return <AuthPanel onAuthSuccess={(user) => setCurrentUser(user)} onClose={() => setIsLanding(true)} />;
+    return (
+      <>
+        <HeroLandingPage 
+          onLogin={() => { setAuthOverlayMode("login"); setShowAuthOverlay(true); }}
+          onRegister={() => { setAuthOverlayMode("register"); setShowAuthOverlay(true); }} 
+        />
+        {showAuthOverlay && (
+          <AuthPanel 
+            initialMode={authOverlayMode}
+            onClose={() => setShowAuthOverlay(false)} 
+            onAuthSuccess={(user, token) => {
+              // Route to role-specific dashboard immediately
+              const role = user?.user_metadata?.role || user?.role || "buyer";
+              const defaultTab = getDefaultTabForRole(role);
+              setActiveTab(defaultTab);
+              setCurrentUser(user);
+              setShowAuthOverlay(false);
+            }}
+          />
+        )}
+      </>
+    );
   }
 
   return (
@@ -8390,7 +7437,72 @@ function CLimaLogixApp() {
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::selection { background: rgba(16,185,129,0.3); }
+        @keyframes welcomeSlideIn {
+          from { opacity: 0; transform: translateX(110%); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes welcomeSlideOut {
+          from { opacity: 1; transform: translateX(0); }
+          to   { opacity: 0; transform: translateX(110%); }
+        }
+        .welcome-toast {
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          z-index: 9999;
+          min-width: 280px;
+          max-width: 360px;
+          background: rgba(11, 15, 25, 0.95);
+          border: 1px solid rgba(16, 185, 129, 0.4);
+          border-radius: 14px;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(16,185,129,0.08), 0 0 30px rgba(16,185,129,0.1);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          padding: 16px 18px;
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          animation: welcomeSlideIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .welcome-toast-dismiss {
+          background: transparent;
+          border: none;
+          color: #6B7280;
+          cursor: pointer;
+          font-size: 16px;
+          padding: 0;
+          line-height: 1;
+          flex-shrink: 0;
+          transition: color 0.2s;
+        }
+        .welcome-toast-dismiss:hover { color: #EF4444; }
       `}</style>
+
+      {/* ── ROLE-BASED WELCOME TOAST ───────────────────────── */}
+      {loginWelcome && (
+        <div className="welcome-toast">
+          <div style={{
+            width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+            background: "rgba(16,185,129,0.12)",
+            border: "1px solid rgba(16,185,129,0.25)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 18
+          }}>
+            {loginWelcome.role === "admin" || loginWelcome.role === "inspector" ? "🔍" :
+             loginWelcome.role === "processor" || loginWelcome.role === "manufacturer" ? "📦" : "🌿"}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: "Inter", fontSize: 13, fontWeight: 600, color: "#10B981", marginBottom: 3 }}>
+              Welcome back, {loginWelcome.name}!
+            </div>
+            <div style={{ fontFamily: "Inter", fontSize: 12, color: "#9CA3AF", lineHeight: 1.4 }}>
+              Signed in as <span style={{ color: "#F9FAFB", fontWeight: 500 }}>{loginWelcome.label}</span>.
+              Routed to your personalized dashboard.
+            </div>
+          </div>
+          <button className="welcome-toast-dismiss" onClick={() => setLoginWelcome(null)} aria-label="Dismiss">×</button>
+        </div>
+      )}
 
       {/* ── LEFT SLIDING DRAWER NAVBAR ───────────────────────── */}
       <div style={{
@@ -8518,6 +7630,7 @@ function CLimaLogixApp() {
                   await window.supabaseClient.auth.signOut();
                 } else {
                   setCurrentUser(null);
+                  setLoginWelcome(null);
                 }
                 setIsDrawerOpen(false);
               }}
@@ -8590,6 +7703,30 @@ function CLimaLogixApp() {
             <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>CLimaLogix AI</div>
             <div style={{ fontSize: 9, color: "var(--text-dim)", letterSpacing: "0.14em", fontWeight: 500 }}>CLIMATESHIELD · SME DASHBOARD</div>
           </div>
+          {/* New SME Dropdown */}
+          <div style={{ marginLeft: 24, display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-secondary)" }}>
+            <span style={{ fontSize: 18 }}>⭐</span>
+            <select 
+              value={selectedSme}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedSme(val);
+                if (val === "custom_sme") {
+                  setTab("configurator");
+                } else {
+                  setTab("dashboard");
+                }
+              }}
+              style={{
+                background: "transparent", color: "var(--text-primary)", border: "none",
+                outline: "none", cursor: "pointer", fontSize: 14, fontWeight: 500
+              }}
+            >
+              <option value="green_refineries">Green Refineries Ltd. (SME)</option>
+              <option value="agro_eco">Agro Eco SME</option>
+              <option value="custom_sme">🛠️ {customSmeName || "Custom SME"} (Configurator)</option>
+            </select>
+          </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           {/* Generalized Dhaka Division Score Indicator */}
@@ -8657,6 +7794,10 @@ function CLimaLogixApp() {
       {/* ── CONTENT ───────────────────────────────────────────── */}
       <main style={{ padding: "32px 48px", width: "100%", margin: "0 auto" }}>
         {activeTab === "dashboard" && <DashboardView onNewBatch={() => { setTab("batches"); setIsRegisteringBatch(true); }} />}
+
+        {activeTab === "inventory" && (
+          <SMEInventoryTracker activeZone={activeZone} />
+        )}
         
         {activeTab === "batches" && (
           isRegisteringBatch 
@@ -8780,15 +7921,15 @@ function CLimaLogixApp() {
           />
         )}
         {activeTab === "tracking" && <TrackingView />}
-        {activeTab === "delivery" && <DeliveryView userRole={userRole} onUpdateTrustScore={setTrustScore} />}
-        {activeTab === "notifications" && (
-          <NotificationsView onSelectBatch={(id, zone) => {
+        {activeTab === "delivery" && safeComponent("DeliveryView", { userRole, onUpdateTrustScore: setTrustScore })}
+        {activeTab === "notifications" && safeComponent("NotificationsView", {
+          onSelectBatch: (id, zone) => {
             setVerificationBatchId(id);
             setVerificationDispatchZone(zone);
             setActiveTab("verification");
-          }} />
-        )}
-        {activeTab === "settings" && <SettingsView />}
+          }
+        })}
+        {activeTab === "settings" && safeComponent("SettingsView", {})}
 
         {activeTab === "marketplace" && <MarketplaceView products={productsList} isLoading={isLoadingProducts} />}
         {activeTab === "chatbot" && (
@@ -8848,7 +7989,7 @@ const initializeAndMount = async () => {
       ? 'http://localhost:5001'
       : 'https://backsme.onrender.com';
       
-    const configRes = await window.apiCall('/api/config');
+    const configRes = await fetch(`${API_BASE}/api/config`).then(r => r.json());
     if (configRes && configRes.success && configRes.data) {
       window.SUPABASE_URL = configRes.data.supabaseUrl || window.SUPABASE_URL;
       window.SUPABASE_ANON_KEY = configRes.data.supabaseAnonKey || window.SUPABASE_ANON_KEY;
@@ -8870,11 +8011,10 @@ const initializeAndMount = async () => {
       );
     }
     const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(<CLimaLogixApp />);
+    const AppWithRouter = window.ReactRouterDOM ? <window.ReactRouterDOM.BrowserRouter><window.ErrorBoundary><window.AuthRouter /></window.ErrorBoundary></window.ReactRouterDOM.BrowserRouter> : <window.ErrorBoundary><window.AuthRouter /></window.ErrorBoundary>;
+      root.render(AppWithRouter);
   }
 };
 
 initializeAndMount();
-
-
-
+  

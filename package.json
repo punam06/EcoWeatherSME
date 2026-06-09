@@ -26,6 +26,9 @@
     "@babel/parser": "^7.29.7",
     "@supabase/supabase-js": "^2.43.4",
     "dotenv": "^16.4.5",
+    "jsdom": "^29.1.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "ws": "^8.21.0"
   },
   "devDependencies": {
