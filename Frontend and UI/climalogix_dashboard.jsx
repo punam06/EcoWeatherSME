@@ -2392,8 +2392,8 @@ function DashboardView({ onNewBatch }) {
     if (isManual) setIsRefreshing(true);
     try {
       const res = await fetch(`${BACKEND_URL}/api/dashboard`);
-      
-      if (json.success && json.data) {
+        const json = await res.json();
+        if (json.success && json.data) {
         setDashData(json.data);
         setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
       }
