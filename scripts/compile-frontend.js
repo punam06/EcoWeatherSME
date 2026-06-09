@@ -64,8 +64,10 @@ function main() {
   }
 
   // 4. Remove Babel Standalone CDN script
-  const babelCdnRegex = /<script [^>]*src="[^"]*babel\.min\.js"[^>]*><\/script>/i;
-  html = html.replace(babelCdnRegex, '<!-- Babel Standalone removed for optimization -->');
+  // Removed this optimization because we now have many other JSX files (dashboards, components) 
+  // that rely on runtime Babel compilation.
+  // const babelCdnRegex = /<script [^>]*src="[^"]*babel\.min\.js"[^>]*><\/script>/i;
+  // html = html.replace(babelCdnRegex, '<!-- Babel Standalone removed for optimization -->');
 
   fs.writeFileSync(indexPath, html);
   console.log('Successfully optimized index.html!');
