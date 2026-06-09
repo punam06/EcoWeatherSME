@@ -137,7 +137,7 @@
       crossorigin
       src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"
     ></script>
-    <script crossorigin src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.5/babel.min.js"></script>
+    <!-- Babel Standalone removed for optimization -->
 
     <style>
       select option {
@@ -383,7 +383,7 @@
     <div id="root"></div>
 
     <script src="./lang/languageManager.js"></script>
-    <script type="text/babel" src="./ThreeScene.js"></script>
+    <script src="./ThreeScene.compiled.js"></script>
     
         <!-- React Router -->
     <script src="https://unpkg.com/react-router-dom@6/umd/react-router-dom.production.min.js"></script>
@@ -398,7 +398,7 @@
     <script type="text/babel" src="./components/CheckoutDialog.jsx"></script>
     
     <!-- Main dashboard script last -->
-    <script type="text/babel" src="./climalogix_dashboard.jsx"></script>
+    <script src="./climalogix_dashboard.js"></script>
 
     <!-- Keep the initialization logic that was at the bottom of the inline script -->
     <script type="text/babel">

@@ -391,23 +391,34 @@ app.get('/api/dashboard', async (req: Request, res: Response) => {
   }
 
   if (!stats) {
-    const now = new Date();
-    const seed = now.getFullYear() * 100 + now.getMonth() * 10 + now.getDate();
-    const t = (seed % 40) + 100;
-    const c = Math.round(t * 0.83);
+    const { getBatchesList } = require('./lib/services/batchStore.service');
+    const localBatches = getBatchesList();
+    const total = localBatches.length;
+    const certified = localBatches.filter((b: any) => b.status === 'certified').length;
+    const active = localBatches.filter((b: any) => ['active', 'pending'].includes(b.status)).length;
+    const avgTrust = total > 0 ? Math.round(localBatches.reduce((a: number, b: any) => a + (b.trust_score || 0), 0) / total * 10) / 10 : 0;
+    const totalWeightKg = localBatches.reduce((a: number, b: any) => a + (b.weight_kg || 0), 0);
+    const weightLabel = totalWeightKg >= 1000 ? `${(totalWeightKg / 1000).toFixed(1)} t` : `${totalWeightKg} kg`;
+
     stats = {
-      totalBatches: t, certifiedBatches: c, activeBatches: Math.round(t * 0.06),
-      certRate: `${Math.round((c / t) * 100)}%`, avgTrustScore: 79 + (seed % 7),
-      totalWeight: `${(t * 0.061).toFixed(1)} t`, plasticSaved: t * 240,
-      co2Sequestered: Math.round(t * 61 * 0.25),
+      totalBatches: total, certifiedBatches: certified, activeBatches: active,
+      certRate: total > 0 ? `${Math.round((certified / total) * 100)}%` : '0%',
+      avgTrustScore: avgTrust, totalWeight: weightLabel,
+      plasticSaved: total * 240, co2Sequestered: Math.round(totalWeightKg * 0.25),
     };
-    recentActivity = [
-      { icon: '🛡️', colorType: 'green', text: `Batch BCH-${t} certified — Trust Score ${82 + (seed % 12)}`, time: '3 min ago' },
-      { icon: '📈', colorType: 'amber', text: `DVS simulation for Old Dhaka route — Score ${60 + (seed % 18)} (Caution)`, time: '21 min ago' },
-      { icon: '🚚', colorType: 'green', text: `Batch BCH-${t - 2} dispatched to Mirpur`, time: '1 hr ago' },
-      { icon: '⚠️', colorType: 'red',   text: 'High thermal hazard in Old Dhaka — delay dispatches until 5 PM', time: '2 hr ago' },
-      { icon: '📦', colorType: 'blue',  text: `New biochar batch BCH-${t - 1} created (${180 + (seed % 40)} kg)`, time: '3 hr ago' },
-    ];
+
+    recentActivity = localBatches.slice(0, 5).map((r: any) => {
+      const elapsed = Math.round((Date.now() - new Date(r.created_at).getTime()) / 60000);
+      const timeAgo = elapsed < 60 ? `${elapsed} min ago` : elapsed < 1440 ? `${Math.round(elapsed / 60)} hr ago` : `${Math.round(elapsed / 1440)} day ago`;
+      const isCert = r.status === 'certified';
+      const isDispatched = ['dispatched', 'delivered'].includes(r.status);
+      return {
+        icon: isCert ? '🛡️' : isDispatched ? '🚚' : '📦',
+        colorType: isCert ? 'green' : isDispatched ? 'green' : 'blue',
+        text: isCert ? `Batch ${r.batch_number} certified — Trust Score ${r.trust_score}` : isDispatched ? `Batch ${r.batch_number} dispatched to ${r.destination_zone || 'destination'}` : `New ${r.product_name || 'batch'} ${r.batch_number} created (${r.weight_kg || 0} kg)`,
+        time: timeAgo,
+      };
+    });
   }
 
   res.json({ success: true, data: { stats, recentActivity, heatmap, liveData, weatherUpdatedAt: new Date().toISOString() } });

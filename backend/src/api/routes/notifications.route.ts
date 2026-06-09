@@ -12,6 +12,7 @@
  */
 
 import { Router, Request, Response, NextFunction } from 'express';
+import nodemailer from 'nodemailer';
 import { authenticateJWT } from '../../middleware/authenticateJWT';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
 
