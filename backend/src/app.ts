@@ -46,10 +46,12 @@ import climateDVSRouter from './api/routes/climateDVS.route';
 import aiRecommendRouter from './api/routes/aiRecommend.route';
 import agentRouter from './api/routes/agent.route';
 import aiChatRouter from './api/routes/aiChat.route';
+import authRouter from './api/routes/auth.route';
 import esgRouter from './api/routes/esg.route';
 import esgReportRouter from './api/routes/esgReport.route';
 import qaRouter from './api/routes/qa.route';
 import verifyRouter from './api/routes/verify.route';
+import qrRouter from './api/routes/qr.route';
 import batchRouter from './api/routes/batch.route';
 import checkoutRouter from './api/routes/checkout.route';
 import spotPricingRouter from './api/routes/spotPricing.route';
@@ -238,8 +240,8 @@ app.get('/api/test-db', async (_req: Request, res: Response) => {
 // NEW TYPED API ROUTES (TypeScript, Zod-validated)
 // ═══════════════════════════════════════════════════════════════
 
-// Removed custom authRouter, using Supabase Auth
-// app.use('/api/auth', authRouter);
+// Auth — validates against public.users table with Argon2
+app.use('/api/auth', authRouter);
 app.use('/api/batch/trust-score', trustScoreRouter);
 app.use('/api/climate/dvs', climateDVSRouter);
 
@@ -258,6 +260,7 @@ app.use('/api/esg', esgRouter);
 app.use('/api/esg/report', esgReportRouter);
 app.use('/api/qa', qaRouter);
 app.use('/api/verify', verifyRouter);
+app.use('/api/qr', qrRouter);
 app.use('/api/language', languageRouter);
 app.use('/api/checkout', checkoutRouter);
 app.use('/api/spot-pricing', spotPricingRouter);

@@ -188,3 +188,75 @@ export interface ProvenanceChain {
   verified: boolean;
 }
 
+// ─── QR Provenance Lifecycle Types ───────────────────────────
+
+/** Birth-certificate metrics declared by the producer at intake. */
+export interface InitialMetrics {
+  ph: number;
+  ec: number;
+  moisture_pct: number;
+  category: ProductCategory;
+  fermentation_days?: number;
+  temperature_celsius?: number;
+  em1_ratio?: number;
+  /** Set to true after inspector verification — immutable thereafter. */
+  locked?: boolean;
+  /** SHA-256 of the canonical birth-certificate payload. */
+  provenance_hash?: string;
+}
+
+export type CustodyActionType = 'production' | 'inspection' | 'sme_receipt';
+
+export interface CustodyLedgerEntry {
+  id: string;
+  batch_id: string;
+  actor_id: string;
+  action_type: CustodyActionType;
+  gps_latitude?: number | null;
+  gps_longitude?: number | null;
+  timestamp: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface QRGenerateResult {
+  id: string;
+  batch_number: string;
+  status: 'created';
+  initial_metrics: InitialMetrics;
+  trust: {
+    score: number;
+    grade: 'A' | 'B' | 'C' | 'F';
+    isViable: boolean;
+    reference: string;
+    breakdown: { ph: number; ec: number; temp: number; ratio: number; days: number };
+    notes: string[];
+  };
+  provenance_hash: string;
+  verification_url: string;
+  created_at: string;
+}
+
+export interface QRInspectResult {
+  id: string;
+  status: 'inspected';
+  inspector_id: string;
+  initial_metrics: InitialMetrics;
+  custody_event_id: string;
+  inspected_at: string;
+}
+
+export interface SaleWindowRecommendations {
+  best_sale_window: string;
+  risk_level: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME';
+  days_viable: number;
+}
+
+export interface QRSMEClaimResult {
+  product_saved: boolean;
+  batch_id: string;
+  status: 'sme_inventory';
+  sme_owner_id: string;
+  custody_event_id: string;
+  recommendations: SaleWindowRecommendations;
+}
+

@@ -44,6 +44,7 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
   // Clear stale tokens/sessions on mount
   useEffect(() => {
     localStorage.removeItem("climaLogix_token");
+    window.SUPABASE_SESSION_TOKEN = null;
     if (window.supabaseClient) {
       window.supabaseClient.auth.signOut().catch(() => {});
     }
@@ -237,29 +238,82 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
     }
 
     try {
-      const sb = window.supabaseClient;
-      if (!sb) throw new Error("Supabase client not initialized");
-
       const backendRole = uiRole === "producer" ? "processor" : uiRole === "inspector" ? "admin" : "buyer";
 
-      let result;
+      // Determine API base URL (mirrors logic from api-integration.js)
+      const IS_STATIC = window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const API_BASE = IS_STATIC ? 'http://localhost:5001' : 'https://backsme.onrender.com';
+
       if (mode === "login") {
-        result = await sb.auth.signInWithPassword({ email, password });
-      } else {
-        result = await sb.auth.signUp({
-          email,
-          password,
-          options: {
-            data: { name, role: backendRole }
-          }
+        // Try backend auth first (public.users + Argon2)
+        const loginRes = await fetch(`${API_BASE}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
         });
-      }
+        const loginData = await loginRes.json();
 
-      if (result.error) {
-        throw new Error(result.error.message || "Authentication failed");
-      }
+        if (loginRes.ok && loginData.success) {
+          // Backend login succeeded
+          setIsSuccess(true);
+          localStorage.setItem("climaLogix_token", loginData.token);
+          window.SUPABASE_SESSION_TOKEN = loginData.token;
+          // Also store user info for dashboard
+          localStorage.setItem("climaLogix_user", JSON.stringify(loginData.user));
+          setTimeout(() => {
+            if (onAuthSuccess) onAuthSuccess(loginData.user, loginData.token);
+            if (onClose) onClose();
+          }, 800);
+          return;
+        }
 
-      if (mode === "register") {
+        // Backend failed — fall back to Supabase Auth
+        const sb = window.supabaseClient;
+        if (!sb) throw new Error("Authentication service unavailable");
+
+        const result = await sb.auth.signInWithPassword({ email, password });
+        if (result.error) throw new Error(result.error.message || "Authentication failed");
+
+        setIsSuccess(true);
+        const token = result.data.session?.access_token;
+        localStorage.setItem("climaLogix_token", token);
+        window.SUPABASE_SESSION_TOKEN = token;
+        setTimeout(() => {
+          if (onAuthSuccess) onAuthSuccess(result.data.user, token);
+          if (onClose) onClose();
+        }, 800);
+      } else {
+        // Register — try backend first
+        const signupRes = await fetch(`${API_BASE}/api/auth/signup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, name, role: backendRole }),
+        });
+        const signupData = await signupRes.json();
+
+        if (signupRes.ok && signupData.success) {
+          // Backend signup succeeded — auto-login
+          setIsSuccess(true);
+          localStorage.setItem("climaLogix_token", signupData.token);
+          window.SUPABASE_SESSION_TOKEN = signupData.token;
+          localStorage.setItem("climaLogix_user", JSON.stringify(signupData.user));
+          setTimeout(() => {
+            if (onAuthSuccess) onAuthSuccess(signupData.user, signupData.token);
+            if (onClose) onClose();
+          }, 800);
+          return;
+        }
+
+        // Backend signup failed — fall back to Supabase Auth
+        const sb = window.supabaseClient;
+        if (!sb) throw new Error("Registration service unavailable");
+
+        const result = await sb.auth.signUp({
+          email, password,
+          options: { data: { name, role: backendRole } },
+        });
+        if (result.error) throw new Error(result.error.message || "Registration failed");
+
         setIsSuccess(true);
         setSuccessMsg("Account created — please sign in");
         setTimeout(() => {
@@ -268,23 +322,9 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
           setPassword("");
           setConfirmPassword("");
         }, 2000);
-      } else {
-        setIsSuccess(true);
-        
-        // Save auth token/session correctly
-        const token = result.data.session?.access_token;
-        localStorage.setItem("climaLogix_token", token);
-        
-        setTimeout(() => {
-          if (onAuthSuccess) {
-            onAuthSuccess(result.data.user, token);
-          }
-          if (onClose) onClose();
-        }, 800);
       }
     } catch (err) {
       setError(err.message || "Connection failed. Please try again.");
-      // Clear password field on failed attempt
       setPassword("");
       if (mode === "register") setConfirmPassword("");
     } finally {

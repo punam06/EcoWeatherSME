@@ -177,3 +177,119 @@ export const VerifyBatchRequestSchema = z
   .strict();
 
 export type VerifyBatchRequest = z.infer<typeof VerifyBatchRequestSchema>;
+
+// ─── QR Provenance Schemas ──────────────────────────────────
+
+const gpsLatitude = z.number().min(-90).max(90);
+const gpsLongitude = z.number().min(-180).max(180);
+
+/** Normalized producer birth-certificate metrics (snake_case). */
+export const QRInitialMetricsSchema = z
+  .object({
+    ph: z.number().min(0).max(14).optional(),
+    pH: z.number().min(0).max(14).optional(),
+    ec: z.number().min(0).max(20).optional(),
+    EC: z.number().min(0).max(20).optional(),
+    moisture: z.number().min(0).max(100).optional(),
+    moisture_pct: z.number().min(0).max(100).optional(),
+    category: ProductCategorySchema,
+    fermentation_days: z.number().int().min(0).max(365).optional(),
+    temperature_celsius: z.number().min(-50).max(100).optional(),
+    em1_ratio: z.number().min(0).max(1).optional(),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    if (data.ph === undefined && data.pH === undefined) {
+      ctx.addIssue({ code: 'custom', message: 'ph is required', path: ['ph'] });
+    }
+    if (data.ec === undefined && data.EC === undefined) {
+      ctx.addIssue({ code: 'custom', message: 'ec is required', path: ['ec'] });
+    }
+    if (data.moisture === undefined && data.moisture_pct === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'moisture (or moisture_pct) is required',
+        path: ['moisture'],
+      });
+    }
+  })
+  .transform((data) => ({
+    ph: data.ph ?? data.pH!,
+    ec: data.ec ?? data.EC!,
+    moisture_pct: data.moisture_pct ?? data.moisture!,
+    category: data.category,
+    fermentation_days: data.fermentation_days,
+    temperature_celsius: data.temperature_celsius,
+    em1_ratio: data.em1_ratio,
+  }));
+
+export type QRInitialMetrics = z.infer<typeof QRInitialMetricsSchema>;
+
+export const QRGenerateRequestSchema = z
+  .object({
+    initial_metrics: QRInitialMetricsSchema,
+    producer_id: z.string().uuid().optional(),
+    is_sensor_verified: z.boolean().optional().default(false),
+    product_name: z.string().min(1).max(255).optional(),
+    feedstock_type: z.string().min(1).max(255).optional(),
+  })
+  .strict();
+
+export type QRGenerateRequest = z.infer<typeof QRGenerateRequestSchema>;
+
+export const QRInspectRequestSchema = z
+  .object({
+    notes: z.string().max(2000).optional(),
+    bsti_credential: z
+      .string()
+      .regex(/^BSTI-\d{4,}$/, 'BSTI credential must match BSTI-#### format')
+      .optional(),
+    gps_latitude: gpsLatitude.optional(),
+    gps_longitude: gpsLongitude.optional(),
+    metadata: z.record(z.unknown()).optional(),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    const hasLat = data.gps_latitude !== undefined;
+    const hasLng = data.gps_longitude !== undefined;
+    if (hasLat !== hasLng) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'gps_latitude and gps_longitude must be provided together',
+        path: ['gps_latitude'],
+      });
+    }
+  });
+
+export type QRInspectRequest = z.infer<typeof QRInspectRequestSchema>;
+
+export const QRSMEClaimRequestSchema = z
+  .object({
+    zone: z.string().min(1).max(100).optional(),
+    gps_latitude: gpsLatitude.optional(),
+    gps_longitude: gpsLongitude.optional(),
+    storage_condition: z.enum(['shaded', 'ambient', 'refrigerated']).optional(),
+    metadata: z.record(z.unknown()).optional(),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    const hasLat = data.gps_latitude !== undefined;
+    const hasLng = data.gps_longitude !== undefined;
+    if (hasLat !== hasLng) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'gps_latitude and gps_longitude must be provided together',
+        path: ['gps_latitude'],
+      });
+    }
+  });
+
+export type QRSMEClaimRequest = z.infer<typeof QRSMEClaimRequestSchema>;
+
+export const BatchUuidParamSchema = z.string()
+  .min(1, 'batch id is required')
+  .max(100, 'batch id too long')
+  .refine(
+    (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v) || /^BCH-\d{6,}$/i.test(v),
+    { message: 'batch id must be a valid UUID or BCH- batch number' },
+  );

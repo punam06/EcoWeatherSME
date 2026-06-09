@@ -1,21 +1,61 @@
 import { Request, Response, NextFunction } from 'express';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import jwt from 'jsonwebtoken';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+let _supabase: SupabaseClient | null = null;
+function isSupabaseKeyValid(): boolean {
+  const url = process.env.SUPABASE_URL ?? '';
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+  return url.length > 0 && key.length > 0
+    && !url.includes('your-project-id')
+    && !key.includes('your-');
+}
+function getSupabase(): SupabaseClient | null {
+  if (!_supabase && isSupabaseKeyValid()) {
+    _supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+  }
+  return _supabase;
+}
+
+/**
+ * Attempts to verify a token against both Supabase Auth and custom JWT_SECRET.
+ * Returns the user object on success, or null on failure.
+ */
+function getJwtSecret(): string {
+  return process.env.JWT_SECRET || 'climalogix-dev-secret-change-in-production';
+}
+
+async function resolveUser(token: string): Promise<Record<string, unknown> | null> {
+  // Try Supabase Auth first
+  const sb = getSupabase();
+  if (sb) {
+    const { data: { user }, error } = await sb.auth.getUser(token).catch(() => ({ data: { user: null }, error: new Error('Supabase unreachable') }));
+    if (!error && user) return user as unknown as Record<string, unknown>;
+  }
+
+  // Fallback: custom JWT signed with JWT_SECRET
+  try {
+    const decoded = jwt.verify(token, getJwtSecret()) as { sub: string; email: string; role: string };
+    return {
+      id: decoded.sub,
+      email: decoded.email,
+      role: decoded.role,
+      user_metadata: { role: decoded.role },
+      app_metadata: { role: decoded.role },
+    };
+  } catch { /* not a custom JWT either */ }
+
+  return null;
+}
 
 export async function authenticateJWT(req: Request, res: Response, next: NextFunction) {
-
-
   const authHeader = req.headers['authorization'];
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Missing or invalid authorization header' });
   }
   const token = authHeader.split(' ')[1];
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  if (error || !user) {
+  const user = await resolveUser(token);
+  if (!user) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
   (req as any).user = user;
@@ -26,8 +66,8 @@ export async function optionalJWT(req: Request, res: Response, next: NextFunctio
   const authHeader = req.headers['authorization'];
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.split(' ')[1];
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    if (!error && user) {
+    const user = await resolveUser(token);
+    if (user) {
       (req as any).user = user;
     }
   }
@@ -36,11 +76,9 @@ export async function optionalJWT(req: Request, res: Response, next: NextFunctio
 
 export function requireRole(...roles: string[]) {
   return (req: Request, res: Response, next: NextFunction) => {
-
-
     const user = (req as any).user;
     const userRole: string | undefined =
-      user?.app_metadata?.role ?? user?.user_metadata?.role ?? undefined;
+      user?.app_metadata?.role ?? user?.user_metadata?.role ?? user?.role ?? undefined;
 
     if (!userRole || !roles.includes(userRole)) {
       return res.status(403).json({

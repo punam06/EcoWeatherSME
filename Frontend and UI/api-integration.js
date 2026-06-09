@@ -187,6 +187,13 @@ const APIClient = {
   // QR scan history for a batch
   getBatchScans: (batchId) => APIClient.request(`/batches/${encodeURIComponent(batchId)}/scans`),
 
+  // SME inventory intake — QR claim + climate sale-window advisory
+  claimSMEInventory: (batchId, data = {}) =>
+    APIClient.request(`/qr/sme-claim/${encodeURIComponent(batchId)}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
   // Forecast
   getDemandForecast: () => APIClient.request('/demand-forecast'),
 
