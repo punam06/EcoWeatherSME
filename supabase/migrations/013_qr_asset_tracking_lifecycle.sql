@@ -371,12 +371,14 @@ CREATE POLICY "Admin full batches"
 ALTER TABLE public.batch_custody_ledger ENABLE ROW LEVEL SECURITY;
 
 -- 5b-i. Public read: QR scans show the full custody chain.
+DROP POLICY IF EXISTS "Public read custody ledger" ON public.batch_custody_ledger;
 CREATE POLICY "Public read custody ledger"
   ON public.batch_custody_ledger
   FOR SELECT
   USING (true);
 
 -- 5b-ii. Producers can INSERT 'production' events.
+DROP POLICY IF EXISTS "Producer insert production events" ON public.batch_custody_ledger;
 CREATE POLICY "Producer insert production events"
   ON public.batch_custody_ledger
   FOR INSERT
@@ -388,6 +390,7 @@ CREATE POLICY "Producer insert production events"
   );
 
 -- 5b-iii. Inspectors can INSERT 'inspection' events.
+DROP POLICY IF EXISTS "Inspector insert inspection events" ON public.batch_custody_ledger;
 CREATE POLICY "Inspector insert inspection events"
   ON public.batch_custody_ledger
   FOR INSERT
@@ -399,6 +402,7 @@ CREATE POLICY "Inspector insert inspection events"
   );
 
 -- 5b-iv. SME owners / buyers / processors can INSERT 'sme_receipt' events.
+DROP POLICY IF EXISTS "SME insert receipt events" ON public.batch_custody_ledger;
 CREATE POLICY "SME insert receipt events"
   ON public.batch_custody_ledger
   FOR INSERT
@@ -410,6 +414,7 @@ CREATE POLICY "SME insert receipt events"
   );
 
 -- 5b-v. Service role has full access (for backend orchestration).
+DROP POLICY IF EXISTS "Service role full custody ledger" ON public.batch_custody_ledger;
 CREATE POLICY "Service role full custody ledger"
   ON public.batch_custody_ledger
   FOR ALL
@@ -418,6 +423,7 @@ CREATE POLICY "Service role full custody ledger"
   WITH CHECK (true);
 
 -- 5b-vi. Admin has full access.
+DROP POLICY IF EXISTS "Admin full custody ledger" ON public.batch_custody_ledger;
 CREATE POLICY "Admin full custody ledger"
   ON public.batch_custody_ledger
   FOR ALL
