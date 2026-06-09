@@ -47,7 +47,7 @@ async function apiCall(path, method = 'GET', body = null) {
     };
     if (body) options.body = JSON.stringify(body);
 
-    const response = await fetch(${BASE_URL}, options);
+    const response = await fetch(`${BASE_URL}${path}`, options);
 
     if (response.status === 401) {
       localStorage.removeItem('climalogix_token');
