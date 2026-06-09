@@ -554,7 +554,7 @@ function NotificationsView({ lang }) {
   );
 }
 
-export default function InspectorDashboard({ user, onLogout }) {
+function InspectorDashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [lang, setLang] = useState('en');
 

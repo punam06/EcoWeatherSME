@@ -4,7 +4,7 @@
 // Wait, the prompt says: "wraps DhakaRouteMicroMap and ZoneDetailPanel in a glass-card div with a title, manages activeZone state"
 // If it's loaded as a Babel script in browser, we can just use DhakaRouteMicroMap and ZoneDetailPanel as standard JSX elements since they will be in global scope from previous scripts.
 
-export default function RouteExposureMapCard() {
+function RouteExposureMapCard() {
   const [activeZone, setActiveZone] = useState("Mirpur");
 
   return (
@@ -41,3 +41,5 @@ export default function RouteExposureMapCard() {
 }
 
 
+
+window.RouteExposureMapCard = RouteExposureMapCard;

@@ -14,7 +14,7 @@ function getUHILabel(offset) {
   return "Low (Class D)";
 }
 
-export default function ZoneDetailPanel({ activeZone, setActiveZone }) {
+function ZoneDetailPanel({ activeZone, setActiveZone }) {
   const baseTemp = 32; // Default base
   const zone = UHI_ZONES[activeZone] || UHI_ZONES["Mirpur"];
   const adjustedTemp = baseTemp + zone.offset;
@@ -65,3 +65,5 @@ export default function ZoneDetailPanel({ activeZone, setActiveZone }) {
 }
 
 
+
+window.ZoneDetailPanel = ZoneDetailPanel;

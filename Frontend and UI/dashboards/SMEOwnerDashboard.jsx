@@ -508,7 +508,7 @@ function NotificationsView({ lang }) {
   );
 }
 
-export default function SMEOwnerDashboard({ user, onLogout }) {
+function SMEOwnerDashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [lang, setLang] = useState('en');
 

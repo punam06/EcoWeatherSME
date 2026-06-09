@@ -575,7 +575,7 @@ function DeliveriesView({ lang }) {
   );
 }
 
-export default function ProducerDashboard({ user, onLogout }) {
+function ProducerDashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [lang, setLang] = useState('en');
 
