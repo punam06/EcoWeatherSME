@@ -1283,7 +1283,7 @@ function MicroclimateSimulator({ trustScore, dvs: parentDvs, setDvs: setParentDv
             <div style={{ fontSize: 12, color: "var(--text-primary)", lineHeight: 1.7 }}>{advice}</div>
           </div>
 
-          <DispatchCalendar baseTemp={baseTemp} zone={zone} trustScore={trustScore} windSpeed={windSpeed} packaging={packaging} />
+          {safeComponent("DispatchCalendar", { baseTemp, zone, trustScore, windSpeed, packaging })}
         </>
       )}
     </div>
@@ -7895,7 +7895,7 @@ function CLimaLogixApp() {
           <div style={{ marginTop: 20 }}>
             <SectionLabel icon="🪪" text="Verify a Claim" />
             <Card>
-              <ClaimVerifier onSelectBatch={(id) => setVerificationBatchId(id)} />
+              {safeComponent("ClaimVerifier", { onSelectBatch: (id) => setVerificationBatchId(id) })}
             </Card>
           </div>
           </>
@@ -7912,7 +7912,7 @@ function CLimaLogixApp() {
             detectGpsLocation={detectGpsLocation} gpsError={gpsError}
           />
         )}
-        {activeTab === "tracking" && <TrackingView />}
+        {activeTab === "tracking" && safeComponent("TrackingView", {})}
         {activeTab === "delivery" && safeComponent("DeliveryView", { userRole, onUpdateTrustScore: setTrustScore })}
         {activeTab === "notifications" && safeComponent("NotificationsView", {
           onSelectBatch: (id, zone) => {
@@ -8003,7 +8003,7 @@ const initializeAndMount = async () => {
       );
     }
     const root = ReactDOM.createRoot(document.getElementById("root"));
-    const AppWithRouter = window.ReactRouterDOM ? <window.ReactRouterDOM.BrowserRouter><window.ErrorBoundary><window.AuthRouter /></window.ErrorBoundary></window.ReactRouterDOM.BrowserRouter> : <window.ErrorBoundary><window.AuthRouter /></window.ErrorBoundary>;
+    const AppWithRouter = window.ReactRouterDOM ? <window.ReactRouterDOM.BrowserRouter><window.ErrorBoundary><CLimaLogixApp /></window.ErrorBoundary></window.ReactRouterDOM.BrowserRouter> : <window.ErrorBoundary><CLimaLogixApp /></window.ErrorBoundary>;
       root.render(AppWithRouter);
   }
 };
