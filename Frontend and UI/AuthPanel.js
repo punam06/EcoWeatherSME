@@ -14,7 +14,6 @@
       - Resolved: Added high-visibility Back to Home button at top left.
    ═══════════════════════════════════════════════════════════════ */
 
-
 function AuthPanel({
   onClose,
   onAuthSuccess,
