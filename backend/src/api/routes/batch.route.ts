@@ -45,7 +45,7 @@ const RecordReadingsSchema = z.object({
 }).strict();
 
 // GET /api/batches
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', authenticateJWT, async (req: Request, res: Response) => {
   try {
     const rawProcessorId = req.query.processor_id;
     const processorId = typeof rawProcessorId === 'string' ? rawProcessorId.trim() : undefined;
@@ -81,7 +81,7 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 // GET /api/batches/:id
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', authenticateJWT, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!id || typeof id !== 'string' || id.length > 100) {

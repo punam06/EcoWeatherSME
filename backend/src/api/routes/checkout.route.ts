@@ -14,6 +14,7 @@ import rateLimit from 'express-rate-limit';
 import { v4 as uuidv4 } from 'uuid';
 import { parseCheckoutIntent } from '../../lib/services/intentParser.service';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
+import { authenticateJWT } from '../../middleware/authenticateJWT';
 
 const router = Router();
 
@@ -43,12 +44,66 @@ const checkoutRateLimiter = rateLimit({
 });
 
 /**
+ * POST /api/checkout
+ * Standard checkout endpoint
+ */
+router.post(
+  '/',
+  authenticateJWT,
+  checkoutRateLimiter,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { product_id, quantity_kg, total_price_bdt, dvs_score, batch_id } = req.body;
+      const userId = (req as any).user?.id;
+
+      if (!product_id || !quantity_kg || !total_price_bdt) {
+        res.status(400).json({ success: false, message: 'Missing required order fields.' });
+        return;
+      }
+
+      if (!isSupabaseConfigured()) {
+        res.status(500).json({ success: false, error: 'Database not configured' });
+        return;
+      }
+
+      const supabase = getSupabaseClient();
+
+      // Insert order into database
+      const { data, error } = await supabase
+        .from('orders')
+        .insert({
+          user_id: userId,
+          product_id,
+          quantity_kg,
+          total_price_bdt,
+          dvs_score: dvs_score || null,
+          batch_id: batch_id || null,
+          status: 'pending',
+          created_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single();
+
+      if (error) throw error;
+
+      res.status(201).json({
+        success: true,
+        data: { order_id: data.id },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
  * POST /api/checkout/voice
  *
  * Request Body: { transcript, sessionId, availableProducts }
  */
 router.post(
   '/voice',
+  authenticateJWT,
   checkoutRateLimiter,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {

@@ -7,6 +7,8 @@ dotenv.config();
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+import { generateEmbedding } from '../backend/src/lib/services/embedding.service';
+
 // BARI standards knowledge data chunks
 const bariStandards = [
   {
@@ -45,8 +47,14 @@ async function seed() {
     console.log(`\n⏳ Seeding standard: ${doc.standard_name}...`);
 
     // In a production app, we would query OpenAI or another LLM embedding service to get a 1536-dimensional vector.
-    // For seeding baseline fallback knowledge, we will generate a normalized mock vector of size 1536.
-    const mockVector = Array.from({ length: 1536 }, () => Number((Math.random() * 0.05).toFixed(6)));
+    // We now use generateEmbedding utility.
+    let mockVector: number[] = [];
+    try {
+      mockVector = await generateEmbedding(doc.document_chunk);
+    } catch (err: any) {
+      console.error(`❌ Skipping ${doc.standard_name} due to embedding error:`, err.message);
+      continue;
+    }
 
     const { error } = await supabase
       .from('compliance_knowledge_base')
@@ -59,7 +67,7 @@ async function seed() {
     if (error) {
       console.error(`❌ Error seeding ${doc.standard_name}:`, error.message);
     } else {
-      console.log(`✅ Seeded ${doc.standard_name} with mock 1536-dim vector embeddings.`);
+      console.log(`✅ Seeded ${doc.standard_name} with real 1536-dim vector embeddings.`);
     }
   }
 

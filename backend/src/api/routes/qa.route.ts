@@ -20,6 +20,7 @@ import {
 } from '../../lib/services/qaIngestion.service';
 import { PRODUCT_CATEGORIES, getStandard } from '../../lib/services/standardsRegistry.service';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
+import { authenticateJWT } from '../../middleware/authenticateJWT';
 
 const router = Router();
 
@@ -60,6 +61,7 @@ router.get('/categories', (_req: Request, res: Response): void => {
  */
 router.post(
   '/submit',
+  authenticateJWT,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       // 1. Validate

@@ -1,9 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { getSupabaseClient } from '../../lib/supabase';
+import { authenticateJWT } from '../../middleware/authenticateJWT';
 
 const router = Router();
 
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', authenticateJWT, async (req: Request, res: Response) => {
   try {
     const supabase = getSupabaseClient();
     // Assuming req.user is set by authenticateJWT
@@ -32,7 +33,7 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-router.put('/', async (req: Request, res: Response) => {
+router.put('/', authenticateJWT, async (req: Request, res: Response) => {
   try {
     const supabase = getSupabaseClient();
     const userId = (req as any).user?.id;

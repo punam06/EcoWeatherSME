@@ -5,6 +5,7 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import { authenticateJWT } from '../../middleware/authenticateJWT';
 import { globalRateLimiter } from '../../lib/middleware/rateLimiter';
 import { isSupabaseConfigured, getSupabaseClient } from '../../lib/supabase';
 import {
@@ -76,6 +77,7 @@ async function handleOrderTransition(
  */
 router.post(
   '/:id/dispatch',
+  authenticateJWT,
   globalRateLimiter,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -91,6 +93,7 @@ router.post(
  */
 router.post(
   '/:id/receipt',
+  authenticateJWT,
   globalRateLimiter,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -114,6 +117,7 @@ const TrackingQuerySchema = z.object({
  */
 router.get(
   '/:id/tracking',
+  authenticateJWT,
   globalRateLimiter,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -208,6 +212,7 @@ const TransitionBodySchema = z.object({
 
 router.post(
   '/:id/transition',
+  authenticateJWT,
   globalRateLimiter,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {

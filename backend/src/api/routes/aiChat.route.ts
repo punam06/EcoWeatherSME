@@ -15,6 +15,7 @@ import { isContentClean } from '../../lib/utils/moderationFilter';
 import { detectLanguageFromText } from '../../lib/utils/languageNormalizer';
 import { createSession, destroySession } from '../../lib/services/chatSession.service';
 import { processMessage } from '../../lib/services/agentOrchestrator.service';
+import { authenticateJWT } from '../../middleware/authenticateJWT';
 
 const router = Router();
 
@@ -29,7 +30,7 @@ const EndSessionSchema = z.object({
 /**
  * POST /api/ai/chat/start
  */
-router.post('/start', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+router.post('/start', authenticateJWT, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const parsed = StartSessionSchema.safeParse(req.body);
     const farmerId = parsed.success ? parsed.data.farmerId : undefined;
@@ -43,7 +44,7 @@ router.post('/start', async (req: Request, res: Response, next: NextFunction): P
 /**
  * POST /api/ai/chat/message
  */
-router.post('/message', aiRateLimiter, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+router.post('/message', authenticateJWT, aiRateLimiter, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const parsed = z.object({
       query: z.string().min(1),
@@ -78,7 +79,7 @@ router.post('/message', aiRateLimiter, async (req: Request, res: Response, next:
 /**
  * DELETE /api/ai/chat/end
  */
-router.delete('/end', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+router.delete('/end', authenticateJWT, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const parsed = EndSessionSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -95,7 +96,7 @@ router.delete('/end', async (req: Request, res: Response, next: NextFunction): P
 /**
  * POST /api/ai/voice-recommend
  */
-router.post('/voice-recommend', aiRateLimiter, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+router.post('/voice-recommend', authenticateJWT, aiRateLimiter, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const parsed = z.object({
       query: z.string().min(1),
