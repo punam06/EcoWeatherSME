@@ -402,6 +402,10 @@
     <script type="text/babel" src="./components/OrderTimeline.jsx"></script>
     <script type="text/babel" src="./components/CheckoutDialog.jsx"></script>
     
+        <script type="text/babel" src="./dashboards/SMEOwnerDashboard.jsx"></script>
+    <script type="text/babel" src="./dashboards/ProducerDashboard.jsx"></script>
+    <script type="text/babel" src="./dashboards/InspectorDashboard.jsx"></script>
+    <script type="text/babel" src="./AuthRouter.jsx"></script>
     <!-- Main dashboard script last -->
     <script src="./climalogix_dashboard.js"></script>
 
@@ -8423,7 +8427,7 @@ const initializeAndMount = async () => {
       );
     }
     const root = ReactDOM.createRoot(document.getElementById("root"));
-    const AppWithRouter = window.ReactRouterDOM ? <window.ReactRouterDOM.BrowserRouter><window.ErrorBoundary><CLimaLogixApp /></window.ErrorBoundary></window.ReactRouterDOM.BrowserRouter> : <window.ErrorBoundary><CLimaLogixApp /></window.ErrorBoundary>;
+    const AppWithRouter = window.ReactRouterDOM ? <window.ReactRouterDOM.BrowserRouter><window.ErrorBoundary><window.AuthRouter /></window.ErrorBoundary></window.ReactRouterDOM.BrowserRouter> : <window.ErrorBoundary><window.AuthRouter /></window.ErrorBoundary>;
       root.render(AppWithRouter);
   }
 };
@@ -8432,3 +8436,4 @@ initializeAndMount();
   </script>
   </body>
 </html>
+

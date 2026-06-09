@@ -148,7 +148,14 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const password_hash = await argon2.hash(password);
+    let password_hash: string;
+    try {
+      password_hash = await argon2.hash(password);
+    } catch (hashError) {
+      console.error('[AuthAPI] Password hashing failed:', hashError);
+      res.status(500).json({ success: false, message: 'Account creation failed.' });
+      return;
+    }
 
     const { data: user, error } = await supabase
       .from('users')

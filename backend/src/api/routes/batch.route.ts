@@ -111,7 +111,7 @@ router.get('/:id', authenticateJWT, async (req: Request, res: Response) => {
 });
 
 // POST /api/batches
-router.post('/', authenticateJWT, requireRole('processor'), async (req: Request, res: Response) => {
+router.post('/', authenticateJWT, requireRole('sme', 'sme_owner', 'buyer'), async (req: Request, res: Response) => {
   try {
     const parsed = CreateBatchSchema.safeParse(req.body);
     if (!parsed.success) {

@@ -250,59 +250,29 @@ function AuthPanel({
     try {
       let result;
       if (mode === "login") {
-        result = await sb.auth.signInWithPassword({
+        result = await window.apiCall('/api/auth/login', 'POST', {
           email,
           password
         });
-      } else if (mode === "register") {
-        result = await sb.auth.signUp({
+      } else {
+        result = await window.apiCall('/api/auth/register', 'POST', {
           email,
           password,
-          options: {
-            data: {
-              name,
-              role: backendRole
-            }
-          }
+          name: email.split('@')[0],
+          role: backendRole
         });
-      } else if (mode === "forgot") {
-        result = await sb.auth.resetPasswordForEmail(email);
-        if (!result.error) {
-          setIsSuccess(true);
-          setSuccessMsg("Reset link sent to your email!");
-          setTimeout(() => {
-            setMode("login");
-            setIsSuccess(false);
-          }, 2500);
-          setIsLoading(false);
-          return;
+      }
+      setIsSuccess(true);
+      localStorage.setItem("climaLogix_token", result.token || result.data && result.data.token);
+      window.SUPABASE_SESSION_TOKEN = result.token || result.data && result.data.token;
+      const userObj = result.user || result.data && result.data.user;
+      localStorage.setItem("climaLogix_user", JSON.stringify(userObj));
+      setTimeout(() => {
+        if (onAuthSuccess) {
+          onAuthSuccess(userObj, result.token || result.data && result.data.token);
         }
-      }
-      if (result.error) {
-        throw new Error(result.error.message || "Authentication failed");
-      }
-      if (mode === "register") {
-        setIsSuccess(true);
-        setSuccessMsg("Account created — please sign in");
-        setTimeout(() => {
-          setMode("login");
-          setIsSuccess(false);
-          setPassword("");
-          setConfirmPassword("");
-        }, 2000);
-      } else {
-        setIsSuccess(true);
-        setTimeout(() => {
-          if (onAuthSuccess) {
-            if (result.data.session) {
-              onAuthSuccess(result.data.user, result.data.session.access_token);
-            } else if (result.data.user) {
-              onAuthSuccess(result.data.user, null);
-            }
-          }
-          if (onClose) onClose();
-        }, 800);
-      }
+        if (onClose) onClose();
+      }, 800);
     } catch (err) {
       setIsVoiceProcessing(false);
       setError(err.message || "Connection failed. Please try again.");

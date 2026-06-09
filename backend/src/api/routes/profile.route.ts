@@ -44,6 +44,23 @@ router.put('/', authenticateJWT, async (req: Request, res: Response) => {
 
     const { full_name, badge_id, pref_zone, heatwave_alerts } = req.body;
 
+    // Validation
+    if (full_name !== undefined && (typeof full_name !== 'string' || full_name.length > 100)) {
+      res.status(400).json({ success: false, message: 'Invalid input.' });
+      return;
+    }
+    if (badge_id !== undefined && (typeof badge_id !== 'string' || badge_id.length > 50 || !/^[a-zA-Z0-9-_]*$/.test(badge_id))) {
+      res.status(400).json({ success: false, message: 'Invalid input.' });
+      return;
+    }
+    if (pref_zone) {
+      const { DHAKA_ZONES } = require('../../lib/services/merm.service');
+      if (typeof pref_zone !== 'string' || !DHAKA_ZONES[pref_zone]) {
+        res.status(400).json({ success: false, message: 'Invalid input.' });
+        return;
+      }
+    }
+
     const { error } = await supabase
       .from('profiles')
       .upsert({

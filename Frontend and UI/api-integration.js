@@ -33,31 +33,36 @@ function getAuthHeaders() {
 }
 
 async function apiCall(path, method = 'GET', body = null) {
-  const BASE_URL = window.location.hostname === 'localhost'
-    ? 'http://localhost:3001'
-    : 'https://backsme.onrender.com';
+  try {
+    const BASE_URL = window.location.hostname === 'localhost'
+      ? 'http://localhost:3001'
+      : 'https://backsme.onrender.com';
 
-  const options = {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-    },
-  };
-  if (body) options.body = JSON.stringify(body);
+    const options = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+    };
+    if (body) options.body = JSON.stringify(body);
 
-  const response = await fetch(`${BASE_URL}${path}`, options);
+    const response = await fetch(${BASE_URL}, options);
 
-  if (response.status === 401) {
-    localStorage.removeItem('climalogix_token');
-    sessionStorage.removeItem('climalogix_token');
-    window.location.href = '/login';
-    throw new Error('Session expired. Please log in again.');
+    if (response.status === 401) {
+      localStorage.removeItem('climalogix_token');
+      sessionStorage.removeItem('climalogix_token');
+      window.location.href = '/login';
+      throw new Error('Session expired. Please log in again.');
+    }
+
+    const json = await response.json();
+    if (!json.success) throw new Error(json.message || json.error || 'API request failed');
+    return json;
+  } catch (err) {
+    console.error('API Call Failed:', err);
+    return Promise.reject(err);
   }
-
-  const json = await response.json();
-  if (!json.success) throw new Error(json.message || json.error || 'API request failed');
-  return json;
 }
 
 const APIClient = {
@@ -290,3 +295,4 @@ if (!IS_STATIC_FILE) {
     initializeConnections();
   }
 }
+
