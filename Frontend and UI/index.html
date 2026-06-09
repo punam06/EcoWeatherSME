@@ -3475,7 +3475,7 @@ function DashboardView({ onNewBatch }) {
     if (isManual) setIsRefreshing(true);
     try {
       const res = await fetch(`${BACKEND_URL}/api/dashboard`);
-      
+      const json = await res.json();
       if (json.success && json.data) {
         setDashData(json.data);
         setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
@@ -8109,6 +8109,25 @@ function CLimaLogixApp() {
   const [theme, setTheme] = useState("dark");
   const [dvs, setDvs] = useState(72);
   const [productsList, setProductsList] = useState([]); const [isLoadingProducts, setIsLoadingProducts] = useState(true); useEffect(() => { const fetchProducts = async () => { try { const json = await window.apiCall(`/api/products`); if (json.success && json.data) { setProductsList(json.data); } else { setProductsList([]); } } catch (err) { console.error("Failed to fetch products:", err); } finally { setIsLoadingProducts(false); } }; fetchProducts(); }, []);
+  useEffect(() => {
+    const fetchGlobalStats = async () => {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/dashboard`);
+        const json = await res.json();
+        if (json.success && json.data && json.data.stats) {
+          const avgScore = json.data.stats.avgTrustScore;
+          if (typeof avgScore === "number" && avgScore > 0) {
+            setTrustScore(Math.round(avgScore));
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch global stats for header:", err);
+      }
+    };
+    fetchGlobalStats();
+    const interval = setInterval(fetchGlobalStats, 30000);
+    return () => clearInterval(interval);
+  }, []);
   const [selectedSme, setSelectedSme] = useState("green_refineries");
   const [customSmeName, setCustomSmeName] = useState("My Custom SME");
   const [verificationBatchId, setVerificationBatchId] = useState("");
@@ -8742,30 +8761,6 @@ function CLimaLogixApp() {
           <div>
             <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>CLimaLogix AI</div>
             <div style={{ fontSize: 9, color: "var(--text-dim)", letterSpacing: "0.14em", fontWeight: 500 }}>CLIMATESHIELD · SME DASHBOARD</div>
-          </div>
-          {/* New SME Dropdown */}
-          <div style={{ marginLeft: 24, display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-secondary)" }}>
-            <span style={{ fontSize: 18 }}>⭐</span>
-            <select 
-              value={selectedSme}
-              onChange={(e) => {
-                const val = e.target.value;
-                setSelectedSme(val);
-                if (val === "custom_sme") {
-                  setTab("configurator");
-                } else {
-                  setTab("dashboard");
-                }
-              }}
-              style={{
-                background: "transparent", color: "var(--text-primary)", border: "none",
-                outline: "none", cursor: "pointer", fontSize: 14, fontWeight: 500
-              }}
-            >
-              <option value="green_refineries">Green Refineries Ltd. (SME)</option>
-              <option value="agro_eco">Agro Eco SME</option>
-              <option value="custom_sme">🛠️ {customSmeName || "Custom SME"} (Configurator)</option>
-            </select>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
