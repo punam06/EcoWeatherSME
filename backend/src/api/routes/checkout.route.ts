@@ -15,7 +15,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { parseCheckoutIntent } from '../../lib/services/intentParser.service';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
 import { authenticateJWT } from '../../middleware/authenticateJWT';
-import { requireRole } from '../../middleware/roleGuard';
+import { requireRoles } from '../../middleware/roleGuard';
 
 const router = Router();
 
@@ -51,7 +51,7 @@ const checkoutRateLimiter = rateLimit({
 router.post(
   '/',
   authenticateJWT,
-  requireRole('sme', 'buyer'),
+  requireRoles('sme', 'buyer'),
   checkoutRateLimiter,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -106,7 +106,7 @@ router.post(
 router.post(
   '/voice',
   authenticateJWT,
-  requireRole('sme', 'buyer'),
+  requireRoles('sme', 'buyer'),
   checkoutRateLimiter,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -195,3 +195,4 @@ router.post(
 );
 
 export default router;
+
