@@ -1,3 +1,4 @@
+(() => {
 /**
  * ═══════════════════════════════════════════════════════════════
  * CLIMALOGIX AI — AGENT PANEL COMPONENT (React / JavaScript)
@@ -579,3 +580,5 @@ function AgentPanel({ setTab }) {
 }
 
 window.AgentPanel = AgentPanel;
+
+})();

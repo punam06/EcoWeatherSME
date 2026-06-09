@@ -1,3 +1,4 @@
+(() => {
 
 
 const UHI_ZONES = {
@@ -67,3 +68,5 @@ function ZoneDetailPanel({ activeZone, setActiveZone }) {
 
 
 window.ZoneDetailPanel = ZoneDetailPanel;
+
+})();

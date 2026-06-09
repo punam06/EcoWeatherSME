@@ -1,3 +1,4 @@
+(() => {
 
 
 const ACCENT = {
@@ -668,3 +669,5 @@ function InspectorDashboard({ user, onLogout }) {
 }
 
 window.InspectorDashboard = InspectorDashboard;
+
+})();

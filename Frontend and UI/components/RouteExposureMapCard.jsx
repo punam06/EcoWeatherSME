@@ -1,3 +1,4 @@
+(() => {
 
 // Helpers defined in DhakaRouteMicroMap.jsx — available via global scope
 // Since we are loading this component via script tag sequentially, DhakaRouteMicroMap and ZoneDetailPanel are available on window if they register themselves. 
@@ -43,3 +44,5 @@ function RouteExposureMapCard() {
 
 
 window.RouteExposureMapCard = RouteExposureMapCard;
+
+})();

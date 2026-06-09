@@ -1,3 +1,4 @@
+(() => {
 
 
 const ACCENT = {
@@ -697,3 +698,5 @@ function ProducerDashboard({ user, onLogout }) {
 }
 
 window.ProducerDashboard = ProducerDashboard;
+
+})();

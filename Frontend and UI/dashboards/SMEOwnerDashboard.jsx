@@ -1,3 +1,4 @@
+(() => {
 
 
 const ACCENT = {
@@ -624,3 +625,5 @@ function SMEOwnerDashboard({ user, onLogout }) {
 }
 
 window.SMEOwnerDashboard = SMEOwnerDashboard;
+
+})();
