@@ -7370,26 +7370,17 @@ function CLimaLogixApp() {
 
   if (!currentUser) {
     return (
-      <>
-        <HeroLandingPage 
-          onLogin={() => { setAuthOverlayMode("login"); setShowAuthOverlay(true); }}
-          onRegister={() => { setAuthOverlayMode("register"); setShowAuthOverlay(true); }} 
-        />
-        {showAuthOverlay && (
-          <AuthPanel 
-            initialMode={authOverlayMode}
-            onClose={() => setShowAuthOverlay(false)} 
-            onAuthSuccess={(user, token) => {
-              // Route to role-specific dashboard immediately
-              const role = user?.user_metadata?.role || user?.role || "buyer";
-              const defaultTab = getDefaultTabForRole(role);
-              setActiveTab(defaultTab);
-              setCurrentUser(user);
-              setShowAuthOverlay(false);
-            }}
-          />
-        )}
-      </>
+      <AuthPanel 
+        initialMode={authOverlayMode}
+        onClose={() => {}} 
+        onAuthSuccess={(user, token) => {
+          // Route to role-specific dashboard immediately
+          const role = user?.user_metadata?.role || user?.role || "buyer";
+          const defaultTab = getDefaultTabForRole(role);
+          setActiveTab(defaultTab);
+          setCurrentUser(user);
+        }}
+      />
     );
   }
 
