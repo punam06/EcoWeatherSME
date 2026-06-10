@@ -3385,7 +3385,7 @@ const isValidOrderUuid = (id) =>
   typeof id === 'string' &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
 
-function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerificationDispatchZone }) {
+function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerificationDispatchZone, setMarketplaceSubTab }) {
   const [messages, setMessages] = useState([
     { role: "system", content: "Hello! I am CLimaLogix AI, your voice and text-based assistant. I can provide microclimate forecasts, smart dispatch suggestions, or analyze files and context. How can I help you today?", time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }
   ]);
@@ -3541,11 +3541,18 @@ function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerific
               setVerificationDispatchZone(agentResponse.verifiedDispatchZone);
             }
           }
+          // confirmed_orders: navigate to marketplace AND open the confirmed sub-tab
+          if (agentResponse.navigationTarget.toLowerCase() === 'confirmed_orders') {
+            if (setMarketplaceSubTab) setMarketplaceSubTab('confirmed');
+            setTimeout(() => { setTab('marketplace'); }, 1500);
+            return;
+          }
           const pageRoutes = {
             'dashboard': 0,
             'orders': 1,
-            'marketplace': 6,
+            'marketplace': 7,
             'batches': 1,
+            'batch_registry': 1,
             'batch_verification': 2,
             'microclimate': 3,
             'climate_demand': 4,
@@ -3557,6 +3564,9 @@ function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerific
             setTimeout(() => {
               setTab(targetIndex);
             }, 1500);
+          } else if (typeof agentResponse.navigationTarget === 'string') {
+            // Handle string-based targets (e.g. 'marketplace')
+            setTimeout(() => { setTab(agentResponse.navigationTarget); }, 1500);
           }
         }
 
@@ -3810,80 +3820,165 @@ function ChatbotView({ setTab, products = [], setVerificationBatchId, setVerific
   );
 }
 
-function MarketplaceView({ products = [], isLoading = false }) {
+function MarketplaceView({ products = [], isLoading = false, marketplaceSubTab = "inventory", setMarketplaceSubTab }) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [minDvs, setMinDvs] = useState(0);
 
-  // Cart and Details States
-  const [cart, setCart] = useState(() => {
-    const saved = localStorage.getItem("climalogix_cart");
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [isCartOpen, setIsCartOpen] = useState(false);
+  // Product detail state (kept for detail view)
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [quantityInput, setQuantityInput] = useState(1);
 
-  // Transit Simulation States
+  // Transit Simulation States (kept for detail view route simulator)
   const [selectedZone, setSelectedZone] = useState("dhaka_north");
   const [simulatedHour, setSimulatedHour] = useState(new Date().getHours());
   const [simulatedTemp, setSimulatedTemp] = useState(33);
 
-  // Checkout States
-  const [isCheckingOut, setIsCheckingOut] = useState(false);
-  const [checkoutSuccess, setCheckoutSuccess] = useState(null);
-  const [checkoutStage, setCheckoutStage] = useState(0);
+  // ── Active Inventory sub-view state ───────────────────────────────────────
+  const [inventoryItems, setInventoryItems] = useState([]);
+  const [isLoadingInventory, setIsLoadingInventory] = useState(false);
+  const [inventoryError, setInventoryError] = useState(null);
 
+  // ── Confirmed Orders sub-view state ───────────────────────────────────────
+  const [confirmedOrders, setConfirmedOrders] = useState([]);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+  const [ordersError, setOrdersError] = useState(null);
+
+  // Fetch Active Inventory from Supabase when sub-tab is active
   useEffect(() => {
-    localStorage.setItem("climalogix_cart", JSON.stringify(cart));
-  }, [cart]);
+    if (marketplaceSubTab !== "inventory") return;
+    setIsLoadingInventory(true);
+    setInventoryError(null);
+
+    // Demo catalog — always available as a final fallback
+    const DEMO_CATALOG = [
+      { id: "demo-1", name: "Premium Organic Compost", category: "Agriculture", price: "৳ 240", unit: "Kg", dvs: 92, trust_score: 91, icon: "🌱", seller: "Green Refineries Ltd.", badge: "BARI Certified", status: "active" },
+      { id: "demo-2", name: "Carbon-Neutral Biochar", category: "Agriculture", price: "৳ 150", unit: "Kg", dvs: 88, trust_score: 88, icon: "🪨", seller: "EcoFarm BD", badge: "Eco-Verified", status: "active" },
+      { id: "demo-3", name: "Trichoderma Bio-Fungicide", category: "Agriculture", price: "৳ 320", unit: "Litre", dvs: 85, trust_score: 86, icon: "🧪", seller: "AgriShield Corp", badge: null, status: "active" },
+      { id: "demo-4", name: "Neem-Based Pesticide", category: "Agriculture", price: "৳ 180", unit: "Litre", dvs: 79, trust_score: 83, icon: "🌿", seller: "NaturePest BD", badge: null, status: "active" },
+      { id: "demo-5", name: "Rhizobium Biofertilizer", category: "Agriculture", price: "৳ 95", unit: "Pack", dvs: 90, trust_score: 89, icon: "🦠", seller: "BioGrow Ltd.", badge: "BARI Certified", status: "active" },
+      { id: "demo-6", name: "Vermicompost (Earthworm)", category: "Agriculture", price: "৳ 60", unit: "Kg", dvs: 95, trust_score: 94, icon: "🪱", seller: "Green Refineries Ltd.", badge: "Premium", status: "active" },
+      { id: "demo-7", name: "Liquid Seaweed Extract", category: "Agriculture", price: "৳ 275", unit: "Litre", dvs: 71, trust_score: 80, icon: "🌊", seller: "OceanAgro SME", badge: "⚡ CLEARANCE", status: "active" },
+      { id: "demo-8", name: "Organic Phosphate Mix", category: "Agriculture", price: "৳ 130", unit: "Kg", dvs: 87, trust_score: 85, icon: "⚗️", seller: "AgriShield Corp", badge: null, status: "active" },
+    ];
+
+    const fetchInventory = async () => {
+      try {
+        // 1st: try Supabase batches table (real SME inventory — always exists)
+        if (window.supabaseClient) {
+          const { data: batchData, error: batchError } = await window.supabaseClient
+            .from('batches')
+            .select('id, batch_number, product_name, status, created_at, trust_score, destination_zone, processor_id')
+            .in('status', ['active', 'certified', 'sme_inventory', 'pending'])
+            .order('created_at', { ascending: false })
+            .limit(50);
+
+          if (!batchError && batchData && batchData.length > 0) {
+            // Map batch records to product display shape
+            const mapped = batchData.map((b, i) => ({
+              id: b.id,
+              name: b.product_name || `Batch ${b.batch_number}`,
+              category: "Agriculture",
+              price: `৳ ${150 + (i * 23)}`,
+              unit: "Kg",
+              dvs: b.trust_score || 85,
+              trust_score: b.trust_score || 85,
+              icon: ["🌱", "🪨", "🌿", "🧪", "🌾"][i % 5],
+              seller: b.destination_zone ? `Zone: ${b.destination_zone}` : "ClimaLogix SME",
+              badge: b.status === "certified" ? "BARI Certified" : b.status === "active" ? "Active" : null,
+              status: b.status,
+              batch_number: b.batch_number,
+            }));
+            setInventoryItems(mapped);
+            return;
+          }
+
+          // 2nd: try products table (may not exist yet)
+          const { data: prodData, error: prodError } = await window.supabaseClient
+            .from('products')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(50);
+          if (!prodError && prodData && prodData.length > 0) {
+            setInventoryItems(prodData);
+            return;
+          }
+        }
+
+        // 3rd: try /api/products backend endpoint
+        if (products && products.length > 0) {
+          setInventoryItems(products);
+          return;
+        }
+
+        // Final fallback: always-available demo catalog
+        setInventoryItems(DEMO_CATALOG);
+      } catch (err) {
+        console.error('[Marketplace] Inventory fetch failed:', err);
+        setInventoryItems(DEMO_CATALOG);
+      } finally {
+        setIsLoadingInventory(false);
+      }
+    };
+    fetchInventory();
+  }, [marketplaceSubTab, products]);
+
+
+  // Fetch Confirmed Orders from Supabase when sub-tab is active
+  useEffect(() => {
+    if (marketplaceSubTab !== "confirmed") return;
+    setIsLoadingOrders(true);
+    setOrdersError(null);
+    const fetchOrders = async () => {
+      try {
+        if (window.supabaseClient) {
+          // Query both tables and merge
+          const [res1, res2] = await Promise.allSettled([
+            window.supabaseClient.from('orders').select('*').eq('status', 'completed').order('created_at', { ascending: false }).limit(30),
+            window.supabaseClient.from('checkout_orders').select('*').eq('status', 'confirmed').order('created_at', { ascending: false }).limit(30)
+          ]);
+          const rows1 = (res1.status === 'fulfilled' && !res1.value.error) ? (res1.value.data || []) : [];
+          const rows2 = (res2.status === 'fulfilled' && !res2.value.error) ? (res2.value.data || []) : [];
+          // Normalise checkout_orders to a common shape
+          const norm2 = rows2.map(r => ({
+            id: r.id,
+            product_name: r.product_name || '—',
+            quantity: r.quantity || '—',
+            status: r.status,
+            created_at: r.created_at,
+            source: 'checkout'
+          }));
+          const norm1 = rows1.map(r => ({
+            id: r.id,
+            product_name: r.product_id || '—',
+            quantity: r.quantity,
+            status: r.status,
+            created_at: r.created_at,
+            source: 'orders'
+          }));
+          const merged = [...norm1, ...norm2].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+          setConfirmedOrders(merged);
+        } else {
+          setConfirmedOrders([]);
+        }
+      } catch (err) {
+        console.error('[Marketplace] Orders fetch failed:', err);
+        setOrdersError('Could not load orders. Please try again.');
+      } finally {
+        setIsLoadingOrders(false);
+      }
+    };
+    fetchOrders();
+  }, [marketplaceSubTab]);
 
   const categories = ["All", "Agriculture", "Pharmaceuticals", "Food & Dairy", "Food & Seafood", "Chemicals"];
 
-  const filteredProducts = products.filter(p => {
+  const filteredProducts = inventoryItems.filter(p => {
     if (category !== "All" && p.category !== category) return false;
-    if (p.dvs < minDvs) return false;
-    if (search && !p.name.toLowerCase().includes(search.toLowerCase()) && !p.seller.toLowerCase().includes(search.toLowerCase())) return false;
+    if (minDvs > 0 && (p.dvs || 0) < minDvs) return false;
+    if (search && !(p.name || '').toLowerCase().includes(search.toLowerCase()) && !(p.seller || '').toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
-
-  const addToCart = (product, qty = 1, e = null) => {
-    if (e) e.stopPropagation();
-    setCart(prev => {
-      const existing = prev.find(item => item.product.id === product.id);
-      if (existing) {
-        return prev.map(item => item.product.id === product.id ? { ...item, quantity: item.quantity + qty } : item);
-      }
-      return [...prev, { product, quantity: qty }];
-    });
-    // Visual feedback
-    if (e) {
-      const btn = e.currentTarget;
-      const originalText = btn.innerHTML;
-      btn.innerHTML = "✓ Added!";
-      btn.style.background = ACCENT.greenBg;
-      btn.style.color = ACCENT.green;
-      setTimeout(() => {
-        btn.innerHTML = originalText;
-        btn.style.background = product.dvs < 75 ? ACCENT.redBg : "var(--bg-input)";
-        btn.style.color = product.dvs < 75 ? ACCENT.red : "var(--text-primary)";
-      }, 1200);
-    }
-  };
-
-  const removeFromCart = (productId) => {
-    setCart(prev => prev.filter(item => item.product.id !== productId));
-  };
-
-  const updateCartQuantity = (productId, amount) => {
-    setCart(prev => prev.map(item => {
-      if (item.product.id === productId) {
-        const newQty = item.quantity + amount;
-        return newQty > 0 ? { ...item, quantity: newQty } : item;
-      }
-      return item;
-    }));
-  };
 
   // Calculate simulated DVS score for the route planner inside details modal
   const getSimulatedDVS = (baseDvs) => {
@@ -3898,43 +3993,6 @@ function MarketplaceView({ products = [], isLoading = false }) {
     return simulated;
   };
 
-  const getShippingCost = () => {
-    // Basic shipping: base ৳ 120 + distance/temperature penalty
-    const baseShipping = 120;
-    const tempPenalty = Math.max(0, (simulatedTemp - 30) * 15);
-    const zoneMultiplier = selectedZone.includes("north") || selectedZone.includes("south") ? 1.0 : 1.4;
-    return Math.round((baseShipping + tempPenalty) * zoneMultiplier);
-  };
-
-  const handleCheckout = () => {
-    setIsCheckingOut(true);
-    setTimeout(() => {
-      const orderId = `ord-${Math.floor(100000 + Math.random() * 900000)}`;
-      const txHash = "0x" + Array.from({length: 40}, () => Math.floor(Math.random()*16).toString(16)).join("");
-      
-      setCheckoutSuccess({
-        orderId,
-        txHash,
-        totalItems: cart.reduce((sum, item) => sum + item.quantity, 0),
-        totalPrice: cart.reduce((sum, item) => {
-          const rawPrice = Number((item.product.price || "").replace(/[৳\s,]/g, ""));
-          const isClearance = item.product.dvs < 75;
-          const price = isClearance ? Math.round(rawPrice * 0.7) : rawPrice;
-          return sum + (price * item.quantity);
-        }, 0) + getShippingCost(),
-        zone: selectedZone.replace(/_/g, " ").toUpperCase(),
-      });
-      setCart([]);
-      setIsCheckingOut(false);
-    }, 2000);
-  };
-
-  const cartTotal = cart.reduce((sum, item) => {
-    const rawPrice = Number((item.product.price || "").replace(/[৳\s,]/g, ""));
-    const isClearance = item.product.dvs < 75;
-    const price = isClearance ? Math.round(rawPrice * 0.7) : rawPrice;
-    return sum + (price * item.quantity);
-  }, 0);
 
 
 
@@ -4080,30 +4138,17 @@ function MarketplaceView({ products = [], isLoading = false }) {
             </div>
           </div>
 
-          {/* Action Row */}
+          {/* Action Row — informational CTA */}
           <div style={{ padding: "20px 0 0 0", borderTop: "1px solid var(--border-primary)", marginTop: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Qty:</span>
-              <input 
-                type="number" min="1" max="100" value={quantityInput}
-                onChange={e => setQuantityInput(Math.max(1, Number(e.target.value)))}
-                style={{ width: 80, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", textAlign: "center", fontSize: 13 }}
-              />
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+              📋 Product info is sourced from the verified BARI trust ledger.
             </div>
-            <div style={{ display: "flex", gap: 12 }}>
-              <button 
-                onClick={() => setSelectedProduct(null)}
-                style={{ padding: "12px 24px", border: "1px solid var(--border-primary)", borderRadius: 8, background: "transparent", color: "var(--text-primary)", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={() => { addToCart(selectedProduct, quantityInput); setSelectedProduct(null); }}
-                style={{ padding: "12px 32px", border: "none", borderRadius: 8, background: ACCENT.green, color: "#ffffff", fontWeight: 700, cursor: "pointer", fontSize: 13, boxShadow: "0 4px 12px rgba(16,185,129,0.3)" }}
-              >
-                Add To Cart (৳ {(basePrice * quantityInput).toLocaleString()})
-              </button>
-            </div>
+            <button 
+              onClick={() => setSelectedProduct(null)}
+              style={{ padding: "12px 24px", border: "1px solid var(--border-primary)", borderRadius: 8, background: "transparent", color: "var(--text-primary)", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
+            >
+              ← Back to Inventory
+            </button>
           </div>
         </Card>
       </div>
@@ -4112,30 +4157,32 @@ function MarketplaceView({ products = [], isLoading = false }) {
 
   return (
     <div style={{ animation: "fadeSlideIn 0.3s ease", position: "relative" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <PageHeader title="Climate-Resilient Circular Marketplace" subtitle="Source verified heat-sensitive components optimized for Dhaka division transit" />
-        <button 
-          onClick={() => setIsCartOpen(true)}
-          style={{
-            background: `linear-gradient(135deg, ${ACCENT.greenLight}, ${ACCENT.greenDark})`,
-            color: "#ffffff",
-            border: "none",
-            borderRadius: "10px",
-            padding: "10px 18px",
-            fontSize: "14px",
-            fontWeight: 700,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            boxShadow: "0 4px 14px rgba(16, 185, 129, 0.4)",
-            transition: "all 0.2s"
-          }}
-          onMouseEnter={e => e.currentTarget.style.transform = "translateY(-1px)"}
-          onMouseLeave={e => e.currentTarget.style.transform = "none"}
-        >
-          🛒 Cart ({cart.reduce((sum, item) => sum + item.quantity, 0)})
-        </button>
+      <div style={{ marginBottom: 16 }}>
+        <PageHeader title="SME Reverse Marketplace" subtitle="Active inventory and confirmed orders from verified BARI-certified suppliers" />
+      </div>
+
+      {/* ── SUB-TAB SWITCHER ─────────────────────────────────────── */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 24, background: "var(--bg-input)", padding: "6px", borderRadius: 10, border: "1px solid var(--border-primary)", width: "fit-content" }}>
+        {[
+          { id: "inventory", label: "📦 Active Inventory", desc: "Available Products" },
+          { id: "confirmed", label: "✅ Confirmed Orders", desc: "Completed Orders" },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            id={`marketplace-subtab-${tab.id}`}
+            onClick={() => setMarketplaceSubTab && setMarketplaceSubTab(tab.id)}
+            style={{
+              padding: "8px 20px", borderRadius: 7, border: "none", cursor: "pointer",
+              background: marketplaceSubTab === tab.id ? `linear-gradient(135deg, ${ACCENT.greenLight}, ${ACCENT.greenDark})` : "transparent",
+              color: marketplaceSubTab === tab.id ? "#ffffff" : "var(--text-secondary)",
+              fontWeight: marketplaceSubTab === tab.id ? 700 : 400,
+              fontSize: 13, transition: "all 0.2s",
+              boxShadow: marketplaceSubTab === tab.id ? "0 2px 8px rgba(16,185,129,0.3)" : "none",
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
       
       {/* Filters Bar */}
@@ -4252,12 +4299,12 @@ function MarketplaceView({ products = [], isLoading = false }) {
                   </div>
                   
                   <button 
-                    onClick={(e) => addToCart(p, 1, e)}
-                    style={{ width: "100%", padding: "10px 0", background: isClearance ? ACCENT.redBg : "var(--bg-input)", border: `1px solid ${isClearance ? ACCENT.redBorder : "var(--border-primary)"}`, borderRadius: 8, color: isClearance ? ACCENT.red : "var(--text-primary)", fontWeight: 600, cursor: "pointer", fontSize: 13, transition: "background 0.2s" }}
-                    onMouseEnter={e => e.currentTarget.style.background = isClearance ? "rgba(239, 68, 68, 0.15)" : ACCENT.greenBg}
-                    onMouseLeave={e => e.currentTarget.style.background = isClearance ? ACCENT.redBg : "var(--bg-input)"}
+                    onClick={() => { setSelectedProduct(p); setQuantityInput(1); }}
+                    style={{ width: "100%", padding: "10px 0", background: "var(--bg-input)", border: `1px solid ${ACCENT.greenBorder}`, borderRadius: 8, color: ACCENT.green, fontWeight: 600, cursor: "pointer", fontSize: 13, transition: "background 0.2s" }}
+                    onMouseEnter={e => e.currentTarget.style.background = ACCENT.greenBg}
+                    onMouseLeave={e => e.currentTarget.style.background = "var(--bg-input)"}
                   >
-                    Add to Cart
+                    View Details →
                   </button>
                 </div>
               </Card>
@@ -4266,157 +4313,200 @@ function MarketplaceView({ products = [], isLoading = false }) {
         )}
       </div>
 
-      {/* ── CART SIDEBAR DRAWER ────────────────────────────── */}
-      <div style={{
-        position: "fixed", top: 0, right: 0, width: "100%", height: "100%",
-        backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)",
-        WebkitBackdropFilter: "blur(6px)", zIndex: 105,
-        opacity: isCartOpen ? 1 : 0, pointerEvents: isCartOpen ? "all" : "none",
-        transition: "opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
-      }} onClick={() => setIsCartOpen(false)}>
-        <div style={{
-          position: "absolute", top: 0, right: 0, width: 380, height: "100%",
-          background: "var(--bg-header)", borderLeft: "1px solid var(--border-primary)",
-          boxShadow: "-4px 0 24px rgba(0,0,0,0.4)", display: "flex", flexDirection: "column",
-          transform: isCartOpen ? "translateX(0)" : "translateX(100%)",
-          transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
-        }} onClick={e => e.stopPropagation()}>
-          
-          {/* Cart Header */}
-          <div style={{ padding: "24px", borderBottom: "1px solid var(--border-primary)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 20 }}>🛒</span>
-              <div style={{ fontWeight: 700, fontSize: 16 }}>Shopping Cart</div>
-            </div>
-            <button 
-              onClick={() => setIsCartOpen(false)}
-              style={{ background: "transparent", border: "none", color: "var(--text-secondary)", fontSize: 20, cursor: "pointer" }}
-            >✕</button>
-          </div>
-
-          {/* Cart Body */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
-            {cart.length === 0 ? (
-              <div style={{ padding: "60px 0", textAlign: "center", color: "var(--text-dim)" }}>
-                <span style={{ fontSize: 48, display: "block", marginBottom: 16 }}>🛍️</span>
-                <p>Your cart is empty.</p>
+      {/* ── SUB-VIEW: ACTIVE INVENTORY ────────────────────────── */}
+      {marketplaceSubTab === "inventory" && (
+        <>
+          {/* Filters Bar */}
+          <Card style={{ padding: "16px 24px", marginBottom: 24 }} hover={false}>
+            <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ flex: "1 1 250px", position: "relative" }}>
+                <span style={{ position: "absolute", left: 14, top: 12, fontSize: 16 }}>🔍</span>
+                <input
+                  type="text"
+                  placeholder="Search products or sellers..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  style={{ width: "100%", padding: "12px 16px 12px 42px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", outline: "none", fontSize: 14 }}
+                />
               </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                {cart.map(item => {
-                  const rawPrice = Number((item.product.price || "").replace(/[৳\s,]/g, ""));
-                  const isClearance = item.product.dvs < 75;
-                  const unitPrice = isClearance ? Math.round(rawPrice * 0.7) : rawPrice;
-                  return (
-                    <div key={item.product.id} style={{ display: "flex", gap: 14, paddingBottom: 16, borderBottom: "1px solid var(--border-primary)" }}>
-                      <span style={{ fontSize: 28 }}>{item.product.icon}</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700 }}>{item.product.name}</div>
-                        <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 6 }}>৳ {unitPrice} / {item.product.unit}</div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <button onClick={() => updateCartQuantity(item.product.id, -1)} style={{ width: 24, height: 24, borderRadius: 4, border: "1px solid var(--border-primary)", background: "transparent", color: "var(--text-primary)", cursor: "pointer" }}>-</button>
-                          <span style={{ fontSize: 12, minWidth: 20, textAlign: "center" }}>{item.quantity}</span>
-                          <button onClick={() => updateCartQuantity(item.product.id, 1)} style={{ width: 24, height: 24, borderRadius: 4, border: "1px solid var(--border-primary)", background: "transparent", color: "var(--text-primary)", cursor: "pointer" }}>+</button>
-                        </div>
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>৳ {(unitPrice * item.quantity).toLocaleString()}</div>
-                        <button onClick={() => removeFromCart(item.product.id)} style={{ background: "transparent", border: "none", color: ACCENT.red, fontSize: 11, cursor: "pointer", marginTop: 8 }}>Remove</button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Cart Footer */}
-          {cart.length > 0 && (
-            <div style={{ padding: "24px", borderTop: "1px solid var(--border-primary)", background: "var(--bg-primary)" }}>
-              <div style={{ marginBottom: 14 }}>
-                <label style={{ display: "block", fontSize: 11, color: "var(--text-secondary)", marginBottom: 6 }}>Delivery Destination Zone:</label>
-                <select 
-                  value={selectedZone} 
-                  onChange={e => setSelectedZone(e.target.value)} 
-                  style={{ width: "100%", padding: "10px", borderRadius: 6, border: "1px solid var(--border-primary)", background: "var(--bg-header)", color: "var(--text-primary)", fontSize: 13 }}
-                >
-                  {Object.keys(UHI_ZONES).map(key => (
-                    <option key={key} value={key}>{key.replace(/_/g, " ").toUpperCase()}</option>
-                  ))}
+              <div style={{ flex: "0 0 180px" }}>
+                <select value={category} onChange={e => setCategory(e.target.value)} style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", outline: "none", fontSize: 14, cursor: "pointer" }}>
+                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
-
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
-                <span>Subtotal:</span>
-                <span style={{ fontWeight: 600 }}>৳ {cartTotal.toLocaleString()}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 12 }}>
-                <span>Simulated Shipping:</span>
-                <span style={{ fontWeight: 600 }}>৳ {getShippingCost().toLocaleString()}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700, borderTop: "1px solid var(--border-primary)", paddingTop: 10, marginBottom: 20 }}>
-                <span>Total Amount:</span>
-                <span style={{ color: ACCENT.green }}>৳ {(cartTotal + getShippingCost()).toLocaleString()}</span>
-              </div>
-
-              <button 
-                onClick={handleCheckout}
-                disabled={isCheckingOut}
-                style={{
-                  width: "100%", padding: "12px 0", border: "none", borderRadius: 8,
-                  background: `linear-gradient(135deg, ${ACCENT.greenLight}, ${ACCENT.greenDark})`,
-                  color: "#ffffff", fontWeight: 700, fontSize: 14, cursor: "pointer",
-                  boxShadow: "0 4px 12px rgba(16, 185, 129, 0.3)"
-                }}
-              >
-                {isCheckingOut ? "Processing..." : "Place Verified Ledger Order"}
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── CHECKOUT SUCCESS MODAL ────────────────────────────── */}
-      {checkoutSuccess && (
-        <div style={{
-          position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
-          backgroundColor: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)",
-          WebkitBackdropFilter: "blur(8px)", zIndex: 120, display: "flex",
-          alignItems: "center", justifyContent: "center", padding: 20
-        }} onClick={() => setCheckoutSuccess(null)}>
-          <div style={{
-            width: "100%", maxWidth: 500, background: "var(--bg-header)",
-            borderRadius: 16, border: `1px solid ${ACCENT.greenBorder}`,
-            boxShadow: "0 20px 50px rgba(0,0,0,0.5)", overflow: "hidden",
-            animation: "fadeSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
-            padding: 32, textAlign: "center"
-          }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 54, marginBottom: 16 }}>🎉</div>
-            <h3 style={{ fontSize: 20, fontWeight: 700, color: ACCENT.green, marginBottom: 8 }}>Order Successfully Placed!</h3>
-            <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 24 }}>
-              Your order has been signed and queued for temperature-controlled transit to {checkoutSuccess.zone}.
-            </p>
-
-            <div style={{ background: "var(--bg-primary)", padding: 16, borderRadius: 8, border: "1px solid var(--border-primary)", textAlign: "left", marginBottom: 24 }}>
-              <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 8 }}>ORDER METADATA</div>
-              <div style={{ fontSize: 12, marginBottom: 4 }}>
-                Order ID: <strong style={{ color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace" }}>{checkoutSuccess.orderId}</strong>
-              </div>
-              <div style={{ fontSize: 12, marginBottom: 4 }}>
-                Items: <strong>{checkoutSuccess.totalItems}</strong> | Total Paid: <strong style={{ color: ACCENT.green }}>৳ {checkoutSuccess.totalPrice.toLocaleString()}</strong>
-              </div>
-              <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 10, wordBreak: "break-all" }}>
-                Ledger Hash: <code style={{ color: ACCENT.blue, fontFamily: "'JetBrains Mono', monospace" }}>{checkoutSuccess.txHash}</code>
+              <div style={{ flex: "0 0 200px" }}>
+                <select value={minDvs} onChange={e => setMinDvs(Number(e.target.value))} style={{ width: "100%", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-primary)", color: "var(--text-primary)", outline: "none", fontSize: 14, cursor: "pointer" }}>
+                  <option value={0}>Any DVS Score</option>
+                  <option value={75}>DVS 75+ (High Reliability)</option>
+                  <option value={90}>DVS 90+ (Critical Transit)</option>
+                </select>
               </div>
             </div>
+          </Card>
 
-            <button 
-              onClick={() => setCheckoutSuccess(null)}
-              style={{ padding: "10px 24px", border: "none", borderRadius: 8, background: ACCENT.green, color: "#ffffff", fontWeight: 600, cursor: "pointer", fontSize: 13 }}
-            >
-              Continue Shopping
-            </button>
+          {/* Product Grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 20, marginBottom: 80 }}>
+            {isLoadingInventory ? (
+              Array.from({ length: 8 }).map((_, i) => (
+                <Card key={i} style={{ padding: "20px 24px", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden", minHeight: 280 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16 }}>
+                    <div style={{ width: 48, height: 48, borderRadius: 12, background: "var(--border-primary)", animation: "pulse 1.5s infinite" }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ height: 16, width: "80%", background: "var(--border-primary)", borderRadius: 4, marginBottom: 8, animation: "pulse 1.5s infinite" }} />
+                      <div style={{ height: 12, width: "50%", background: "var(--border-primary)", borderRadius: 4, animation: "pulse 1.5s infinite" }} />
+                    </div>
+                  </div>
+                  <div style={{ marginTop: "auto" }}>
+                    <div style={{ height: 20, width: "40%", background: "var(--border-primary)", borderRadius: 4, marginBottom: 16, animation: "pulse 1.5s infinite" }} />
+                    <div style={{ height: 40, width: "100%", background: "var(--border-primary)", borderRadius: 8, animation: "pulse 1.5s infinite" }} />
+                  </div>
+                </Card>
+              ))
+            ) : filteredProducts.length === 0 ? (
+              <div style={{ gridColumn: "1 / -1", padding: 60, textAlign: "center", color: "var(--text-secondary)" }}>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>📦</div>
+                <div style={{ fontSize: 16, fontWeight: 500, marginBottom: 8 }}>No active inventory items found.</div>
+                <div style={{ fontSize: 13, color: "var(--text-dim)" }}>Products verified on the BARI trust ledger will appear here once available.</div>
+              </div>
+            ) : (
+              filteredProducts.map(p => {
+                const rawPrice = Number((p.price || "").replace(/[৳\s,]/g, ""));
+                const isClearance = p.dvs < 75;
+                const discountedPrice = isClearance ? Math.round(rawPrice * 0.7) : rawPrice;
+                return (
+                  <Card
+                    key={p.id}
+                    onClick={() => { setSelectedProduct(p); setQuantityInput(1); }}
+                    style={{ padding: "20px 24px", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden", cursor: "pointer" }}
+                  >
+                    {isClearance ? (
+                      <div style={{ position: "absolute", top: 16, right: 16, background: ACCENT.redBg, color: ACCENT.red, padding: "4px 10px", borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", border: `1px solid ${ACCENT.redBorder}`, animation: "pulseGlow 2s infinite" }}>
+                        ⚡ DYNAMIC CLEARANCE
+                      </div>
+                    ) : p.badge ? (
+                      <div style={{ position: "absolute", top: 16, right: 16, background: p.badge.includes("Critical") ? ACCENT.redBg : ACCENT.blueBg, color: p.badge.includes("Critical") ? ACCENT.red : ACCENT.blue, padding: "4px 10px", borderRadius: 4, fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", border: `1px solid ${p.badge.includes("Critical") ? ACCENT.redBorder : "var(--border-primary)"}` }}>
+                        {p.badge.toUpperCase()}
+                      </div>
+                    ) : null}
+
+                    <div style={{ fontSize: 36, marginBottom: 16 }}>{p.icon || "📦"}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 4 }}>{p.category}</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4, lineHeight: 1.3 }}>{p.name}</div>
+                    <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 16 }}>{p.seller}</div>
+
+                    <div style={{ marginTop: "auto" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16, paddingBottom: 16, borderBottom: "1px solid var(--border-primary)" }}>
+                        <div>
+                          {isClearance ? (
+                            <div>
+                              <div style={{ fontSize: 12, textDecoration: "line-through", color: "var(--text-muted)", marginBottom: 2 }}>{p.price}</div>
+                              <div style={{ fontSize: 20, fontWeight: 700, color: ACCENT.red, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>৳ {discountedPrice.toLocaleString()}</div>
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 20, fontWeight: 700, color: ACCENT.green, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>{p.price || '—'}</div>
+                          )}
+                          <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 4 }}>per {p.unit}</div>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: (p.dvs || 0) >= 90 ? ACCENT.green : (p.dvs || 0) >= 75 ? ACCENT.blue : ACCENT.amber, fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>{p.dvs || '—'}</div>
+                          <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 4, fontWeight: 600 }}>DVS SCORE</div>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => { setSelectedProduct(p); setQuantityInput(1); }}
+                        style={{ width: "100%", padding: "10px 0", background: "var(--bg-input)", border: `1px solid ${ACCENT.greenBorder}`, borderRadius: 8, color: ACCENT.green, fontWeight: 600, cursor: "pointer", fontSize: 13, transition: "background 0.2s" }}
+                        onMouseEnter={e => e.currentTarget.style.background = ACCENT.greenBg}
+                        onMouseLeave={e => e.currentTarget.style.background = "var(--bg-input)"}
+                      >
+                        View Details →
+                      </button>
+                    </div>
+                  </Card>
+                );
+              })
+            )}
           </div>
+        </>
+      )}
+
+      {/* ── SUB-VIEW: CONFIRMED ORDERS ────────────────────────── */}
+      {marketplaceSubTab === "confirmed" && (
+        <div style={{ animation: "fadeSlideIn 0.3s ease" }}>
+          {isLoadingOrders ? (
+            <Card hover={false} style={{ padding: 32 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1fr 1fr 1fr", gap: 16, alignItems: "center" }}>
+                    {Array.from({ length: 5 }).map((__, j) => (
+                      <div key={j} style={{ height: 14, borderRadius: 4, background: "var(--border-primary)", animation: "pulse 1.5s infinite" }} />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ) : ordersError ? (
+            <Card hover={false} style={{ padding: 40, textAlign: "center" }}>
+              <div style={{ fontSize: 36, marginBottom: 12 }}>⚠️</div>
+              <div style={{ fontSize: 14, color: ACCENT.red, marginBottom: 8 }}>{ordersError}</div>
+              <button onClick={() => setMarketplaceSubTab && setMarketplaceSubTab("confirmed")} style={{ padding: "8px 20px", borderRadius: 8, border: `1px solid ${ACCENT.greenBorder}`, background: "transparent", color: ACCENT.green, cursor: "pointer", fontSize: 13 }}>Retry</button>
+            </Card>
+          ) : confirmedOrders.length === 0 ? (
+            <Card hover={false} style={{ padding: 60, textAlign: "center" }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
+              <div style={{ fontSize: 16, fontWeight: 500, marginBottom: 8 }}>No confirmed orders yet.</div>
+              <div style={{ fontSize: 13, color: "var(--text-dim)" }}>Completed and confirmed orders from the ledger will appear here.</div>
+            </Card>
+          ) : (
+            <Card hover={false} style={{ padding: 0, overflow: "hidden" }}>
+              <div style={{ padding: "16px 24px", borderBottom: "1px solid var(--border-primary)", display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 18 }}>✅</span>
+                <span style={{ fontWeight: 700, fontSize: 15 }}>Confirmed Orders</span>
+                <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--text-dim)", padding: "3px 10px", borderRadius: 20, background: "var(--bg-input)", border: "1px solid var(--border-primary)" }}>{confirmedOrders.length} records</span>
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: "var(--bg-input)", textAlign: "left" }}>
+                      {["Order ID", "Product", "Qty", "Status", "Date"].map(h => (
+                        <th key={h} style={{ padding: "12px 20px", fontWeight: 600, fontSize: 11, color: "var(--text-secondary)", letterSpacing: "0.05em", textTransform: "uppercase", borderBottom: "1px solid var(--border-primary)" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {confirmedOrders.map((order, idx) => (
+                      <tr key={order.id} style={{ borderBottom: "1px solid var(--border-primary)", transition: "background 0.15s" }}
+                        onMouseEnter={e => e.currentTarget.style.background = "var(--bg-input)"}
+                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                      >
+                        <td style={{ padding: "12px 20px", fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: ACCENT.blue }}>
+                          {String(order.id).substring(0, 12)}…
+                        </td>
+                        <td style={{ padding: "12px 20px", fontWeight: 500, color: "var(--text-primary)" }}>
+                          {order.product_name || '—'}
+                        </td>
+                        <td style={{ padding: "12px 20px", color: "var(--text-secondary)" }}>
+                          {order.quantity ?? '—'}
+                        </td>
+                        <td style={{ padding: "12px 20px" }}>
+                          <span style={{
+                            fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 4,
+                            background: ACCENT.greenBg, color: ACCENT.green,
+                            border: `1px solid ${ACCENT.greenBorder}`, letterSpacing: "0.05em"
+                          }}>
+                            {String(order.status || 'confirmed').toUpperCase()}
+                          </span>
+                        </td>
+                        <td style={{ padding: "12px 20px", fontSize: 11, color: "var(--text-dim)", fontFamily: "'JetBrains Mono', monospace" }}>
+                          {order.created_at ? new Date(order.created_at).toLocaleDateString('en-GB') : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
         </div>
       )}
 
@@ -7059,6 +7149,8 @@ function CLimaLogixApp() {
 
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  // marketplaceSubTab is lifted here so the chatbot can trigger cross-component navigation
+  const [marketplaceSubTab, setMarketplaceSubTab] = useState("inventory");
   const [trustScore, setTrustScore] = useState(84);
   // Full deterministic trust score envelope from /api/batch/trust-score
   // { score, grade, isViable, category, breakdown, reference, notes }
@@ -7932,13 +8024,14 @@ function CLimaLogixApp() {
         })}
         {activeTab === "settings" && safeComponent("SettingsView", {})}
 
-        {activeTab === "marketplace" && <MarketplaceView products={productsList} isLoading={isLoadingProducts} />}
+        {activeTab === "marketplace" && <MarketplaceView products={productsList} isLoading={isLoadingProducts} marketplaceSubTab={marketplaceSubTab} setMarketplaceSubTab={setMarketplaceSubTab} />}
         {activeTab === "chatbot" && (
           <ChatbotView
             setTab={setTab}
             products={productsList}
             setVerificationBatchId={setVerificationBatchId}
             setVerificationDispatchZone={setVerificationDispatchZone}
+            setMarketplaceSubTab={setMarketplaceSubTab}
           />
         )}
         {activeTab === "configurator" && selectedSme === "custom_sme" && (

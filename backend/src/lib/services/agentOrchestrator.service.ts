@@ -501,7 +501,7 @@ For every user message, respond with a JSON object in this exact format:
   "language": "bn" | "en" | "mixed",
   "extractedData": {
     "city": "string or null",
-    "page": "dashboard" | "orders" | "marketplace" | "batches" | "batch_verification" | "microclimate" | "climate_demand" | "impact_esg" | "chatbot" | null,
+    "page": "dashboard" | "orders" | "marketplace" | "batches" | "batch_registry" | "confirmed_orders" | "batch_verification" | "microclimate" | "climate_demand" | "impact_esg" | "chatbot" | null,
     "productName": "string or null",
     "quantity": "number or null",
     "unit": "string or null",
@@ -528,6 +528,8 @@ Intent Rules:
 Special Rules:
 - If the user mentions a batch (BCH-XXX) and asks if it's safe/verified → "navigate" with page "batch_verification" and extract batchId
 - If the user responds with just a city name after being asked for one → intent is "weather"
+- "batch_registry" navigates to the SME's product/batch management page (Batch Registry)
+- "confirmed_orders" navigates to the Confirmed Orders sub-view inside the Marketplace tab
 - Always respond in the same language the user wrote in
 - "replyMessage" must be warm, conversational, and helpful — never robotic
 - Never say "I cannot help with that"
@@ -540,7 +542,7 @@ interface AgentParsedResult {
   language: string;
   extractedData: {
     city: string | null;
-    page: 'dashboard' | 'orders' | 'marketplace' | 'batches' | 'batch_verification' | 'microclimate' | 'climate_demand' | 'impact_esg' | 'chatbot' | null;
+    page: 'dashboard' | 'orders' | 'marketplace' | 'batches' | 'batch_registry' | 'confirmed_orders' | 'batch_verification' | 'microclimate' | 'climate_demand' | 'impact_esg' | 'chatbot' | null;
     productName: string | null;
     quantity: number | null;
     unit: string | null;
@@ -650,12 +652,46 @@ export async function processMessage(
     effectiveLanguage = detected;
   }
 
+  const lang: string = effectiveLanguage;
+
+  // ── Keyword fast-paths (pre-LLM, no token cost) ───────────────────────────
+  // "My Products" / batch registry intent
+  if (/my products?|আমার পণ্য|আমার প্রোডাক্ট|batch[\s-]?registry|ব্যাচ রেজিস্ট্রি/i.test(query)) {
+    appendMessage(activeSessionId!, 'user', query);
+    const msg = lang === 'bn'
+      ? 'আপনার পণ্য তালিকা দেখানো হচ্ছে — ব্যাচ রেজিস্ট্রিতে নিয়ে যাওয়া হচ্ছে...'
+      : 'Navigating to your Batch Registry / product list...';
+    appendMessage(activeSessionId!, 'assistant', msg);
+    return {
+      type: 'NAVIGATION',
+      message: msg,
+      navigationTarget: 'batch_registry',
+      language: lang,
+      sessionId: activeSessionId!,
+    };
+  }
+
+  // "Confirmed Orders" intent
+  if (/confirmed orders?|আমার নিশ্চিত অর্ডার|confirmed আর্ডার|নিশ্চিত অর্ডার/i.test(query)) {
+    appendMessage(activeSessionId!, 'user', query);
+    const msg = lang === 'bn'
+      ? 'আপনার নিশ্চিত অর্ডারগুলো দেখানো হচ্ছে...'
+      : 'Navigating to your Confirmed Orders...';
+    appendMessage(activeSessionId!, 'assistant', msg);
+    return {
+      type: 'NAVIGATION',
+      message: msg,
+      navigationTarget: 'confirmed_orders',
+      language: lang,
+      sessionId: activeSessionId!,
+    };
+  }
+  // ── End keyword fast-paths ─────────────────────────────────────────────────
+
   // Query LLM Intent Layer
   const llmResult = await queryLLMIntent(query, session.history, customProductsContext, effectiveLanguage);
 
   appendMessage(activeSessionId!, 'user', query);
-
-  const lang: string = effectiveLanguage;
 
   try {
     let result: AgentResponse;
@@ -773,10 +809,15 @@ export async function processMessage(
             };
           }
         } else {
+          // Normalise LLM-returned page values to canonical navigationTarget keys
+          const normalisedTarget =
+            page === 'batch_registry' ? 'batches' :
+            page === 'confirmed_orders' ? 'confirmed_orders' :
+            page;
           result = {
             type: 'NAVIGATION',
             message: llmResult.replyMessage,
-            navigationTarget: page,
+            navigationTarget: normalisedTarget,
             language: lang,
             sessionId: activeSessionId!,
           };

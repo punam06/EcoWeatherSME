@@ -283,7 +283,7 @@ function AgentPanel({ setTab }) {
           setTimeout(() => {
             const target = agentData.navigationTarget.toLowerCase();
             if (target.includes('marketplace') || target.includes('market')) {
-              setTab(6);
+              setTab(7);
             } else if (target.includes('dashboard')) {
               setTab(0);
             } else if (target.includes('order')) {
