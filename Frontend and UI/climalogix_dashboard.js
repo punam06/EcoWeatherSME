@@ -12851,6 +12851,7 @@ function safeComponent(name, props, displayName) {
   }, 'This feature will be available in a future update.'));
 }
 function CLimaLogixApp() {
+  const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [showAuthOverlay, setShowAuthOverlay] = useState(false);
@@ -12949,6 +12950,7 @@ function CLimaLogixApp() {
         console.error("Failed to fetch products:", err);
       } finally {
         setIsLoadingProducts(false);
+        setLoading(false);
       }
     };
     fetchProducts();
@@ -12959,6 +12961,12 @@ function CLimaLogixApp() {
   const [verificationDispatchZone, setVerificationDispatchZone] = useState("");
   const [activeZone, setActiveZone] = useState("Mirpur");
   const [gpsError, setGpsError] = useState(null);
+  const [thanaSearch, setThanaSearch] = useState("Mirpur");
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const thanas = ["Mirpur", "Gulshan", "Dhanmondi", "Uttara", "Motijheel", "Banani", "Mohammadpur", "Tejgaon", "Khilgaon", "Lalbagh"];
+  useEffect(() => {
+    setThanaSearch(activeZone);
+  }, [activeZone]);
   const setTab = target => {
     if (typeof target === "number") {
       const legacyMap = {
@@ -13383,6 +13391,34 @@ function CLimaLogixApp() {
       }
     }));
   }
+  const LoadingSpinner = () => /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#0B0F19",
+      color: "#10B981",
+      height: "100vh",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      fontFamily: "'JetBrains Mono', monospace",
+      fontSize: "14px",
+      gap: "16px"
+    }
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "32",
+    height: "32",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    style: {
+      animation: "spin 1s linear infinite"
+    }
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M21 12a9 9 0 11-6.219-8.56"
+  })), /*#__PURE__*/React.createElement("span", null, "LOADING DASHBOARD..."));
+  if (loading) return /*#__PURE__*/React.createElement(LoadingSpinner, null);
   return /*#__PURE__*/React.createElement("div", {
     style: {
       ...themeVars,
@@ -13819,31 +13855,87 @@ function CLimaLogixApp() {
       marginLeft: 6,
       opacity: 0.75,
       fontFamily: "'JetBrains Mono', monospace",
-      fontSize: 11
+      fontSize: 11,
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 4
     }
-  }, "\uD83D\uDCCD", /*#__PURE__*/React.createElement("select", {
-    value: activeZone,
-    onChange: e => setActiveZone(e.target.value),
+  }, "\uD83D\uDCCD", /*#__PURE__*/React.createElement("div", {
     style: {
-      background: "transparent",
-      border: "none",
+      position: "relative",
+      display: "inline-block"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    placeholder: "Search Thana...",
+    value: thanaSearch,
+    onFocus: () => setSuggestionsOpen(true),
+    onBlur: () => setTimeout(() => setSuggestionsOpen(false), 250),
+    onChange: e => {
+      setThanaSearch(e.target.value);
+      setSuggestionsOpen(true);
+    },
+    onKeyDown: e => {
+      if (e.key === 'Enter') {
+        const matched = thanas.find(t => t.toLowerCase() === thanaSearch.toLowerCase());
+        if (matched) {
+          setActiveZone(matched);
+          setThanaSearch(matched);
+          setSuggestionsOpen(false);
+        }
+      }
+    },
+    style: {
+      background: "rgba(255, 255, 255, 0.05)",
+      border: "1px solid var(--border-primary)",
       color: "var(--text-primary)",
       fontWeight: 600,
-      cursor: "pointer",
       outline: "none",
       fontSize: 11,
-      padding: "2px 4px",
+      padding: "2px 6px",
       borderRadius: 4,
-      marginLeft: 4
+      marginLeft: 4,
+      width: "120px"
     }
-  }, Object.keys(UHI_ZONES).map(z => /*#__PURE__*/React.createElement("option", {
-    key: z,
-    value: z,
+  }), suggestionsOpen && /*#__PURE__*/React.createElement("div", {
     style: {
+      position: "absolute",
+      top: "100%",
+      left: 4,
+      right: 0,
       background: "var(--bg-card)",
-      color: "var(--text-primary)"
+      border: "1px solid var(--border-primary)",
+      borderRadius: 4,
+      zIndex: 9999,
+      maxHeight: "150px",
+      overflowY: "auto",
+      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.5)"
     }
-  }, z))))), /*#__PURE__*/React.createElement("span", {
+  }, thanas.filter(t => t.toLowerCase().includes(thanaSearch.toLowerCase())).map(t => /*#__PURE__*/React.createElement("div", {
+    key: t,
+    onMouseDown: () => {
+      setActiveZone(t);
+      setThanaSearch(t);
+      setSuggestionsOpen(false);
+    },
+    style: {
+      padding: "6px 8px",
+      cursor: "pointer",
+      fontSize: 11,
+      color: "var(--text-primary)",
+      borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+      textAlign: "left"
+    },
+    onMouseEnter: e => e.target.style.background = "rgba(16, 185, 129, 0.2)",
+    onMouseLeave: e => e.target.style.background = "transparent"
+  }, t)), thanas.filter(t => t.toLowerCase().includes(thanaSearch.toLowerCase())).length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "6px 8px",
+      fontSize: 11,
+      color: "var(--text-dim)",
+      textAlign: "left"
+    }
+  }, "No match"))))), /*#__PURE__*/React.createElement("span", {
     style: {
       width: 1,
       height: 12,

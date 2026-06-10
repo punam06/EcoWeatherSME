@@ -7166,6 +7166,13 @@ function CLimaLogixApp() {
   const [verificationDispatchZone, setVerificationDispatchZone] = useState("");
   const [activeZone, setActiveZone] = useState("Mirpur");
   const [gpsError, setGpsError] = useState(null);
+  const [thanaSearch, setThanaSearch] = useState("Mirpur");
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const thanas = ["Mirpur", "Gulshan", "Dhanmondi", "Uttara", "Motijheel", "Banani", "Mohammadpur", "Tejgaon", "Khilgaon", "Lalbagh"];
+  useEffect(() => {
+    setThanaSearch(activeZone);
+  }, [activeZone]);
+
 
   const setTab = (target) => {
     if (typeof target === "number") {
@@ -7854,30 +7861,88 @@ function CLimaLogixApp() {
             <span style={{ fontWeight: 700, color: ACCENT.green }}>{activeZone.toUpperCase()} · ZONE SCORE</span>
             <span title={`Base Weather: ${(liveWeather?.rawTemp ?? liveWeather?.temp ?? 31).toFixed(1)}°C · wind ${liveWeather?.windSpeed ?? 8} km/h · source: ${liveWeather?.source ?? "fallback"} · ${liveWeather?.label ?? "n/a"}`}>
               🌡 <strong style={{ color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace" }}>{adjustedHeaderTemp.toFixed(1)}°C</strong>
-              <span style={{ marginLeft: 6, opacity: 0.75, fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>
+              <span style={{ marginLeft: 6, opacity: 0.75, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, display: "inline-flex", alignItems: "center", gap: 4 }}>
                 📍
-                <select
-                  value={activeZone}
-                  onChange={(e) => setActiveZone(e.target.value)}
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    color: "var(--text-primary)",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    outline: "none",
-                    fontSize: 11,
-                    padding: "2px 4px",
-                    borderRadius: 4,
-                    marginLeft: 4,
-                  }}
-                >
-                  {Object.keys(UHI_ZONES).map(z => (
-                    <option key={z} value={z} style={{ background: "var(--bg-card)", color: "var(--text-primary)" }}>
-                      {z}
-                    </option>
-                  ))}
-                </select>
+                <div style={{ position: "relative", display: "inline-block" }}>
+                  <input
+                    type="text"
+                    placeholder="Search Thana..."
+                    value={thanaSearch}
+                    onFocus={() => setSuggestionsOpen(true)}
+                    onBlur={() => setTimeout(() => setSuggestionsOpen(false), 250)}
+                    onChange={(e) => {
+                      setThanaSearch(e.target.value);
+                      setSuggestionsOpen(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const matched = thanas.find(t => t.toLowerCase() === thanaSearch.toLowerCase());
+                        if (matched) {
+                          setActiveZone(matched);
+                          setThanaSearch(matched);
+                          setSuggestionsOpen(false);
+                        }
+                      }
+                    }}
+                    style={{
+                      background: "rgba(255, 255, 255, 0.05)",
+                      border: "1px solid var(--border-primary)",
+                      color: "var(--text-primary)",
+                      fontWeight: 600,
+                      outline: "none",
+                      fontSize: 11,
+                      padding: "2px 6px",
+                      borderRadius: 4,
+                      marginLeft: 4,
+                      width: "120px"
+                    }}
+                  />
+                  {suggestionsOpen && (
+                    <div style={{
+                      position: "absolute",
+                      top: "100%",
+                      left: 4,
+                      right: 0,
+                      background: "var(--bg-card)",
+                      border: "1px solid var(--border-primary)",
+                      borderRadius: 4,
+                      zIndex: 9999,
+                      maxHeight: "150px",
+                      overflowY: "auto",
+                      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.5)"
+                    }}>
+                      {thanas
+                        .filter(t => t.toLowerCase().includes(thanaSearch.toLowerCase()))
+                        .map(t => (
+                          <div
+                            key={t}
+                            onMouseDown={() => {
+                              setActiveZone(t);
+                              setThanaSearch(t);
+                              setSuggestionsOpen(false);
+                            }}
+                            style={{
+                              padding: "6px 8px",
+                              cursor: "pointer",
+                              fontSize: 11,
+                              color: "var(--text-primary)",
+                              borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+                              textAlign: "left"
+                            }}
+                            onMouseEnter={(e) => e.target.style.background = "rgba(16, 185, 129, 0.2)"}
+                            onMouseLeave={(e) => e.target.style.background = "transparent"}
+                          >
+                            {t}
+                          </div>
+                        ))}
+                      {thanas.filter(t => t.toLowerCase().includes(thanaSearch.toLowerCase())).length === 0 && (
+                        <div style={{ padding: "6px 8px", fontSize: 11, color: "var(--text-dim)", textAlign: "left" }}>
+                          No match
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </span>
             </span>
             <span style={{ width: 1, height: 12, background: "var(--border-primary)" }}></span>

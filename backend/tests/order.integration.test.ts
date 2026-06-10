@@ -7,6 +7,22 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { ZodError } from 'zod';
+import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
+import path from 'node:path';
+
+// Load environment variables matching backend app sequence
+dotenv.config(); // backend/.env
+dotenv.config({ path: path.resolve(__dirname, '..', '..', '.env') }); // root .env
+
+const JWT_SECRET = process.env.JWT_SECRET || 'climalogix-dev-secret-change-in-production';
+const mockToken = jwt.sign(
+  { sub: 'demo-farmer-id', email: 'demo@farmer.com', role: 'farmer' },
+  JWT_SECRET
+);
+const authHeaders = {
+  'Authorization': `Bearer ${mockToken}`
+};
 
 import {
   OrderIdParamsSchema,
@@ -148,12 +164,12 @@ test('HTTP POST /api/orders/:id/dispatch and /receipt', async () => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const app = require('../src/app').default;
 
-  const dispatchRes = await httpRequest(app, 'POST', `/api/orders/${orderId}/dispatch`, {});
+  const dispatchRes = await httpRequest(app, 'POST', `/api/orders/${orderId}/dispatch`, {}, authHeaders);
   assert.equal(dispatchRes.status, 200);
   OrderApiSuccessResponseSchema.parse(dispatchRes.body);
   assert.equal(dispatchRes.body.data.order.status, 'processing');
 
-  const receiptRes = await httpRequest(app, 'POST', `/api/orders/${orderId}/receipt`, {});
+  const receiptRes = await httpRequest(app, 'POST', `/api/orders/${orderId}/receipt`, {}, authHeaders);
   assert.equal(receiptRes.status, 200);
   OrderApiSuccessResponseSchema.parse(receiptRes.body);
   assert.equal(receiptRes.body.data.order.status, 'completed');
@@ -164,7 +180,7 @@ test('HTTP dispatch returns 400 for invalid order id', async () => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const app = require('../src/app').default;
 
-  const res = await httpRequest(app, 'POST', '/api/orders/bad-id/dispatch', {});
+  const res = await httpRequest(app, 'POST', '/api/orders/bad-id/dispatch', {}, authHeaders);
   assert.equal(res.status, 400);
   OrderApiErrorResponseSchema.parse(res.body);
   assert.equal(res.body.code, OrderErrorCode.VALIDATION_FAILED);
@@ -180,7 +196,8 @@ function httpRequest(
   app: import('express').Application,
   method: string,
   path: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  headers?: Record<string, string>
 ): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
     const server = http.createServer(app);
@@ -197,6 +214,7 @@ function httpRequest(
           headers: {
             'Content-Type': 'application/json',
             'Content-Length': Buffer.byteLength(payload),
+            ...headers,
           },
         },
         (res) => {
