@@ -12850,6 +12850,61 @@ function safeComponent(name, props, displayName) {
     }
   }, 'This feature will be available in a future update.'));
 }
+function TopGreenSMEWidget() {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 24,
+      animation: "fadeSlideIn 0.4s ease"
+    }
+  }, /*#__PURE__*/React.createElement(Card, {
+    style: {
+      border: `1px solid ${ACCENT.green}55`,
+      background: `linear-gradient(135deg, rgba(16,185,129,0.05), rgba(6,95,70,0.1))`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      margin: "0 0 8px 0",
+      color: ACCENT.green,
+      display: "flex",
+      alignItems: "center",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 20
+    }
+  }, "\uD83C\uDFC6"), " Top Green SME"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "var(--text-secondary)",
+      lineHeight: 1.5
+    }
+  }, "Your sustainable practices have ranked you in the top 5% of BARI-certified processors this month!")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "right"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 32,
+      fontWeight: 800,
+      color: ACCENT.green,
+      fontFamily: "'JetBrains Mono', monospace"
+    }
+  }, "#1"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: ACCENT.green,
+      letterSpacing: "0.05em",
+      fontWeight: 600
+    }
+  }, "IN DHAKA ZONE")))));
+}
 function CLimaLogixApp() {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
@@ -13199,6 +13254,11 @@ function CLimaLogixApp() {
         icon: "✅",
         layer: "L1"
       }, {
+        id: "batch-qr",
+        label: "Batch QR & Verify",
+        icon: "📱",
+        layer: "L1"
+      }, {
         id: "settings",
         label: "Profile & Settings",
         icon: "⚙️",
@@ -13214,6 +13274,11 @@ function CLimaLogixApp() {
         id: "verification",
         label: "Batch Verification",
         icon: "✅",
+        layer: "L1"
+      }, {
+        id: "batch-qr",
+        label: "Batch QR & Verify",
+        icon: "📱",
         layer: "L1"
       }, {
         id: "delivery",
@@ -13266,6 +13331,11 @@ function CLimaLogixApp() {
         id: "verification",
         label: "Batch Verification",
         icon: "✅",
+        layer: "L1"
+      }, {
+        id: "batch-qr",
+        label: "Batch QR & Verify",
+        icon: "📱",
         layer: "L1"
       }, {
         id: "marketplace",
@@ -13419,7 +13489,7 @@ function CLimaLogixApp() {
     d: "M21 12a9 9 0 11-6.219-8.56"
   })), /*#__PURE__*/React.createElement("span", null, "LOADING DASHBOARD..."));
   if (loading) return /*#__PURE__*/React.createElement(LoadingSpinner, null);
-  return /*#__PURE__*/React.createElement("div", {
+  const MainDashboardLayout = () => /*#__PURE__*/React.createElement("div", {
     style: {
       ...themeVars,
       background: "var(--bg-primary)",
@@ -13990,12 +14060,12 @@ function CLimaLogixApp() {
       width: "100%",
       margin: "0 auto"
     }
-  }, activeTab === "dashboard" && /*#__PURE__*/React.createElement(DashboardView, {
+  }, activeTab === "dashboard" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(DashboardView, {
     onNewBatch: () => {
       setTab("batches");
       setIsRegisteringBatch(true);
     }
-  }), activeTab === "inventory" && /*#__PURE__*/React.createElement(SMEInventoryTracker, {
+  }), userRole === 'sme_owner' && /*#__PURE__*/React.createElement(TopGreenSMEWidget, null)), activeTab === "inventory" && /*#__PURE__*/React.createElement(SMEInventoryTracker, {
     activeZone: activeZone
   }), activeTab === "batches" && (isRegisteringBatch ? /*#__PURE__*/React.createElement(RegisterBatch, {
     onCancel: () => setIsRegisteringBatch(false)
@@ -14170,7 +14240,9 @@ function CLimaLogixApp() {
     liveWeather: liveWeather,
     detectGpsLocation: detectGpsLocation,
     gpsError: gpsError
-  }), activeTab === "tracking" && safeComponent("TrackingView", {}), activeTab === "delivery" && safeComponent("DeliveryView", {
+  }), activeTab === "tracking" && safeComponent("DeliveryTrackingView", {
+    lang
+  }), activeTab === "batch-qr" && safeComponent("BatchVerificationQR", {}), activeTab === "delivery" && safeComponent("DeliveryView", {
     userRole,
     onUpdateTrustScore: setTrustScore
   }), activeTab === "notifications" && safeComponent("NotificationsView", {
@@ -14239,6 +14311,34 @@ function CLimaLogixApp() {
     setVerificationBatchId: setVerificationBatchId,
     setVerificationDispatchZone: setVerificationDispatchZone
   }));
+  if (window.ReactRouterDOM) {
+    const {
+      Routes,
+      Route
+    } = window.ReactRouterDOM;
+    return /*#__PURE__*/React.createElement(Routes, null, /*#__PURE__*/React.createElement(Route, {
+      path: "/batch-verification-qr",
+      element: /*#__PURE__*/React.createElement("div", {
+        style: {
+          ...themeVars,
+          background: "var(--bg-primary)",
+          minHeight: "100vh",
+          padding: "40px"
+        }
+      }, /*#__PURE__*/React.createElement("link", {
+        href: "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap",
+        rel: "stylesheet"
+      }), /*#__PURE__*/React.createElement("style", null, `
+              @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+              * { box-sizing: border-box; margin: 0; padding: 0; }
+              body { font-family: 'Inter', sans-serif; background: #0B0F19; color: #F8FAFC; }
+            `), safeComponent("BatchVerificationQR", {}))
+    }), /*#__PURE__*/React.createElement(Route, {
+      path: "*",
+      element: /*#__PURE__*/React.createElement(MainDashboardLayout, null)
+    }));
+  }
+  return /*#__PURE__*/React.createElement(MainDashboardLayout, null);
 }
 window.CLimaLogixApp = CLimaLogixApp;
 const initializeAndMount = async () => {

@@ -172,9 +172,7 @@ export async function ingestAndPersistQAReport(
   if (!result.ok || !result.report) return result;
 
   if (!isSupabaseConfigured()) {
-    // Supabase not configured — return the validated+signed report anyway
-    console.warn('[QA] Supabase not configured, skipping persistence');
-    return result;
+    return { ok: false, error: 'Supabase is not configured' };
   }
 
   try {

@@ -11,6 +11,9 @@ const router = Router();
 const CreateBatchSchema = z.object({
   product_name: z.string().min(1).max(255).optional(),
   product_type: z.string().min(1).max(255).optional(),
+  // feedstock_type is an alias sent by ProducerDashboard — accepted here to
+  // avoid silent data loss from Zod's .strict() unknown-key rejection.
+  feedstock_type: z.string().min(1).max(255).optional(),
   weight_kg: z.coerce.number().min(0).max(1000000).optional(),
   packaging_type: z.string().min(1).max(100).optional(),
   destination_zone: z.string().min(1).max(100).optional(),
@@ -122,12 +125,15 @@ router.post('/', authenticateJWT, requireRoles('sme', 'sme_owner', 'buyer'), asy
     const { 
       product_name, 
       product_type, 
+      feedstock_type,
       weight_kg, 
       packaging_type, 
       destination_zone, 
       processor_id,
       batch_number
     } = parsed.data;
+    // Use feedstock_type as fallback alias for product_type (sent by ProducerDashboard)
+    const resolvedProductType = product_type || feedstock_type;
 
     const displayBatchId = batch_number || `BCH-${Date.now().toString().slice(-6)}`;
     const weightNum = weight_kg ?? 100;
@@ -135,7 +141,7 @@ router.post('/', authenticateJWT, requireRoles('sme', 'sme_owner', 'buyer'), asy
     const batchData = {
       batch_number: displayBatchId,
       product_name: product_name || 'Unnamed Organic Product',
-      product_type: product_type || 'Bio-Slurry',
+      product_type: resolvedProductType || 'Bio-Slurry',
       weight_kg: weightNum,
       packaging_type: packaging_type || 'Standard',
       destination_zone: destination_zone || 'Old Dhaka',
@@ -152,7 +158,7 @@ router.post('/', authenticateJWT, requireRoles('sme', 'sme_owner', 'buyer'), asy
           .insert({
             batch_number: batchData.batch_number,
             product_name: batchData.product_name,
-            feedstock_type: batchData.product_type,
+            feedstock_type: resolvedProductType || batchData.product_type,
             trust_score: batchData.trust_score,
             processor_id: processor_id || undefined,
             weight_kg: batchData.weight_kg,

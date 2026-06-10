@@ -7078,6 +7078,29 @@ function safeComponent(name, props, displayName) {
   );
 }
 
+function TopGreenSMEWidget() {
+  return (
+    <div style={{ marginTop: 24, animation: "fadeSlideIn 0.4s ease" }}>
+      <Card style={{ border: `1px solid ${ACCENT.green}55`, background: `linear-gradient(135deg, rgba(16,185,129,0.05), rgba(6,95,70,0.1))` }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <h3 style={{ margin: "0 0 8px 0", color: ACCENT.green, display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 20 }}>🏆</span> Top Green SME
+            </h3>
+            <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+              Your sustainable practices have ranked you in the top 5% of BARI-certified processors this month!
+            </div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 32, fontWeight: 800, color: ACCENT.green, fontFamily: "'JetBrains Mono', monospace" }}>#1</div>
+            <div style={{ fontSize: 11, color: ACCENT.green, letterSpacing: "0.05em", fontWeight: 600 }}>IN DHAKA ZONE</div>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function CLimaLogixApp() {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
@@ -7381,12 +7404,14 @@ function CLimaLogixApp() {
       return [
         { id: "notifications", label: "Verification Requests", icon: "🔔", layer: "L0" },
         { id: "verification",  label: "Batch Verification",   icon: "✅", layer: "L1" },
+        { id: "batch-qr",      label: "Batch QR & Verify",    icon: "📱", layer: "L1" },
         { id: "settings",      label: "Profile & Settings",   icon: "⚙️", layer: "L0" }
       ];
     } else if (isManufacturer) {
       return [
         { id: "batches",      label: "Batch Registry",        icon: "📦", layer: "L1" },
         { id: "verification", label: "Batch Verification",   icon: "✅", layer: "L1" },
+        { id: "batch-qr",     label: "Batch QR & Verify",    icon: "📱", layer: "L1" },
         { id: "delivery",     label: "Route Optimization",    icon: "🚚", layer: "L1" },
         { id: "chatbot",      label: "Chatbot",               icon: "💬", layer: "LX" },
         { id: "tracking",     label: "Batch Tracking",        icon: "🔍", layer: "L3" },
@@ -7400,6 +7425,7 @@ function CLimaLogixApp() {
         { id: "tracking",     label: "Consumer Tracking",     icon: "🔍", layer: "L3" },
         { id: "batches",      label: "Batches",               icon: "📦", layer: "L1" },
         { id: "verification", label: "Batch Verification",   icon: "✅", layer: "L1" },
+        { id: "batch-qr",     label: "Batch QR & Verify",    icon: "📱", layer: "L1" },
         { id: "marketplace",  label: "Marketplace",           icon: "🛒", layer: "L3" },
         { id: "delivery",     label: "Delivery system",       icon: "🚚", layer: "L1" },
         { id: "chatbot",      label: "Chatbot",               icon: "💬", layer: "LX" }
@@ -7514,7 +7540,7 @@ function CLimaLogixApp() {
 
   if (loading) return <LoadingSpinner />;
 
-  return (
+  const MainDashboardLayout = () => (
     <div style={{
       ...themeVars,
       background: "var(--bg-primary)",
@@ -7972,8 +7998,12 @@ function CLimaLogixApp() {
 
       {/* ── CONTENT ───────────────────────────────────────────── */}
       <main style={{ padding: "32px 48px", width: "100%", margin: "0 auto" }}>
-        {activeTab === "dashboard" && <DashboardView onNewBatch={() => { setTab("batches"); setIsRegisteringBatch(true); }} />}
-
+        {activeTab === "dashboard" && (
+          <>
+            <DashboardView onNewBatch={() => { setTab("batches"); setIsRegisteringBatch(true); }} />
+            {userRole === 'sme_owner' && <TopGreenSMEWidget />}
+          </>
+        )}
         {activeTab === "inventory" && (
           <SMEInventoryTracker activeZone={activeZone} />
         )}
@@ -8099,7 +8129,8 @@ function CLimaLogixApp() {
             detectGpsLocation={detectGpsLocation} gpsError={gpsError}
           />
         )}
-        {activeTab === "tracking" && safeComponent("TrackingView", {})}
+        {activeTab === "tracking" && safeComponent("DeliveryTrackingView", { lang })}
+        {activeTab === "batch-qr" && safeComponent("BatchVerificationQR", {})}
         {activeTab === "delivery" && safeComponent("DeliveryView", { userRole, onUpdateTrustScore: setTrustScore })}
         {activeTab === "notifications" && safeComponent("NotificationsView", {
           onSelectBatch: (id, zone) => {
@@ -8158,6 +8189,28 @@ function CLimaLogixApp() {
       />
     </div>
   );
+
+  if (window.ReactRouterDOM) {
+    const { Routes, Route } = window.ReactRouterDOM;
+    return (
+      <Routes>
+        <Route path="/batch-verification-qr" element={
+          <div style={{ ...themeVars, background: "var(--bg-primary)", minHeight: "100vh", padding: "40px" }}>
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+            <style>{`
+              @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+              * { box-sizing: border-box; margin: 0; padding: 0; }
+              body { font-family: 'Inter', sans-serif; background: #0B0F19; color: #F8FAFC; }
+            `}</style>
+            {safeComponent("BatchVerificationQR", {})}
+          </div>
+        } />
+        <Route path="*" element={<MainDashboardLayout />} />
+      </Routes>
+    );
+  }
+
+  return <MainDashboardLayout />;
 }
 
 window.CLimaLogixApp = CLimaLogixApp;
