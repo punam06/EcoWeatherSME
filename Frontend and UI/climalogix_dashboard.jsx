@@ -2634,6 +2634,7 @@ function DashboardView({ onNewBatch }) {
               }}>{isRefreshing ? "⏳" : "↻"}</button>
             </div>
           </div>
+          <div style={{ fontSize: 12, color: 'gray', marginBottom: 12 }}>Last updated: Just Now (Simulated Live Data)</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {isLoading
               ? Array.from({ length: 4 }).map((_, i) => (
@@ -7241,13 +7242,13 @@ function CLimaLogixApp() {
   };
 
   const [liveWeather, setLiveWeather] = useState(() => {
-    const est = computeDiurnalEstimate(DHAKA_LAT, DHAKA_LON);
     return {
-      temp: est.temperature,
-      rawTemp: est.temperature,
-      windSpeed: est.windspeed_kmh,
-      humidity: est.humidity,
-      description: est.description,
+      temp: 38,
+      rawTemp: 38,
+      windSpeed: 12,
+      humidity: 82,
+      heatIndex: 44,
+      description: "Partly Cloudy",
       source: "fallback", // 'live-device' | 'live-dhaka' | 'fallback' | 'fetching' | 'live-zone'
       lat: DHAKA_LAT,
       lon: DHAKA_LON,
@@ -7859,8 +7860,11 @@ function CLimaLogixApp() {
             letterSpacing: "0.02em"
           }}>
             <span style={{ fontWeight: 700, color: ACCENT.green }}>{activeZone.toUpperCase()} · ZONE SCORE</span>
-            <span title={`Base Weather: ${(liveWeather?.rawTemp ?? liveWeather?.temp ?? 31).toFixed(1)}°C · wind ${liveWeather?.windSpeed ?? 8} km/h · source: ${liveWeather?.source ?? "fallback"} · ${liveWeather?.label ?? "n/a"}`}>
-              🌡 <strong style={{ color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace" }}>{adjustedHeaderTemp.toFixed(1)}°C</strong>
+            <span title={`Base Weather: ${(liveWeather?.temp ?? 38)}°C · wind ${liveWeather?.windSpeed ?? 12} km/h · source: ${liveWeather?.source ?? "fallback"} · ${liveWeather?.label ?? "n/a"}`}>
+              🌡 <strong style={{ color: "var(--text-primary)", fontFamily: "'JetBrains Mono', monospace" }}>{liveWeather?.temp ?? 38}°C</strong>
+              <span style={{ marginLeft: 8, fontSize: 12, color: "var(--text-secondary)" }}>
+                Humidity: {liveWeather?.humidity ?? 82}% · Heat Index: {liveWeather?.heatIndex ?? 44}°C · {liveWeather?.description ?? "Partly Cloudy"}
+              </span>
               <span style={{ marginLeft: 6, opacity: 0.75, fontFamily: "'JetBrains Mono', monospace", fontSize: 11, display: "inline-flex", alignItems: "center", gap: 4 }}>
                 📍
                 <div style={{ position: "relative", display: "inline-block" }}>

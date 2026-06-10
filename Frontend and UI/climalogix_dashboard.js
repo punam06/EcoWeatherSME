@@ -4963,6 +4963,12 @@ function DashboardView({
     }
   }, isRefreshing ? "⏳" : "↻"))), /*#__PURE__*/React.createElement("div", {
     style: {
+      fontSize: 12,
+      color: 'gray',
+      marginBottom: 12
+    }
+  }, "Last updated: Just Now (Simulated Live Data)"), /*#__PURE__*/React.createElement("div", {
+    style: {
       display: "flex",
       flexDirection: "column",
       gap: 12
@@ -13032,13 +13038,13 @@ function CLimaLogixApp() {
     };
   };
   const [liveWeather, setLiveWeather] = useState(() => {
-    const est = computeDiurnalEstimate(DHAKA_LAT, DHAKA_LON);
     return {
-      temp: est.temperature,
-      rawTemp: est.temperature,
-      windSpeed: est.windspeed_kmh,
-      humidity: est.humidity,
-      description: est.description,
+      temp: 38,
+      rawTemp: 38,
+      windSpeed: 12,
+      humidity: 82,
+      heatIndex: 44,
+      description: "Partly Cloudy",
       source: "fallback",
       // 'live-device' | 'live-dhaka' | 'fallback' | 'fetching' | 'live-zone'
       lat: DHAKA_LAT,
@@ -13844,13 +13850,19 @@ function CLimaLogixApp() {
       color: ACCENT.green
     }
   }, activeZone.toUpperCase(), " \xB7 ZONE SCORE"), /*#__PURE__*/React.createElement("span", {
-    title: `Base Weather: ${(liveWeather?.rawTemp ?? liveWeather?.temp ?? 31).toFixed(1)}°C · wind ${liveWeather?.windSpeed ?? 8} km/h · source: ${liveWeather?.source ?? "fallback"} · ${liveWeather?.label ?? "n/a"}`
+    title: `Base Weather: ${liveWeather?.temp ?? 38}°C · wind ${liveWeather?.windSpeed ?? 12} km/h · source: ${liveWeather?.source ?? "fallback"} · ${liveWeather?.label ?? "n/a"}`
   }, "\uD83C\uDF21 ", /*#__PURE__*/React.createElement("strong", {
     style: {
       color: "var(--text-primary)",
       fontFamily: "'JetBrains Mono', monospace"
     }
-  }, adjustedHeaderTemp.toFixed(1), "\xB0C"), /*#__PURE__*/React.createElement("span", {
+  }, liveWeather?.temp ?? 38, "\xB0C"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      marginLeft: 8,
+      fontSize: 12,
+      color: "var(--text-secondary)"
+    }
+  }, "Humidity: ", liveWeather?.humidity ?? 82, "% \xB7 Heat Index: ", liveWeather?.heatIndex ?? 44, "\xB0C \xB7 ", liveWeather?.description ?? "Partly Cloudy"), /*#__PURE__*/React.createElement("span", {
     style: {
       marginLeft: 6,
       opacity: 0.75,

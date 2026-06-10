@@ -240,16 +240,7 @@ function CreateBatchView({ lang, setTab }) {
   const [checkedItems, setCheckedItems] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // IoT Sliders state
-  const conf = STANDARDS_CONFIG[category] || STANDARDS_CONFIG.organic;
-  const [pH, setPH] = useState(conf.ph?.default || 7.0);
-  const [EC, setEC] = useState(conf.ec?.default || 3.4);
-  const [temp, setTemp] = useState(conf.temp?.default || 28);
-  const [days, setDays] = useState(conf.days?.default || 9);
 
-  const handleToggle = (id) => {
-    setCheckedItems(prev => ({ ...prev, [id]: !prev[id] }));
-  };
 
   const handleSubmit = async () => {
     if (!productName.trim()) {
@@ -257,33 +248,27 @@ function CreateBatchView({ lang, setTab }) {
       return;
     }
 
-    if (qaSource === 'manufacturer') {
-      const checkedCount = Object.values(checkedItems).filter(Boolean).length;
-      if (checkedCount < 3) {
-        if (window.showToast) {
-          window.showToast(
-            lang === 'bn'
-              ? 'সতর্কতা: সমস্ত কমপ্লায়েন্স আইটেম চেক করা হয়নি।'
-              : 'Warning: Not all compliance items are checked.',
-            'warning'
-          );
-        }
-      }
-    }
-
     setIsSubmitting(true);
 
     try {
       const localBatchNumber = `BCH-${Date.now().toString().slice(-6)}`;
-      const result = await window.apiCall('/api/batches', 'POST', {
-        batch_number: localBatchNumber,
-        feedstock_type: productType,
-        product_name: productName,
-        trust_score: 0,
-        destination_zone: destinationZone,
-        weight_kg: parseFloat(weight) || 0,
-        packaging_type: 'Standard'
+      const response = await fetch('/api/batches', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('climalogix_token') ? { 'Authorization': `Bearer ${localStorage.getItem('climalogix_token')}` } : {})
+        },
+        body: JSON.stringify({
+          batch_number: localBatchNumber,
+          feedstock_type: productType,
+          product_name: productName,
+          trust_score: 0,
+          destination_zone: destinationZone,
+          weight_kg: parseFloat(weight) || 0,
+          packaging_type: 'Standard'
+        })
       });
+      const result = await response.json();
 
       if (result.success && result.data) {
         const newId = result.data.id || result.data.batch_number || localBatchNumber;
@@ -336,64 +321,7 @@ function CreateBatchView({ lang, setTab }) {
               <option value="pharma">Pharmaceuticals (DGDA)</option>
             </select>
           </div>
-          <div>
-            <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>QA Source</label>
-            <select 
-              value={qaSource} 
-              onChange={e => setQaSource(e.target.value)}
-              style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", outline: "none" }}
-            >
-              <option value="iot">📡 IoT Sensors</option>
-              <option value="inspector">✅ Certified Inspector</option>
-              <option value="manufacturer">🏭 Manufacturer Declaration</option>
-            </select>
-          </div>
-        </div>
 
-        {qaSource === 'iot' && conf && (
-          <div style={{ background: "rgba(0,0,0,0.2)", padding: 20, borderRadius: 12, marginBottom: 24, border: "1px solid var(--border-primary)" }}>
-            <h4 style={{ margin: "0 0 16px 0", color: ACCENT.blue }}>{lang === 'bn' ? 'IoT সেন্সর রিডিংস' : 'Live IoT Sensor Readings'}</h4>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-              {conf.ph && (
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 8 }}>
-                    <span style={{ color: "var(--text-secondary)" }}>{conf.ph.label}</span>
-                    <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{pH}</span>
-                  </div>
-                  <input type="range" min={conf.ph.min} max={conf.ph.max} step={conf.ph.step} value={pH} onChange={e => setPH(parseFloat(e.target.value))} style={{ width: "100%", accentColor: ACCENT.blue }} />
-                </div>
-              )}
-              {conf.temp && (
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 8 }}>
-                    <span style={{ color: "var(--text-secondary)" }}>{conf.temp.label}</span>
-                    <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{temp} {conf.temp.unit}</span>
-                  </div>
-                  <input type="range" min={conf.temp.min} max={conf.temp.max} step={conf.temp.step} value={temp} onChange={e => setTemp(parseFloat(e.target.value))} style={{ width: "100%", accentColor: ACCENT.blue }} />
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {qaSource === 'manufacturer' && (
-          <div style={{ background: "rgba(16, 185, 129, 0.05)", padding: 20, borderRadius: 12, marginBottom: 24, border: `1px solid ${ACCENT.greenBorder}` }}>
-            <h4 style={{ margin: "0 0 16px 0", color: ACCENT.green }}>{lang === 'bn' ? 'ম্যানুফ্যাকচারার কমপ্লায়েন্স চেকলিস্ট' : 'Manufacturer Compliance Checklist'}</h4>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {CHECKLIST_ITEMS.map(item => (
-                <label key={item.id} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", color: "var(--text-secondary)", fontSize: 13 }}>
-                  <input 
-                    type="checkbox" 
-                    checked={!!checkedItems[item.id]} 
-                    onChange={() => handleToggle(item.id)} 
-                    style={{ width: 16, height: 16, accentColor: ACCENT.green, cursor: "pointer" }}
-                  />
-                  {lang === 'bn' ? item.bn : item.en}
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 32 }}>
           <button 
