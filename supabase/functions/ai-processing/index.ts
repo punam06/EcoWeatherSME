@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from '@supabase/supabase-js';
 import { corsHeaders } from "../_shared/cors.ts";
 
 export interface AIRecommendationRequest {
@@ -93,13 +92,13 @@ async function retrieveBARIContext(
   }
 }
 
-serve(async (req) => {
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    const { userQuery, language, preferredZone } = await req.json() as AIRecommendationRequest;
+    const { userQuery, language, preferredZone: _preferredZone } = await req.json() as AIRecommendationRequest;
 
     if (!userQuery) {
       return new Response(JSON.stringify({ error: "Missing userQuery" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -145,7 +144,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: (error as Error).message }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
