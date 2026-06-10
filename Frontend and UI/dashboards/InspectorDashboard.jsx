@@ -19,6 +19,25 @@ const BARI_STANDARDS = [
   { id: 'duration', labelEn: 'Fermentation Duration', labelBn: 'ফার্মেন্টেশনের সময়কাল', range: '≥45 days' }
 ];
 
+const CHECKLIST_ITEMS = [
+  { id: 'feedstock', en: 'Feedstock meets organic criteria', bn: 'কাঁচামাল জৈব মানদণ্ড পূরণ করে' },
+  { id: 'sop', en: 'SOP compliance verified', bn: 'এসওপি কমপ্লায়েন্স যাচাই করা হয়েছে' },
+  { id: 'chemicals', en: 'No prohibited chemicals used', bn: 'কোনো নিষিদ্ধ রাসায়নিক ব্যবহার করা হয়নি' },
+  { id: 'logs', en: 'Batch temperature logs available', bn: 'ব্যাচ তাপমাত্রার লগ উপলব্ধ আছে' }
+];
+
+const STANDARDS_CONFIG = window.STANDARDS_CONFIG || {
+  organic: {
+    displayName: 'Organic Biofertilizer (BARI EM-1)',
+    ph: { min: 3.0, max: 7.0, step: 0.1, label: "pH Level", unit: "", optimal: "3.5-7.5", default: 4.1 },
+    ec: { min: 1.0, max: 6.0, step: 0.1, label: "Conductivity (EC)", unit: " mS/cm", optimal: "2.5-5.0 mS/cm", default: 3.4 },
+    temp: { min: 20, max: 45, step: 0.5, label: "Storage Temperature", unit: "°C", optimal: "25-32°C", default: 28 },
+    days: { min: 3, max: 21, step: 1, label: "Processing Days", unit: " days", optimal: "7-14 days", default: 9 },
+    hasRatio: true
+  }
+};
+
+
 const Card = ({ children, style }) => (
   <div style={{
     background: "rgba(17, 24, 39, 0.7)",
@@ -118,6 +137,18 @@ function BatchReviewQueueView({ lang }) {
   const [loading, setLoading] = useState(true);
   const [selectedBatch, setSelectedBatch] = useState(null);
 
+  // QA Form State
+  const [qaSource, setQaSource] = useState("inspector");
+  const [checkedItems, setCheckedItems] = useState({});
+  const conf = STANDARDS_CONFIG.organic;
+  const [pH, setPH] = useState(conf.ph?.default || 7.0);
+  const [temp, setTemp] = useState(conf.temp?.default || 28);
+
+  const handleToggle = (id) => {
+    setCheckedItems(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+
   useEffect(() => {
     fetchBatches();
   }, []);
@@ -142,10 +173,16 @@ function BatchReviewQueueView({ lang }) {
     if (!confirm(confirmMsg)) return;
 
     try {
-      const res = await window.apiCall('/api/qa/certify', 'POST', {
+      // Include QA form data with decision
+      const payload = {
         batch_id: selectedBatch.id,
-        decision
-      });
+        decision,
+        qaSource,
+        metrics: qaSource === 'iot' || qaSource === 'inspector' ? { ph: pH, temp: temp } : {},
+        checklist: qaSource === 'manufacturer' ? checkedItems : {}
+      };
+
+      const res = await window.apiCall('/api/qa/certify', 'POST', payload);
       if (res && res.success) {
         if (window.showToast) window.showToast(`Batch ${decision} successfully`, 'success');
         setBatches(prev => prev.filter(b => b.id !== selectedBatch.id));
@@ -183,14 +220,57 @@ function BatchReviewQueueView({ lang }) {
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
             <div style={{ background: "rgba(255,255,255,0.03)", padding: 20, borderRadius: 12, border: "1px solid var(--border-primary)" }}>
-              <h4 style={{ margin: "0 0 16px 0", color: ACCENT.blue }}>IoT Readings</h4>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 13, color: "var(--text-secondary)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between" }}><span>pH:</span> <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>{selectedBatch.qa_metrics?.ph || '7.1'}</span></div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}><span>EC:</span> <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>{selectedBatch.qa_metrics?.ec || '2.8'} dS/m</span></div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}><span>Temp:</span> <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>{selectedBatch.qa_metrics?.temp || '62'}°C</span></div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}><span>EM-1 Ratio:</span> <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>{selectedBatch.qa_metrics?.em1 || '0.002'}</span></div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}><span>Duration:</span> <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>{selectedBatch.qa_metrics?.days || '48'} days</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <h4 style={{ margin: 0, color: ACCENT.blue }}>QA Inspector Review</h4>
+                <select 
+                  value={qaSource} 
+                  onChange={e => setQaSource(e.target.value)}
+                  style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", outline: "none", fontSize: 12 }}
+                >
+                  <option value="inspector">✅ Certified Inspector</option>
+                  <option value="iot">📡 IoT Sensors</option>
+                  <option value="manufacturer">🏭 Manufacturer Declaration</option>
+                </select>
               </div>
+
+              {(qaSource === 'iot' || qaSource === 'inspector') && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  {conf.ph && (
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 8 }}>
+                        <span style={{ color: "var(--text-secondary)" }}>{conf.ph.label}</span>
+                        <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{pH}</span>
+                      </div>
+                      <input type="range" min={conf.ph.min} max={conf.ph.max} step={conf.ph.step} value={pH} onChange={e => setPH(parseFloat(e.target.value))} style={{ width: "100%", accentColor: ACCENT.blue }} />
+                    </div>
+                  )}
+                  {conf.temp && (
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 8 }}>
+                        <span style={{ color: "var(--text-secondary)" }}>{conf.temp.label}</span>
+                        <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{temp} {conf.temp.unit}</span>
+                      </div>
+                      <input type="range" min={conf.temp.min} max={conf.temp.max} step={conf.temp.step} value={temp} onChange={e => setTemp(parseFloat(e.target.value))} style={{ width: "100%", accentColor: ACCENT.blue }} />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {qaSource === 'manufacturer' && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 8 }}>
+                  {CHECKLIST_ITEMS.map(item => (
+                    <label key={item.id} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", color: "var(--text-secondary)", fontSize: 13 }}>
+                      <input 
+                        type="checkbox" 
+                        checked={!!checkedItems[item.id]} 
+                        onChange={() => handleToggle(item.id)} 
+                        style={{ width: 16, height: 16, accentColor: ACCENT.green, cursor: "pointer" }}
+                      />
+                      {lang === 'bn' ? item.bn : item.en}
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div style={{ background: "rgba(255,255,255,0.03)", padding: 20, borderRadius: 12, border: "1px solid var(--border-primary)" }}>
