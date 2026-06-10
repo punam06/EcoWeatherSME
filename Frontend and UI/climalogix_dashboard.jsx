@@ -6989,6 +6989,7 @@ function safeComponent(name, props, displayName) {
 }
 
 function CLimaLogixApp() {
+  const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [showAuthOverlay, setShowAuthOverlay] = useState(false);
@@ -7066,7 +7067,7 @@ function CLimaLogixApp() {
   const [isRegisteringBatch, setIsRegisteringBatch] = useState(false);
   const [theme, setTheme] = useState("dark");
   const [dvs, setDvs] = useState(72);
-  const [productsList, setProductsList] = useState([]); const [isLoadingProducts, setIsLoadingProducts] = useState(true); useEffect(() => { const fetchProducts = async () => { try { const json = await window.apiCall(`/api/products`); if (json.success && json.data) { setProductsList(json.data); } else { setProductsList([]); } } catch (err) { console.error("Failed to fetch products:", err); } finally { setIsLoadingProducts(false); } }; fetchProducts(); }, []);
+  const [productsList, setProductsList] = useState([]); const [isLoadingProducts, setIsLoadingProducts] = useState(true); useEffect(() => { const fetchProducts = async () => { try { const json = await window.apiCall(`/api/products`); if (json.success && json.data) { setProductsList(json.data); } else { setProductsList([]); } } catch (err) { console.error("Failed to fetch products:", err); } finally { setIsLoadingProducts(false); setLoading(false); } }; fetchProducts(); }, []);
   const [selectedSme, setSelectedSme] = useState("green_refineries");
   const [customSmeName, setCustomSmeName] = useState("My Custom SME");
   const [verificationBatchId, setVerificationBatchId] = useState("");
@@ -7393,6 +7394,26 @@ function CLimaLogixApp() {
         </>
     );
   }
+
+  const LoadingSpinner = () => (
+    <div style={{
+      background: "#0B0F19",
+      color: "#10B981",
+      height: "100vh",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      fontFamily: "'JetBrains Mono', monospace",
+      fontSize: "14px",
+      gap: "16px"
+    }}>
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+      <span>LOADING DASHBOARD...</span>
+    </div>
+  );
+
+  if (loading) return <LoadingSpinner />;
 
   return (
     <div style={{
