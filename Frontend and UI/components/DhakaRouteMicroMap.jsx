@@ -1,6 +1,10 @@
 
 
 const DhakaRouteMicroMap = () => {
+  const dummyStart = "2026-06-10T08:00:00";
+  const dummyEnd = "2026-06-10T10:00:00";
+  const getTravelTime = () => Math.floor((new Date(dummyEnd) - new Date(dummyStart)) / 60000);
+
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       {/* Route SVG Map */}
@@ -74,10 +78,10 @@ const DhakaRouteMicroMap = () => {
           <span style={{ fontSize: "9px", color: "var(--text-dim)" }}>ID: BCH-201</span>
         </div>
         <div style={{ fontSize: "11px", color: "var(--text-primary)" }}>
-          ETA: <strong style={{ color: "#3B82F6" }}>34 Mins</strong>
+          ETA: <strong style={{ color: "#3B82F6" }}><span>{getTravelTime()} min estimated travel time</span></strong>
         </div>
         <div style={{ fontSize: "11px", color: "var(--text-primary)" }}>
-          Health: <strong style={{ color: "#F59E0B" }}>Warning (Temp Spikes)</strong>
+          Health: <strong style={{ color: "#F59E0B" }}>Updated Soon</strong>
         </div>
       </div>
 
