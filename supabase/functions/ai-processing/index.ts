@@ -1,4 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
 import { corsHeaders } from "../_shared/cors.ts";
 
 export interface AIRecommendationRequest {
@@ -70,15 +69,25 @@ async function retrieveBARIContext(
   }
 
   try {
-    const supabase = createClient(supabaseUrl, supabaseKey);
     const searchWord = query.toLowerCase().includes('carbon') ? 'carbon' : 'em-1';
-    const { data, error } = await supabase
-      .from('compliance_knowledge_base')
-      .select('standard_name, document_chunk')
-      .ilike('document_chunk', `%${searchWord}%`)
-      .limit(1);
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/compliance_knowledge_base?document_chunk=ilike.%25${encodeURIComponent(searchWord)}%25&limit=1`,
+      {
+        headers: {
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
 
-    if (error || !data || data.length === 0) {
+    if (!response.ok) {
+      return { standardName: defaultStandardName, context: fallbackContext };
+    }
+
+    const data = await response.json() as Array<{ standard_name: string; document_chunk: string }>;
+
+    if (!data || data.length === 0) {
       return { standardName: defaultStandardName, context: fallbackContext };
     }
 
