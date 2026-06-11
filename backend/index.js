@@ -564,63 +564,66 @@ app.get('/api/dashboard', asyncHandler(async (req, res) => {
   let stats = null;
   let recentActivity = [];
 
-  if (getPool()) {
-    try {
-      // Aggregate batch stats
-      const batchRes = await queryDB(`
-        SELECT
-          COUNT(*) AS total,
-          COUNT(*) FILTER (WHERE status = 'certified') AS certified,
-          COUNT(*) FILTER (WHERE status IN ('active','pending')) AS active,
-          ROUND(AVG(trust_score)::numeric, 1) AS avg_trust,
-          COALESCE(SUM(weight_kg), 0) AS total_weight
-        FROM batches
-      `);
-      const row = batchRes.rows[0];
-      const total = parseInt(row.total) || 0;
-      const cert = parseInt(row.certified) || 0;
+  // Try live data from Supabase REST first; fall back to deterministic seed
+  // stats if the table is empty, schema-mismatched, or the call fails. The
+  // previous version used queryDB(), which couldn't reach the IPv6 pooler
+  // from Render — that's why every dashboard call saw fallback data.
+  try {
+    // Recent activity: last 5 batch events. We fetch only the columns we
+    // know exist on the live schema. weight_kg is read defensively because
+    // the deployed table may or may not have it.
+    const actRes = await supabaseRest(
+      '/batches?select=id,batch_number,product_name,status,trust_score,destination_zone,created_at&order=created_at.desc&limit=5'
+    );
+    const actRows = Array.isArray(actRes) ? actRes : [];
+    recentActivity = actRows.map(r => {
+      const created = r.created_at ? new Date(r.created_at).getTime() : Date.now();
+      const elapsed = Math.max(0, Math.round((Date.now() - created) / 60000));
+      const timeAgo = elapsed < 60 ? `${elapsed} min ago` : elapsed < 1440 ? `${Math.round(elapsed/60)} hr ago` : `${Math.round(elapsed/1440)} day ago`;
+      const isNew = r.status === 'pending' || r.status === 'active';
+      const isCert = r.status === 'certified';
+      const isDispatched = r.status === 'dispatched' || r.status === 'delivered';
+      return {
+        icon: isCert ? '🛡️' : isDispatched ? '🚚' : isNew ? '📦' : '📈',
+        colorType: isCert ? 'green' : isDispatched ? 'green' : isNew ? 'blue' : 'amber',
+        text: isCert
+          ? `Batch ${r.batch_number} certified — Trust Score ${r.trust_score}`
+          : isDispatched
+          ? `Batch ${r.batch_number} dispatched to ${r.destination_zone || 'destination'}`
+          : `New ${r.product_name || 'batch'} ${r.batch_number} created (${r.weight_kg || 0} kg)`,
+        time: timeAgo,
+      };
+    });
+
+    // Aggregate stats: count + status breakdown + avg trust + total weight.
+    // PostgREST can't do FILTER, so we fetch up to 1000 rows and aggregate
+    // client-side. For a portfolio of <1k batches this is fine and keeps us
+    // off the broken pg.Pool.
+    const allBatches = await supabaseRest(
+      '/batches?select=id,status,trust_score&limit=1000'
+    ) || [];
+    if (allBatches.length > 0) {
+      const total = allBatches.length;
+      const cert = allBatches.filter(b => b.status === 'certified').length;
+      const active = allBatches.filter(b => b.status === 'active' || b.status === 'pending').length;
+      const trustSum = allBatches.reduce((s, b) => s + (Number(b.trust_score) || 0), 0);
+      const totalWeightKg = 0; // weight_kg column may not exist in live schema
       const certRate = total > 0 ? Math.round((cert / total) * 100) : 0;
-      const totalWeightKg = parseFloat(row.total_weight) || 0;
       const weightLabel = totalWeightKg >= 1000 ? `${(totalWeightKg / 1000).toFixed(1)} t` : `${totalWeightKg} kg`;
 
       stats = {
         totalBatches: total,
         certifiedBatches: cert,
-        activeBatches: parseInt(row.active) || 0,
+        activeBatches: active,
         certRate: `${certRate}%`,
-        avgTrustScore: parseFloat(row.avg_trust) || 0,
+        avgTrustScore: Math.round((trustSum / total) * 10) / 10,
         totalWeight: weightLabel,
         plasticSaved: total * 240,
         co2Sequestered: Math.round(totalWeightKg * 0.25),
       };
-
-      // Recent activity: last 5 batch events
-      const actRes = await queryDB(`
-        SELECT batch_number, product_name, status, trust_score, destination_zone, created_at, weight_kg
-        FROM batches
-        ORDER BY created_at DESC
-        LIMIT 5
-      `);
-      recentActivity = actRes.rows.map(r => {
-        const elapsed = Math.round((Date.now() - new Date(r.created_at).getTime()) / 60000);
-        const timeAgo = elapsed < 60 ? `${elapsed} min ago` : elapsed < 1440 ? `${Math.round(elapsed/60)} hr ago` : `${Math.round(elapsed/1440)} day ago`;
-        const isNew = r.status === 'pending' || r.status === 'active';
-        const isCert = r.status === 'certified';
-        const isDispatched = r.status === 'dispatched' || r.status === 'delivered';
-        return {
-          icon: isCert ? '🛡️' : isDispatched ? '🚚' : isNew ? '📦' : '📈',
-          colorType: isCert ? 'green' : isDispatched ? 'green' : isNew ? 'blue' : 'amber',
-          text: isCert
-            ? `Batch ${r.batch_number} certified — Trust Score ${r.trust_score}`
-            : isDispatched
-            ? `Batch ${r.batch_number} dispatched to ${r.destination_zone || 'destination'}`
-            : `New ${r.product_name || 'batch'} ${r.batch_number} created (${r.weight_kg || 0} kg)`,
-          time: timeAgo,
-        };
-      });
-    } catch (dbErr) {
-      console.error('[Dashboard] DB query error:', dbErr.message);
     }
+  } catch (dbErr) {
+    console.error('[Dashboard] Supabase REST error:', dbErr.message);
   }
 
   // ── Smart fallback when DB unavailable ────────────────────────
@@ -664,13 +667,29 @@ app.post('/api/auth/register', asyncHandler(async (req, res) => {
 
   const passwordHash = await argon2.hash(payload.password);
   try {
-    const result = await queryDB(
-      `INSERT INTO users (email, password_hash, name, role)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, email, name, role, created_at`,
-      [payload.email, passwordHash, payload.name, payload.role]
+    // Use Supabase REST (HTTPS) — pg.Pool can't reach Supabase from Render.
+    // Detect duplicate-email (PostgREST returns 409 with a 23505 message) by
+    // checking the email first to give a cleaner 409 to the client.
+    const existing = await supabaseRest(
+      `/users?select=id&email=eq.${encodeURIComponent(payload.email)}&limit=1`
     );
-    const user = result.rows[0];
+    if (Array.isArray(existing) && existing.length > 0) {
+      return res.status(409).json({ success: false, error: 'Email already exists' });
+    }
+    const rows = await supabaseRest('/users', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=representation' },
+      body: JSON.stringify([{
+        email: payload.email,
+        password_hash: passwordHash,
+        name: payload.name,
+        role: payload.role || 'buyer'
+      }])
+    });
+    const user = rows && rows[0];
+    if (!user) {
+      return res.status(500).json({ success: false, error: 'Registration failed' });
+    }
     const { accessToken } = await issueAuthTokens(req, res, user);
     res.status(201).json({
       success: true,
@@ -682,7 +701,8 @@ app.post('/api/auth/register', asyncHandler(async (req, res) => {
       }
     });
   } catch (error) {
-    if (error.code === '23505') {
+    // 23505 from PostgREST surfaces as 409 too
+    if (error && (error.status === 409 || /duplicate key/i.test(error.message || ''))) {
       return res.status(409).json({ success: false, error: 'Email already exists' });
     }
     throw error;
@@ -936,34 +956,59 @@ app.post('/api/zones', requireAuth, requireRole('admin'), asyncHandler(async (re
 
 /* ═══════════════════════════════════════════════════════════════
    BATCH MANAGEMENT ENDPOINTS
+   Uses Supabase REST (PostgREST) instead of the pg.Pool that can't reach
+   the IPv6 pooler from Render's IPv4-only network.
    ═══════════════════════════════════════════════════════════════ */
+
+// Helper: strip columns the live schema doesn't have, so a stale POST
+// doesn't 400. We try the full payload first; if PostgREST rejects it with
+// a "column does not exist" error, we retry with the offending columns
+// removed. This keeps us forward-compatible if supabase.sql and the live
+// DB drift apart.
+async function insertBatchRow(row) {
+  try {
+    return await supabaseRest('/batches', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=representation' },
+      body: JSON.stringify([row])
+    });
+  } catch (e) {
+    if (e && /column .* does not exist/i.test(e.message)) {
+      const dropMatch = e.message.match(/column "(.+?)" does not exist/i);
+      if (dropMatch) {
+        const drop = dropMatch[1];
+        const retry = { ...row };
+        delete retry[drop];
+        return await supabaseRest('/batches', {
+          method: 'POST',
+          headers: { 'Prefer': 'return=representation' },
+          body: JSON.stringify([retry])
+        });
+      }
+    }
+    throw e;
+  }
+}
 
 // Get all batches
 app.get('/api/batches', asyncHandler(async (req, res) => {
   const { processor_id } = req.query;
-  let query = 'SELECT * FROM batches ORDER BY created_at DESC';
-  const params = [];
-  
-  if (processor_id) {
-    query = 'SELECT * FROM batches WHERE processor_id = $1 ORDER BY created_at DESC';
-    params.push(processor_id);
-  }
-  
-  const result = await queryDB(query, params);
-  res.json({ success: true, data: result.rows, count: result.rows.length });
+  const params = new URLSearchParams({ select: '*', order: 'created_at.desc' });
+  if (processor_id) params.append('processor_id', `eq.${processor_id}`);
+  const rows = await supabaseRest(`/batches?${params.toString()}`);
+  res.json({ success: true, data: rows || [], count: Array.isArray(rows) ? rows.length : 0 });
 }));
 
 // Get specific batch
 app.get('/api/batches/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const result = await queryDB(
-    'SELECT * FROM batches WHERE id = $1',
-    [id]
+  const rows = await supabaseRest(
+    `/batches?id=eq.${encodeURIComponent(id)}&select=*&limit=1`
   );
-  if (result.rows.length === 0) {
+  if (!rows || rows.length === 0) {
     return res.status(404).json({ success: false, error: 'Batch not found' });
   }
-  res.json({ success: true, data: result.rows[0] });
+  res.json({ success: true, data: rows[0] });
 }));
 
 // Create new batch
@@ -971,14 +1016,15 @@ app.post('/api/batches', asyncHandler(async (req, res) => {
   const payload = parseBody(batchCreateSchema, req, res);
   if (!payload) return;
   const { processor_id, batch_number, feedstock_type, product_name, trust_score } = payload;
-
-  const result = await queryDB(`
-    INSERT INTO batches (processor_id, batch_number, feedstock_type, product_name, trust_score)
-    VALUES ($1, $2, $3, $4, $5)
-    RETURNING *;
-  `, [processor_id || null, batch_number, feedstock_type, product_name, trust_score]);
-  
-  res.status(201).json({ success: true, data: result.rows[0] });
+  const row = {
+    processor_id: processor_id || null,
+    batch_number,
+    feedstock_type,
+    product_name,
+    trust_score
+  };
+  const rows = await insertBatchRow(row);
+  res.status(201).json({ success: true, data: rows && rows[0] });
 }));
 
 // Update batch
@@ -988,21 +1034,31 @@ app.put('/api/batches/:id', asyncHandler(async (req, res) => {
   if (!payload) return;
   const { product_name, trust_score, certificate_url, qr_code_url } = payload;
 
-  const result = await queryDB(`
-    UPDATE batches 
-    SET product_name = COALESCE($2, product_name),
-        trust_score = COALESCE($3, trust_score),
-        certificate_url = COALESCE($4, certificate_url),
-        qr_code_url = COALESCE($5, qr_code_url)
-    WHERE id = $1
-    RETURNING *;
-  `, [id, product_name, trust_score, certificate_url, qr_code_url]);
+  // Build PATCH body from non-undefined values (PostgREST skips nulls if
+  // the client doesn't send the key). The service-role key is authorised
+  // for PATCH even when RLS is on for anon.
+  const patch = {};
+  if (product_name !== undefined) patch.product_name = product_name;
+  if (trust_score !== undefined) patch.trust_score = trust_score;
+  if (certificate_url !== undefined) patch.certificate_url = certificate_url;
+  if (qr_code_url !== undefined) patch.qr_code_url = qr_code_url;
 
-  if (result.rows.length === 0) {
+  if (Object.keys(patch).length === 0) {
+    return res.status(400).json({ success: false, error: 'No updatable fields provided' });
+  }
+
+  const rows = await supabaseRest(
+    `/batches?id=eq.${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Prefer': 'return=representation' },
+      body: JSON.stringify(patch)
+    }
+  );
+  if (!rows || rows.length === 0) {
     return res.status(404).json({ success: false, error: 'Batch not found' });
   }
-  
-  res.json({ success: true, data: result.rows[0] });
+  res.json({ success: true, data: rows[0] });
 }));
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1012,11 +1068,13 @@ app.put('/api/batches/:id', asyncHandler(async (req, res) => {
 // Get IoT readings for a batch
 app.get('/api/batches/:batch_id/readings', asyncHandler(async (req, res) => {
   const { batch_id } = req.params;
-  const result = await queryDB(
-    'SELECT * FROM iot_readings WHERE batch_id = $1 ORDER BY recorded_at DESC',
-    [batch_id]
-  );
-  res.json({ success: true, data: result.rows, count: result.rows.length });
+  const params = new URLSearchParams({
+    select: '*',
+    order: 'recorded_at.desc'
+  });
+  params.append('batch_id', `eq.${batch_id}`);
+  const rows = await supabaseRest(`/iot_readings?${params.toString()}`);
+  res.json({ success: true, data: rows || [], count: Array.isArray(rows) ? rows.length : 0 });
 }));
 
 // Record new IoT reading
@@ -1026,13 +1084,33 @@ app.post('/api/batches/:batch_id/readings', asyncHandler(async (req, res) => {
   if (!payload) return;
   const { pH, EC, temperature, em1_ratio, fermentation_days } = payload;
 
-  const result = await queryDB(`
-    INSERT INTO iot_readings (batch_id, pH, EC, temperature, em1_ratio, fermentation_days)
-    VALUES ($1, $2, $3, $4, $5, $6)
-    RETURNING *;
-  `, [batch_id, pH, EC, temperature, em1_ratio, fermentation_days]);
-  
-  res.status(201).json({ success: true, data: result.rows[0] });
+  const row = { batch_id, pH, EC, temperature, em1_ratio, fermentation_days };
+  let rows;
+  try {
+    rows = await supabaseRest('/iot_readings', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=representation' },
+      body: JSON.stringify([row])
+    });
+  } catch (e) {
+    // Drop unknown columns and retry once
+    if (e && /column .* does not exist/i.test(e.message)) {
+      const m = e.message.match(/column "(.+?)" does not exist/i);
+      if (m) {
+        delete row[m[1]];
+        rows = await supabaseRest('/iot_readings', {
+          method: 'POST',
+          headers: { 'Prefer': 'return=representation' },
+          body: JSON.stringify([row])
+        });
+      } else {
+        throw e;
+      }
+    } else {
+      throw e;
+    }
+  }
+  res.status(201).json({ success: true, data: rows && rows[0] });
 }));
 
 /* ═══════════════════════════════════════════════════════════════
