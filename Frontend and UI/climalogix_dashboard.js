@@ -12989,8 +12989,30 @@ function CLimaLogixApp() {
     return labels[role] || "Member";
   };
   useEffect(() => {
+    const hydrateFromLocalJwt = () => {
+      // Custom JWT (backend /api/auth/login) — token in climaLogix_token,
+      // user object in climaLogix_user. Use these to survive a reload or a
+      // null-firing onAuthStateChange from Supabase.
+      const storedToken = localStorage.getItem("climaLogix_token");
+      if (!storedToken) return false;
+      window.SUPABASE_SESSION_TOKEN = storedToken;
+      try {
+        const raw = localStorage.getItem("climaLogix_user");
+        if (raw) {
+          const cachedUser = JSON.parse(raw);
+          if (cachedUser && (cachedUser.id || cachedUser.email)) {
+            setCurrentUser(prev => prev || cachedUser);
+            return true;
+          }
+        }
+      } catch (e) {
+        // ignore JSON parse errors
+      }
+      return false;
+    };
     if (!window.supabaseClient) {
-      // Kept unauthenticated by default so Landing Home Page displays
+      // No Supabase client — fall back entirely to the local JWT cache.
+      hydrateFromLocalJwt();
       setAuthLoading(false);
       return;
     }
@@ -13003,14 +13025,13 @@ function CLimaLogixApp() {
         setCurrentUser(session.user);
         window.SUPABASE_SESSION_TOKEN = session.access_token;
       } else {
-        // Fallback: check for a custom JWT from a previous local login
-        const storedToken = localStorage.getItem("climaLogix_token");
-        if (storedToken) {
-          window.SUPABASE_SESSION_TOKEN = storedToken;
-        }
+        // Fallback: hydrate from a custom JWT cached in localStorage.
+        hydrateFromLocalJwt();
       }
       setAuthLoading(false);
     }).catch(() => {
+      // If Supabase is unreachable but we still have a cached JWT, use it.
+      hydrateFromLocalJwt();
       setAuthLoading(false);
     });
     const {
@@ -13022,11 +13043,18 @@ function CLimaLogixApp() {
         setCurrentUser(session.user);
         window.SUPABASE_SESSION_TOKEN = session.access_token;
       } else {
-        setCurrentUser(null);
-        // Fallback: check for a custom JWT from a previous local login
+        // Only null out currentUser if we have NO cached custom JWT.
+        // Otherwise the listener races with onAuthSuccess and bounces the
+        // user back to the hero landing page.
         const storedToken = localStorage.getItem("climaLogix_token");
-        window.SUPABASE_SESSION_TOKEN = storedToken || null;
-        setLoginWelcome(null);
+        if (storedToken) {
+          window.SUPABASE_SESSION_TOKEN = storedToken;
+          hydrateFromLocalJwt();
+        } else {
+          setCurrentUser(null);
+          window.SUPABASE_SESSION_TOKEN = null;
+          setLoginWelcome(null);
+        }
       }
       setAuthLoading(false);
     });

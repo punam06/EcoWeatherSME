@@ -249,14 +249,20 @@ function AuthPanel({
         }
         if (!fetchFailed && loginRes) {
           if (loginRes.ok && loginData.success) {
-            // Backend login succeeded
+            // Backend login succeeded — response envelope: { success, data: { user, access_token, ... } }
+            const payload = loginData.data || loginData;
+            const accessToken = payload.access_token || payload.token;
+            const user = payload.user;
+            if (!accessToken || !user) {
+              throw new Error("Authentication response missing token or user");
+            }
             setIsSuccess(true);
-            localStorage.setItem("climaLogix_token", loginData.token);
-            window.SUPABASE_SESSION_TOKEN = loginData.token;
+            localStorage.setItem("climaLogix_token", accessToken);
+            window.SUPABASE_SESSION_TOKEN = accessToken;
             // Also store user info for dashboard
-            localStorage.setItem("climaLogix_user", JSON.stringify(loginData.user));
+            localStorage.setItem("climaLogix_user", JSON.stringify(user));
             setTimeout(() => {
-              if (onAuthSuccess) onAuthSuccess(loginData.user, loginData.token);
+              if (onAuthSuccess) onAuthSuccess(user, accessToken);
               if (onClose) onClose();
             }, 800);
             return;
@@ -307,12 +313,19 @@ function AuthPanel({
         if (!fetchFailed && signupRes) {
           if (signupRes.ok && signupData.success) {
             // Backend signup succeeded — auto-login
+            // Response envelope: { success, data: { user, access_token, ... } }
+            const payload = signupData.data || signupData;
+            const accessToken = payload.access_token || payload.token;
+            const user = payload.user;
+            if (!accessToken || !user) {
+              throw new Error("Registration response missing token or user");
+            }
             setIsSuccess(true);
-            localStorage.setItem("climaLogix_token", signupData.token);
-            window.SUPABASE_SESSION_TOKEN = signupData.token;
-            localStorage.setItem("climaLogix_user", JSON.stringify(signupData.user));
+            localStorage.setItem("climaLogix_token", accessToken);
+            window.SUPABASE_SESSION_TOKEN = accessToken;
+            localStorage.setItem("climaLogix_user", JSON.stringify(user));
             setTimeout(() => {
-              if (onAuthSuccess) onAuthSuccess(signupData.user, signupData.token);
+              if (onAuthSuccess) onAuthSuccess(user, accessToken);
               if (onClose) onClose();
             }, 800);
             return;
