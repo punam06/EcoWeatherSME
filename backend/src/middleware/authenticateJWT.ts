@@ -48,20 +48,42 @@ async function resolveUser(token: string): Promise<Record<string, unknown> | nul
   return null;
 }
 
+export async function resolveUserForToken(token: string): Promise<Record<string, unknown> | null> {
+  return resolveUser(token);
+}
+
+export function getRequestUser(req: Request): Record<string, unknown> | undefined {
+  return (req as any).user;
+}
+
+export function getRequestUserId(req: Request): string | undefined {
+  const user = getRequestUser(req);
+  const id = user?.id ?? user?.sub;
+  return typeof id === 'string' ? id : undefined;
+}
+
+export function getRequestUserRole(req: Request): string | undefined {
+  const user = getRequestUser(req);
+  const meta = user?.app_metadata as Record<string, unknown> | undefined;
+  const userMeta = user?.user_metadata as Record<string, unknown> | undefined;
+  const role = meta?.role ?? userMeta?.role ?? user?.role;
+  return typeof role === 'string' ? role : undefined;
+}
+
 export async function authenticateJWT(req: Request, res: Response, next: NextFunction) {
-  if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
+  if (process.env.NODE_ENV === 'test') {
     (req as any).user = { id: 'test-user', role: 'admin', app_metadata: { role: 'admin' } };
     return next();
   }
 
   const authHeader = req.headers['authorization'];
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Missing or invalid authorization header' });
+    return res.status(401).json({ success: false, error: 'Missing or invalid authorization header' });
   }
   const token = authHeader.split(' ')[1];
   const user = await resolveUser(token);
   if (!user) {
-    return res.status(401).json({ error: 'Invalid or expired token' });
+    return res.status(401).json({ success: false, error: 'Invalid or expired token' });
   }
   (req as any).user = user;
   next();

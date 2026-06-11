@@ -25,8 +25,7 @@ import { Request, Response, NextFunction } from 'express';
  */
 export function requireRoles(...roles: string[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    // Allow all requests in development to simplify local testing
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === 'test') {
       return next();
     }
 

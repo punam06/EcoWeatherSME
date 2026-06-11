@@ -110,14 +110,32 @@ const APIClient = {
   createZone: (data) => APIClient.request('/zones', { method: 'POST', body: JSON.stringify(data) }),
 
   // Batch operations
-  getBatches: (processorId) => {
-    const query = processorId ? `?processor_id=${processorId}` : '';
+  getBatches: (processorId, options = {}) => {
+    const params = new URLSearchParams();
+    if (processorId) params.set('processor_id', processorId);
+    Object.entries(options || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') params.set(key, value);
+    });
+    const query = params.toString() ? `?${params.toString()}` : '';
     return APIClient.request(`/batches${query}`);
   },
   getBatch: (id) => APIClient.request(`/batches/${id}`),
   createBatch: (data) => APIClient.request('/batches', { method: 'POST', body: JSON.stringify(data) }),
   updateBatch: (id, data) => APIClient.request(`/batches/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  shipBatch: (id) => APIClient.request(`/batches/${encodeURIComponent(id)}/ship`, { method: 'POST' }),
   certifyBatch: (data) => APIClient.request('/batches/certify', { method: 'POST', body: JSON.stringify(data) }),
+  getVerificationRequests: (options = {}) => {
+    const query = new URLSearchParams(options).toString();
+    return APIClient.request(`/verification-requests${query ? `?${query}` : ''}`);
+  },
+  markVerificationReceived: (id) =>
+    APIClient.request(`/verification-requests/${encodeURIComponent(id)}/received`, { method: 'POST' }),
+  submitVerificationVerdict: (id, data) =>
+    APIClient.request(`/verification-requests/${encodeURIComponent(id)}/verdict`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getBatchQr: (id) => APIClient.request(`/qr/${encodeURIComponent(id)}`),
 
   // IoT readings
   getReadings: (batchId) => APIClient.request(`/batches/${batchId}/readings`),
@@ -307,4 +325,3 @@ if (!IS_STATIC_FILE) {
     initializeConnections();
   }
 }
-

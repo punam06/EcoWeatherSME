@@ -30,6 +30,9 @@ dotenv.config({ path: path.resolve(__dirname, '..', '..', '.env') }); // root .e
 // Environment variable startup check
 const checkEnvVars = () => {
   const required = ['GROQ_API_KEY', 'OPENWEATHER_API_KEY'];
+  if (process.env.NODE_ENV === 'production') {
+    required.push('SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'JWT_SECRET');
+  }
   const missing = required.filter((key) => !process.env[key]);
   if (missing.length > 0) {
     if (process.env.NODE_ENV === 'production') {
@@ -60,6 +63,7 @@ import qaRouter from './api/routes/qa.route';
 import verifyRouter from './api/routes/verify.route';
 import qrRouter from './api/routes/qr.route';
 import batchRouter from './api/routes/batch.route';
+import verificationRequestsRouter from './api/routes/verificationRequests.route';
 import checkoutRouter from './api/routes/checkout.route';
 import spotPricingRouter from './api/routes/spotPricing.route';
 import orderRouter from './api/routes/order.route';
@@ -81,6 +85,10 @@ import { strictAiRateLimiter } from './lib/middleware/rateLimiter';
 
 // ── Supabase Guard ────────────────────────────────────────────────────────────
 import { isSupabaseConfigured } from './lib/supabase';
+import { getDbHealthSnapshot } from './lib/dbHealth';
+import { APP_NAME, BACKEND_ENTRY, requireSupabaseInProduction } from './lib/runtimeConfig';
+
+requireSupabaseInProduction();
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -107,6 +115,7 @@ const FRONTEND_ORIGINS = [
   process.env.FRONTEND_URL,
   'https://eco-sortha.vercel.app',
   'https://climalogix.onrender.com',
+  'https://ecoweathersme.onrender.com',
   'https://backsme.onrender.com',
   'http://localhost:3000',
   'http://localhost:5173',
@@ -177,18 +186,33 @@ const CleverResponderMicroclimateSchema = z.object({
 // HEALTH & DIAGNOSTICS
 // ═══════════════════════════════════════════════════════════════
 
-app.get('/api/health', (_req: Request, res: Response) => {
-  res.status(200).json({
-    success: true,
+app.get('/api/health', async (_req: Request, res: Response) => {
+  const db = await getDbHealthSnapshot();
+  const healthy = db.supabaseReachable || db.postgresReachable;
+  res.status(healthy || process.env.NODE_ENV !== 'production' ? 200 : 503).json({
+    success: healthy,
     data: {
-      status: 'ok',
-      message: 'ClimaLogix AI backend is running.',
-      version: '2.0.0',
+      app: APP_NAME,
+      status: healthy ? 'ok' : 'degraded',
+      message: healthy ? 'ClimaLogix AI backend is running.' : 'Database connectivity failed',
+      version: process.env.npm_package_version || '2.0.0',
+      commit: process.env.RENDER_GIT_COMMIT?.slice(0, 12) || process.env.GIT_COMMIT || null,
       environment: process.env.NODE_ENV ?? 'development',
-      supabaseConfigured: isSupabaseConfigured(),
+      backendEntry: BACKEND_ENTRY,
+      supabaseConfigured: db.supabaseConfigured,
+      supabaseReachable: db.supabaseReachable,
+      postgresConfigured: db.postgresConfigured,
+      postgresReachable: db.postgresReachable,
+      postgresLatencyMs: db.postgresLatencyMs,
+      databaseServerTime: db.serverTime,
       groqConfigured: Boolean(process.env.GROQ_API_KEY),
       weatherConfigured: Boolean(process.env.OPENWEATHER_API_KEY),
+      publicBackendUrl: process.env.PUBLIC_BACKEND_URL || process.env.BACKEND_API_URL || null,
       timestamp: new Date().toISOString(),
+    },
+    errors: {
+      supabase: db.supabaseError,
+      postgres: db.postgresError,
     },
   });
 });
@@ -264,6 +288,7 @@ app.use('/api/orders', orderRouter);
 app.use('/api/agent', strictAiRateLimiter, aiCostShield(50), agentRouter);
 app.use('/api/ai/chat', strictAiRateLimiter, aiCostShield(50), aiChatRouter);
 app.use('/api/batches', batchRouter);
+app.use('/api/verification-requests', verificationRequestsRouter);
 app.use('/api/esg', esgRouter);
 app.use('/api/esg/report', esgReportRouter);
 app.use('/api/qa', qaRouter);

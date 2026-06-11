@@ -419,6 +419,104 @@ When adding a feature, ensure these patterns are followed:
 
 ---
 
+## Investor Demo: Batch Verification & QR Certification
+
+Run the lifecycle migration before the demo:
+
+```bash
+supabase db push
+# or paste db/migrations/002_batch_verification_lifecycle.sql into Supabase SQL editor
+```
+
+Optional large registry seed for pagination/search/filter demos:
+
+```bash
+psql "$DATABASE_URL" -f db/seeds/005_demo_verification_lifecycle.sql
+```
+
+Investor-scale demo seed for ClimaLogix AI / ClimateShield:
+
+```bash
+DATABASE_URL="postgresql://..." npm run seed:investor-demo
+```
+
+This creates a clearly synthetic dataset with `is_demo = true` wherever the table supports it: 100 demo manufacturers, 25 inspectors, 10 admins, 10,400 batches, 7,000 approved batches with QR URLs and `CLX-DEMO-CERT-*` certificate numbers, 50,000 QR scan logs, 20,000 IoT readings, 12,000 QA reports, provenance chains, verification requests, orders, ESG metrics, and workflow notifications.
+
+Demo-only reset:
+
+```bash
+DEMO_SEED_ALLOW_RESET=true npm run seed:investor-demo:reset
+```
+
+Demo accounts all use `DemoPass123!` and are for local/demo environments only:
+
+| Role | Email |
+| --- | --- |
+| Manufacturer | `manufacturer.demo@climalogix.test` |
+| Inspector | `inspector.demo@climalogix.test` |
+| Admin | `admin.demo@climalogix.test` |
+
+Suggested investor journey:
+
+1. Login as `manufacturer.demo@climalogix.test`.
+2. Show the batch registry with thousands of paginated demo rows.
+3. Register a new valid batch and show auto-evaluation passing.
+4. Show the inspector request created.
+5. Login as `inspector.demo@climalogix.test`.
+6. Mark the batch received, then approve it.
+7. Login as manufacturer again and download the QR.
+8. Open `/api/verify/:batchId/page?hash=<current_provenance_hash>`.
+9. Download `/api/verify/:batchId/certificate.pdf?hash=<current_provenance_hash>`.
+10. Show dashboard charts, ESG metrics, QR scan analytics, rejected reason breakdown, and inspector workload.
+
+Every official-looking demo ID is visibly marked with `DEMO`, for example `DEMO-BSTI-2026-0001`, `DEMO-BARI-EVAL-2026-0001`, and `CLX-DEMO-CERT-2026-000001`. These are synthetic records and are not official certificates, approvals, or government inspection records.
+
+Backend checks:
+
+```bash
+cd backend
+npm install
+npm run build
+npm run lint
+npm test
+npm run dev
+```
+
+Frontend demo:
+
+```bash
+cd "Frontend and UI"
+npm install
+npm run dev
+```
+
+Lifecycle to show:
+
+1. Producer creates a batch. Valid BARI/BSTI inputs return `awaiting_shipment`; invalid inputs return `evaluation_failed` with field-level reasons and no inspector request.
+2. Producer clicks `Send`, which creates a shipment token and moves the batch to `shipped`.
+3. Inspector opens Verification Requests, clicks `Received`, completes the checklist, then approves or rejects.
+4. Rejected batches show reason categories and never receive QR data.
+5. Approved batches are locked, receive a certificate number, QR image, expiry date, and public URL.
+6. Open `/api/verify/:batchId/page?hash=<current_provenance_hash>` for the public QR verification page.
+7. Download `/api/verify/:batchId/certificate.pdf?hash=<current_provenance_hash>` for the generated live PDF certificate.
+
+New lifecycle endpoints:
+
+| Endpoint | Method | Purpose |
+| --- | --- | --- |
+| `/api/batches` | POST | Create batch and run automated BARI/BSTI evaluation |
+| `/api/batches` | GET | Paginated/searchable/filterable batch registry |
+| `/api/batches/:id/ship` | POST | Manufacturer shipment handoff |
+| `/api/verification-requests` | GET | Inspector inbox |
+| `/api/verification-requests/:id/received` | POST | Inspector receipt |
+| `/api/verification-requests/:id/verdict` | POST | Inspector approve/reject verdict |
+| `/api/qr/:batchId` | GET | Approved QR image and verification URL |
+| `/api/verify/:batchId` | GET | Public verification JSON |
+| `/api/verify/:batchId/page` | GET | Mobile public verification page |
+| `/api/verify/:batchId/certificate.pdf` | GET | On-demand PDF certificate |
+
+---
+
 ## Team
 
 | Name | Role | Contributions |

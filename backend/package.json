@@ -9,7 +9,7 @@
     "dev": "ts-node --transpile-only src/app.ts",
     "dev:watch": "ts-node-dev --respawn --transpile-only src/app.ts",
     "lint": "tsc --noEmit --ignoreDeprecations 6.0",
-    "test": "node -r ts-node/register --test tests/order.integration.test.ts",
+    "test": "node -r ts-node/register --test tests/order.integration.test.ts tests/batch-verification-lifecycle.test.ts",
     "test:smoke": "bash ../scripts/smoke-trust-layer-v2.sh",
     "test:all": "npm test && npm run test:smoke",
     "legacy": "node index.js",

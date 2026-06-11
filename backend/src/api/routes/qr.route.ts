@@ -22,9 +22,26 @@ import {
   generateQRBatch,
   inspectQRBatch,
 } from '../../lib/services/qrProvenance.service';
+import { getApprovedQr } from '../../lib/services/batchVerification.service';
 import { authenticateJWT, requireRole } from '../../middleware/authenticateJWT';
 
 const router = Router();
+
+router.get(
+  '/:batchId',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await getApprovedQr(req.params.batchId);
+      if (result.status !== 200) {
+        res.status(result.status).json({ success: false, error: result.error });
+        return;
+      }
+      res.json({ success: true, data: result.data });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 /**
  * POST /api/qr/generate

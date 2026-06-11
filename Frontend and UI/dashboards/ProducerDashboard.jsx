@@ -120,29 +120,74 @@ function OverviewView({ lang }) {
 function MyBatchesView({ lang, setTab, refreshKey }) {
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
 
   useEffect(() => {
-    window.apiCall('/api/batches')
+    const query = new URLSearchParams({ page: String(page), pageSize: "25" });
+    if (search.trim()) query.set("search", search.trim());
+    if (status) query.set("status", status);
+    setLoading(true);
+    window.apiCall(`/api/batches?${query.toString()}`)
       .then(res => {
         if (res && res.success && res.data) {
           setBatches(res.data);
+          setPagination(res.pagination || { page, totalPages: 1, total: res.data.length });
         }
       })
       .catch(err => console.error("Batches fetch error:", err))
       .finally(() => setLoading(false));
-  }, [refreshKey]);
+  }, [refreshKey, search, status, page]);
 
-  const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this batch?')) return;
+  const handleShip = async (id) => {
     try {
-      const res = await window.apiCall(`/api/batches/${id}`, 'DELETE');
+      const res = await window.apiCall(`/api/batches/${id}/ship`, 'POST');
       if (res && res.success) {
-        setBatches(prev => prev.filter(b => b.id !== id));
-        if (window.showToast) window.showToast('Batch deleted successfully', 'success');
+        if (window.showToast) window.showToast('Shipment token generated and inspector notified', 'success');
+        setBatches(prev => prev.map(batch => batch.id === id ? { ...batch, status: 'shipped', shipment_token: res.data?.shipmentToken } : batch));
       }
     } catch (error) {
-      if (window.showToast) window.showToast('Failed to delete batch', 'error');
+      if (window.showToast) window.showToast(error.message || 'Failed to ship batch', 'error');
     }
+  };
+
+  const handleDownloadPdf = async (batch) => {
+    try {
+      const hash = batch.current_provenance_hash;
+      if (!hash) throw new Error('Certificate hash not ready');
+      const base = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'http://localhost:5001'
+        : 'https://backsme.onrender.com';
+      const url = `${base}/api/verify/${batch.id}/certificate.pdf?hash=${encodeURIComponent(hash)}`;
+      window.open(url, '_blank');
+    } catch (error) {
+      if (window.showToast) window.showToast(error.message || 'Failed to download certificate PDF', 'error');
+    }
+  };
+
+  const handleDownloadQr = async (id) => {
+    try {
+      const res = await window.apiCall(`/api/qr/${id}`);
+      const qr = res?.data?.qrImageData;
+      if (!qr) throw new Error('QR is not ready');
+      const a = document.createElement('a');
+      a.href = qr;
+      a.download = `${res.data.certificateNumber || id}-qr.png`;
+      a.click();
+    } catch (error) {
+      if (window.showToast) window.showToast(error.message || 'Failed to download QR', 'error');
+    }
+  };
+
+  const badge = (value) => {
+    const good = ['approved', 'awaiting_shipment', 'evaluation_passed'].includes(value);
+    const bad = ['rejected', 'evaluation_failed', 'revoked', 'expired'].includes(value);
+    return {
+      background: good ? ACCENT.greenBg : bad ? "rgba(239, 68, 68, 0.1)" : "rgba(245, 158, 11, 0.1)",
+      color: good ? ACCENT.green : bad ? ACCENT.red : ACCENT.amber,
+    };
   };
 
   return (
@@ -156,6 +201,28 @@ function MyBatchesView({ lang, setTab, refreshKey }) {
           >
             + {lang === 'bn' ? 'নতুন ব্যাচ তৈরি করুন' : 'Create Batch'}
           </button>
+        </div>
+
+        <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+          <input
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Search batch or product"
+            style={{ minWidth: 220, flex: 1, padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)" }}
+          />
+          <select
+            value={status}
+            onChange={(e) => { setStatus(e.target.value); setPage(1); }}
+            style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)" }}
+          >
+            <option value="">All statuses</option>
+            <option value="awaiting_shipment">Awaiting shipment</option>
+            <option value="shipped">Shipped</option>
+            <option value="under_review">Under review</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+            <option value="evaluation_failed">Evaluation failed</option>
+          </select>
         </div>
 
         {loading ? (
@@ -179,7 +246,6 @@ function MyBatchesView({ lang, setTab, refreshKey }) {
                   <th style={{ padding: "12px 8px" }}>Product</th>
                   <th style={{ padding: "12px 8px" }}>Weight (kg)</th>
                   <th style={{ padding: "12px 8px" }}>Trust Score</th>
-                  <th style={{ padding: "12px 8px" }}>DVS Score</th>
                   <th style={{ padding: "12px 8px" }}>Status</th>
                   <th style={{ padding: "12px 8px" }}>Created At</th>
                   <th style={{ padding: "12px 8px", textAlign: "right" }}>Actions</th>
@@ -202,27 +268,48 @@ function MyBatchesView({ lang, setTab, refreshKey }) {
                         </span>
                       ) : '-'}
                     </td>
-                    <td style={{ padding: "12px 8px", color: "var(--text-secondary)" }}>{b.dvs_score || '-'}</td>
                     <td style={{ padding: "12px 8px" }}>
+                      {(() => {
+                        const style = badge(b.status);
+                        return (
                       <span style={{ 
                         padding: "4px 8px", borderRadius: 4, fontSize: 11, fontWeight: 600,
-                        background: b.status === 'certified' ? ACCENT.greenBg : b.status === 'rejected' ? "rgba(239, 68, 68, 0.1)" : "rgba(245, 158, 11, 0.1)",
-                        color: b.status === 'certified' ? ACCENT.green : b.status === 'rejected' ? ACCENT.red : ACCENT.amber 
+                        background: style.background,
+                        color: style.color
                       }}>
-                        {b.status?.toUpperCase() || 'PENDING'}
+                        {(b.status || 'pending').replace(/_/g, ' ').toUpperCase()}
                       </span>
+                        );
+                      })()}
                     </td>
                     <td style={{ padding: "12px 8px", color: "var(--text-dim)" }}>
                       {b.created_at ? new Date(b.created_at).toLocaleDateString() : '-'}
                     </td>
                     <td style={{ padding: "12px 8px", textAlign: "right" }}>
-                      <button style={{ background: "none", border: "none", color: ACCENT.blue, cursor: "pointer", marginRight: 12, fontSize: 12 }}>View</button>
-                      <button onClick={() => handleDelete(b.id)} style={{ background: "none", border: "none", color: ACCENT.red, cursor: "pointer", fontSize: 12 }}>Delete</button>
+                      {b.status === 'awaiting_shipment' && (
+                        <button onClick={() => handleShip(b.id)} style={{ background: "none", border: "none", color: ACCENT.blue, cursor: "pointer", marginRight: 12, fontSize: 12 }}>Send</button>
+                      )}
+                      {b.status === 'approved' && (
+                        <>
+                          <button onClick={() => handleDownloadQr(b.id)} style={{ background: "none", border: "none", color: ACCENT.green, cursor: "pointer", marginRight: 12, fontSize: 12 }}>QR</button>
+                          <button onClick={() => handleDownloadPdf(b)} style={{ background: "none", border: "none", color: ACCENT.blue, cursor: "pointer", marginRight: 12, fontSize: 12 }}>PDF</button>
+                          <a href={`${window.BACKEND_URL || 'https://backsme.onrender.com'}/api/verify/${encodeURIComponent(b.id)}/page?hash=${encodeURIComponent(b.current_provenance_hash || '')}`} target="_blank" rel="noreferrer" style={{ color: ACCENT.blue, fontSize: 12 }}>Preview</a>
+                        </>
+                      )}
+                      {b.status === 'rejected' && <span style={{ color: ACCENT.red, fontSize: 12 }}>Reasons available</span>}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16, color: "var(--text-secondary)", fontSize: 12 }}>
+              <span>{pagination.total} batches</span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))} style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border-primary)", background: "transparent", color: "var(--text-primary)", opacity: page <= 1 ? 0.5 : 1 }}>Prev</button>
+                <span style={{ padding: "6px 4px" }}>Page {pagination.page} / {pagination.totalPages}</span>
+                <button disabled={page >= pagination.totalPages} onClick={() => setPage(p => p + 1)} style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border-primary)", background: "transparent", color: "var(--text-primary)", opacity: page >= pagination.totalPages ? 0.5 : 1 }}>Next</button>
+              </div>
+            </div>
           </div>
         )}
       </Card>
@@ -233,8 +320,16 @@ function MyBatchesView({ lang, setTab, refreshKey }) {
 function CreateBatchView({ lang, setTab, onBatchCreated }) {
   const [productName, setProductName] = useState("");
   const [productType, setProductType] = useState("Bio-Slurry");
+  const [category, setCategory] = useState("organic");
   const [weight, setWeight] = useState("100");
   const [destinationZone, setDestinationZone] = useState("Old Dhaka");
+  const [pH, setPH] = useState("7.0");
+  const [ec, setEc] = useState("2.4");
+  const [temperature, setTemperature] = useState("30");
+  const [fermentationDays, setFermentationDays] = useState("21");
+  const [em1Ratio, setEm1Ratio] = useState("0.001");
+  const [bstiCredential, setBstiCredential] = useState("");
+  const [evaluationResult, setEvaluationResult] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async () => {
@@ -249,19 +344,30 @@ function CreateBatchView({ lang, setTab, onBatchCreated }) {
       const localBatchNumber = `BCH-${Date.now().toString().slice(-6)}`;
       const result = await window.apiCall('/api/batches', 'POST', {
         batch_number: localBatchNumber,
+        category,
         feedstock_type: productType,
+        product_type: productType,
         product_name: productName,
-        trust_score: 0,
         destination_zone: destinationZone,
         weight_kg: parseFloat(weight) || 0,
-        packaging_type: 'Standard'
+        packaging_type: 'Standard',
+        pH: Number(pH),
+        ec: Number(ec),
+        temperature: Number(temperature),
+        fermentation_days: Number(fermentationDays),
+        em1Ratio: category === 'organic' ? Number(em1Ratio) : 0,
+        bstiCredential: bstiCredential.trim() || undefined
       });
 
       if (result && result.success && result.data) {
         const newId = result.data.id || result.data.batch_number || localBatchNumber;
-        if (window.showToast) window.showToast(`Batch ${newId} registered successfully!`, 'success');
+        setEvaluationResult(result.evaluation || null);
+        const message = result.data.status === 'evaluation_failed'
+          ? `Batch ${newId} failed automated evaluation`
+          : `Batch ${newId} passed evaluation and is awaiting shipment`;
+        if (window.showToast) window.showToast(message, result.data.status === 'evaluation_failed' ? 'error' : 'success');
         if (onBatchCreated) onBatchCreated();
-        setTab('batches');
+        if (result.data.status !== 'evaluation_failed') setTab('batches');
       } else {
         throw new Error(result?.error || "Failed to register batch");
       }
@@ -309,9 +415,52 @@ function CreateBatchView({ lang, setTab, onBatchCreated }) {
               <option value="organic">Organic Biofertilizer (BARI EM-1)</option>
               <option value="retail">Retail FMCG / Packaged Goods</option>
               <option value="pharma">Pharmaceuticals (DGDA)</option>
+              <option value="dairy">Dairy Cold Chain</option>
+              <option value="manufacturing">Manufacturing Feedstock</option>
             </select>
           </div>
+          <div>
+            <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>Destination Zone</label>
+            <input value={destinationZone} onChange={e => setDestinationZone(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", outline: "none" }} />
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>pH</label>
+            <input type="number" step="0.1" value={pH} onChange={e => setPH(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", outline: "none" }} />
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>EC</label>
+            <input type="number" step="0.1" value={ec} onChange={e => setEc(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", outline: "none" }} />
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>Temperature C</label>
+            <input type="number" step="0.1" value={temperature} onChange={e => setTemperature(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", outline: "none" }} />
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>Fermentation / holding days</label>
+            <input type="number" value={fermentationDays} onChange={e => setFermentationDays(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", outline: "none" }} />
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>EM-1 Ratio</label>
+            <input value={em1Ratio} onChange={e => setEm1Ratio(e.target.value)} disabled={category !== 'organic'} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", outline: "none", opacity: category !== 'organic' ? 0.6 : 1 }} />
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 8 }}>BSTI Credential</label>
+            <input value={bstiCredential} onChange={e => setBstiCredential(e.target.value)} placeholder="BSTI-1234" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", outline: "none" }} />
+          </div>
         </div>
+
+        {evaluationResult && (
+          <div style={{ marginTop: 8, padding: 16, borderRadius: 8, border: `1px solid ${evaluationResult.passed ? ACCENT.green : ACCENT.red}`, background: evaluationResult.passed ? ACCENT.greenBg : "rgba(239, 68, 68, 0.08)" }}>
+            <div style={{ fontWeight: 700, color: evaluationResult.passed ? ACCENT.green : ACCENT.red, marginBottom: 8 }}>
+              {evaluationResult.summary?.status?.replace(/_/g, ' ').toUpperCase()} · Trust score {evaluationResult.trustScore}
+            </div>
+            <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+              {(evaluationResult.summary?.failures || []).length
+                ? evaluationResult.summary.failures.join("; ")
+                : "Field-level BARI/BSTI evaluation passed. Inspector request created."}
+            </div>
+          </div>
+        )}
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 32 }}>
           <button 
@@ -413,16 +562,37 @@ function NotificationsView({ lang }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    window.apiCall('/api/notifications')
+    const load = () => window.apiCall('/api/notifications')
       .then(res => {
         if (res && res.success && res.data) {
-          setNotifications(res.data);
+          setNotifications(res.data.notifications || res.data || []);
         }
       })
       .catch(err => {
-        console.warn("Notifications fetch error (expected if endpoint missing):", err);
+        console.warn("Notifications fetch error:", err);
       })
       .finally(() => setLoading(false));
+
+    load();
+
+    const base = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:5001'
+      : 'https://backsme.onrender.com';
+    const token = localStorage.getItem('climaLogix_token') || localStorage.getItem('climalogix_token');
+    let source;
+    if (token && typeof EventSource !== 'undefined') {
+      source = new EventSource(`${base}/api/notifications/stream?token=${encodeURIComponent(token)}`);
+      source.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'notification' && payload.notification) {
+            setNotifications(prev => [payload.notification, ...prev]);
+          }
+        } catch { /* ignore */ }
+      };
+    }
+
+    return () => source?.close();
   }, []);
 
   return (

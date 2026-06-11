@@ -101,8 +101,9 @@ export function calculateTrustScore(
   // decay to 0 at 50% off.
   const ratioDelta = Math.abs(input.em1Ratio - std.requiredRatio);
   const ratioTolerance = std.requiredRatio * 0.05;
-  const ratioSub =
-    ratioDelta <= ratioTolerance
+  const ratioSub = std.requiredRatio === 0
+    ? 1
+    : ratioDelta <= ratioTolerance
       ? 1
       : clamp(1 - (ratioDelta - ratioTolerance) / (std.requiredRatio * 0.5), 0, 1);
 

@@ -1,3 +1,8 @@
+/**
+ * Legacy Render entry shim.
+ * Production MUST run the compiled TypeScript server (dist/app.js).
+ * This file exists only so misconfigured start commands fail loudly with guidance.
+ */
 const path = require('path');
 // CRITICAL: Force IPv4-first DNS resolution BEFORE any network code runs.
 // Render free instances lack reliable IPv6 outbound — without this, Node
@@ -298,9 +303,6 @@ function createAccessToken(user) {
     { sub: user.id, role: user.role, email: user.email, type: 'access' },
     ACCESS_TOKEN_SECRET,
     { expiresIn: ACCESS_TOKEN_TTL }
-  );
-}
-
 function createRefreshToken(user) {
   ensureAuthSecrets();
   const nonce = crypto.randomBytes(32).toString('hex');

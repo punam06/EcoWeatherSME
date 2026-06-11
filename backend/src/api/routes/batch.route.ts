@@ -1,44 +1,63 @@
-import { Router, Request, Response } from 'express';
-import QRCode from 'qrcode';
+import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
-import { getBatchesList, addBatch, updateBatchInStore, getBatchFromStore, deleteBatchFromStore } from '../../lib/services/batchStore.service';
-import { authenticateJWT, optionalJWT } from '../../middleware/authenticateJWT';
+import { authenticateJWT, optionalJWT, getRequestUserId, getRequestUserRole } from '../../middleware/authenticateJWT';
 import { requireRoles } from '../../middleware/roleGuard';
+import {
+  createBatchWithEvaluation,
+  getBatchDetail,
+  guardedUpdateBatch,
+  listBatches,
+  revokeBatch,
+  shipBatch,
+} from '../../lib/services/batchVerification.service';
 
 const router = Router();
 
 const CreateBatchSchema = z.object({
   product_name: z.string().min(1).max(255).optional(),
   product_type: z.string().min(1).max(255).optional(),
-  // feedstock_type is an alias sent by ProducerDashboard — accepted here to
-  // avoid silent data loss from Zod's .strict() unknown-key rejection.
+  category: z.string().min(1).max(100).optional(),
   feedstock_type: z.string().min(1).max(255).optional(),
-  trust_score: z.number().optional(),
+  ingredients: z.any().optional(),
+  certification_claims: z.any().optional(),
   weight_kg: z.coerce.number().min(0).max(1000000).optional(),
   packaging_type: z.string().min(1).max(100).optional(),
   destination_zone: z.string().min(1).max(100).optional(),
   processor_id: z.string().min(1).max(100).optional(),
+  manufacturer_id: z.string().min(1).max(100).optional(),
   batch_number: z.string().min(1).max(100).optional(),
-});
+  pH: z.coerce.number().min(0).max(14).optional(),
+  ph: z.coerce.number().min(0).max(14).optional(),
+  ec: z.coerce.number().min(0).max(20).optional(),
+  EC: z.coerce.number().min(0).max(20).optional(),
+  temperature: z.coerce.number().min(-50).max(100).optional(),
+  temp: z.coerce.number().min(-50).max(100).optional(),
+  temperatureCelsius: z.coerce.number().min(-50).max(100).optional(),
+  temperature_celsius: z.coerce.number().min(-50).max(100).optional(),
+  em1Ratio: z.union([z.coerce.number(), z.string()]).optional(),
+  em1_ratio: z.union([z.coerce.number(), z.string()]).optional(),
+  ratio: z.union([z.coerce.number(), z.string()]).optional(),
+  fermentationDays: z.coerce.number().int().min(0).max(3650).optional(),
+  fermentation_days: z.coerce.number().int().min(0).max(3650).optional(),
+  bstiCredential: z.string().max(100).optional(),
+  bsti_credential: z.string().max(100).optional(),
+  inspector_certification_id: z.string().max(100).optional(),
+}).passthrough();
 
 const UpdateBatchSchema = z.object({
   product_name: z.string().min(1).max(255).optional(),
+  product_type: z.string().min(1).max(255).optional(),
   feedstock_type: z.string().min(1).max(255).optional(),
+  ingredients: z.any().optional(),
+  certification_claims: z.any().optional(),
   weight_kg: z.coerce.number().min(0).max(1000000).optional(),
   packaging_type: z.string().min(1).max(100).optional(),
   destination_zone: z.string().min(1).max(100).optional(),
-  processor_id: z.string().min(1).max(100).optional(),
-  batch_number: z.string().min(1).max(100).optional(),
-  status: z.enum(['pending', 'certified', 'dispatched', 'delivered']).optional(),
-  trust_score: z.number().min(0).max(100).optional(),
-  qr_code_url: z.string().optional(),
-  certificate_url: z.string().optional(),
 }).strict();
 
-const CertifyBatchSchema = z.object({
-  batchId: z.string().min(1).max(100).optional(),
-  trustScore: z.coerce.number().min(0).max(100).optional(),
+const RevokeSchema = z.object({
+  reason: z.string().min(3).max(2000),
 }).strict();
 
 const RecordReadingsSchema = z.object({
@@ -49,446 +68,216 @@ const RecordReadingsSchema = z.object({
   fermentation_days: z.coerce.number().int().min(0).max(365).optional(),
 }).strict();
 
-// GET /api/batches
-router.get('/', authenticateJWT, async (req: Request, res: Response) => {
+function accessContext(req: Request) {
+  return { userId: getRequestUserId(req), role: getRequestUserRole(req) };
+}
+
+router.get('/', authenticateJWT, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const rawProcessorId = req.query.processor_id;
-    const processorId = typeof rawProcessorId === 'string' ? rawProcessorId.trim() : undefined;
-    if (processorId && (processorId.length === 0 || processorId.length > 100)) {
-      res.status(400).json({ success: false, error: 'Invalid processor_id format' });
-      return;
-    }
-    
-    if (isSupabaseConfigured()) {
-      const supabase = getSupabaseClient();
-      let query = supabase.from('batches').select('*').order('created_at', { ascending: false });
-      if (processorId) {
-        query = query.eq('processor_id', processorId);
-      }
-      const { data, error } = await query;
-      if (!error && data) {
-        res.json({ success: true, data });
-        return;
-      }
-      console.warn('Supabase fetch failed, falling back to batchStore:', error);
-    }
-    
-    // In-memory fallback
-    let list = getBatchesList();
-    if (processorId) {
-      list = list.filter(b => b.processor_id === processorId);
-    }
-    res.json({ success: true, data: list });
-  } catch (error) {
-    console.error('Fetch batches error:', error);
-    res.status(500).json({ success: false, error: 'Failed to retrieve batches' });
-  }
-});
-
-// GET /api/batches/:id
-router.get('/:id', optionalJWT, async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    if (!id || typeof id !== 'string' || id.length > 100) {
-      res.status(400).json({ success: false, error: 'Valid batch ID is required' });
-      return;
-    }
-    
-    if (isSupabaseConfigured()) {
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase.from('batches').select('*').eq('id', id).single();
-      if (!error && data) {
-        res.json({ success: true, data });
-        return;
-      }
-    }
-    
-    const batch = getBatchFromStore(id);
-    if (batch) {
-      res.json({ success: true, data: batch });
-    } else {
-      res.status(404).json({ success: false, error: 'Batch not found' });
-    }
-  } catch (error) {
-    console.error('Fetch batch error:', error);
-    res.status(500).json({ success: false, error: 'Failed to retrieve batch' });
-  }
-});
-
-// POST /api/batches
-router.post('/', authenticateJWT, requireRoles('processor', 'producer', 'sme', 'sme_owner', 'buyer'), async (req: Request, res: Response) => {
-  try {
-    const parsed = CreateBatchSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ success: false, error: 'Validation failed', details: parsed.error.issues });
-      return;
-    }
-    const { 
-      product_name, 
-      product_type, 
-      feedstock_type,
-      weight_kg, 
-      packaging_type, 
-      destination_zone, 
-      batch_number
-    } = parsed.data;
-    // Use feedstock_type as fallback alias for product_type (sent by ProducerDashboard)
-    const resolvedProductType = product_type || feedstock_type;
-
-    const user = (req as any).user;
-    const userId = user?.id || 'demo-processor-id';
-
-    const displayBatchId = batch_number || `BCH-${Date.now().toString().slice(-6)}`;
-    const weightNum = weight_kg ?? 100;
-    
-    const batchData = {
-      batch_number: displayBatchId,
-      product_name: product_name || 'Unnamed Organic Product',
-      product_type: resolvedProductType || 'Bio-Slurry',
-      feedstock_type: resolvedProductType || 'Bio-Slurry',
-      weight_kg: weightNum,
-      packaging_type: packaging_type || 'Standard',
-      destination_zone: destination_zone || 'Old Dhaka',
-      status: 'pending' as const,
-      trust_score: 0,
-      processor_id: userId
-    };
-
-    if (isSupabaseConfigured()) {
-      try {
-        const supabase = getSupabaseClient();
-        const { data, error } = await supabase
-          .from('batches')
-          .insert({
-            batch_number: batchData.batch_number,
-            product_name: batchData.product_name,
-            feedstock_type: batchData.feedstock_type,
-            trust_score: batchData.trust_score,
-            processor_id: userId,
-            producer_id: userId, // Set both for schema/provenance compatibility
-            weight_kg: batchData.weight_kg,
-            packaging_type: batchData.packaging_type,
-            destination_zone: batchData.destination_zone,
-            status: 'pending'
-          })
-          .select('*')
-          .single();
-        
-        if (!error && data) {
-          // Sync to local memory as well
-          addBatch({ ...batchData, id: data.id });
-          res.status(201).json({ success: true, data });
-          return;
-        }
-        console.warn('Supabase batch creation failed, using fallback:', error);
-        res.status(400).json({ success: false, error: error?.message || 'Supabase insertion failed' });
-        return;
-      } catch (err: any) {
-        console.warn('Supabase batch creation threw, using fallback:', err);
-        res.status(500).json({ success: false, error: err?.message || 'Internal Supabase database error' });
-        return;
-      }
-    }
-
-    // In-memory fallback
-    const newBatch = addBatch(batchData);
-    res.status(201).json({ success: true, data: newBatch });
-  } catch (error) {
-    console.error('Create batch error:', error);
-    res.status(500).json({ success: false, error: 'Failed to create new batch registry' });
-  }
-});
-
-// PUT /api/batches/:id
-router.put('/:id', authenticateJWT, requireRoles('processor'), async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    if (!id || typeof id !== 'string' || id.length > 100) {
-      res.status(400).json({ success: false, error: 'Valid batch ID is required' });
-      return;
-    }
-    const parsed = UpdateBatchSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ success: false, error: 'Validation failed', details: parsed.error.issues });
-      return;
-    }
-    const updates = parsed.data;
-    
-    if (isSupabaseConfigured()) {
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase.from('batches').update(updates).eq('id', id).select('*').single();
-      if (!error && data) {
-        updateBatchInStore(id, data);
-        res.json({ success: true, data });
-        return;
-      }
-    }
-    
-    const updated = updateBatchInStore(id, updates);
-    if (updated) {
-      res.json({ success: true, data: updated });
-    } else {
-      res.status(404).json({ success: false, error: 'Batch not found to update' });
-    }
-  } catch (error) {
-    console.error('Update batch error:', error);
-    res.status(500).json({ success: false, error: 'Failed to update batch' });
-  }
-});
-
-// POST /api/batches/certify
-router.post('/certify', authenticateJWT, requireRoles('processor'), async (req: Request, res: Response) => {
-  try {
-    const parsed = CertifyBatchSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ success: false, error: 'Validation failed', details: parsed.error.issues });
-      return;
-    }
-    const { batchId, trustScore } = parsed.data;
-    const finalTrustScore = trustScore ?? 80;
-    
-    // Generate actual batch ID if none provided
-    const displayBatchId = batchId || `BCH-${Date.now().toString().slice(-6)}`;
-    
-    // Create the public verification URL — uses FRONTEND_URL env (set in .env to
-    // https://ecoweathersme.onrender.com) so QRs always resolve to the live SPA,
-    // which deep-links to the Tracking view via ?batch=<id>.
-    const frontendBase = (process.env.FRONTEND_URL || 'https://ecoweathersme.onrender.com')
-      .replace(/\/+$/, ''); // strip trailing slash
-    const verificationUrl = `${frontendBase}/?batch=${displayBatchId}`;
-    
-    // Generate QR code data URL (Base64 image) securely on the backend
-    const qrCodeDataUrl = await QRCode.toDataURL(verificationUrl, {
-      width: 300,
-      margin: 2,
-      color: {
-        dark: '#000000',
-        light: '#ffffff'
-      }
-    });
-
-    // Update status in store or Supabase
-    if (isSupabaseConfigured()) {
-      try {
-        const supabase = getSupabaseClient();
-        const { data, error } = await supabase
-          .from('batches')
-          .update({ 
-            qr_code_url: qrCodeDataUrl, 
-            certificate_url: verificationUrl,
-            status: 'certified',
-            trust_score: finalTrustScore
-          })
-          .eq('batch_number', displayBatchId)
-          .select('*')
-          .single();
-        
-        if (!error && data) {
-          updateBatchInStore(displayBatchId, { 
-            status: 'certified', 
-            trust_score: finalTrustScore,
-            qr_code_url: qrCodeDataUrl,
-            certificate_url: verificationUrl
-          });
-        }
-      } catch (err) {
-        console.warn('Supabase certify update failed, fallback to store update:', err);
-      }
-    }
-
-    // Always keep store in sync
-    updateBatchInStore(displayBatchId, {
-      status: 'certified',
-      trust_score: finalTrustScore,
-      qr_code_url: qrCodeDataUrl,
-      certificate_url: verificationUrl
-    });
-    
+    const result = await listBatches(req.query, accessContext(req));
     res.json({
       success: true,
-      data: {
-        batchId: displayBatchId,
-        verificationUrl,
-        qrCodeDataUrl,
-        certifiedAt: new Date().toISOString(),
-        trustScore: finalTrustScore
-      }
+      data: result.rows,
+      pagination: {
+        page: result.page,
+        pageSize: result.pageSize,
+        total: result.total,
+        totalPages: result.totalPages,
+      },
     });
   } catch (error) {
-    console.error('QR Generation Error:', error);
-    res.status(500).json({ success: false, error: 'Failed to generate cryptographic QR code' });
+    next(error);
   }
 });
 
-// Readings stubs so they are handled cleanly inside batchRouter
-router.post('/:id/readings', authenticateJWT, requireRoles('processor'), async (req: Request, res: Response) => {
+router.get('/:id', optionalJWT, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    if (!id || typeof id !== 'string' || id.length > 100) {
+    if (!id || id.length > 100) {
       res.status(400).json({ success: false, error: 'Valid batch ID is required' });
       return;
     }
+    const ctx = accessContext(req);
+    const batch = await getBatchDetail(id, ctx.userId ? ctx : undefined);
+    if (!batch) {
+      res.status(404).json({ success: false, error: 'Batch not found' });
+      return;
+    }
+    res.json({ success: true, data: batch });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post(
+  '/',
+  authenticateJWT,
+  requireRoles('processor', 'producer', 'sme', 'sme_owner', 'buyer', 'admin'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = CreateBatchSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, error: 'Validation failed', details: parsed.error.issues });
+        return;
+      }
+      const userId = getRequestUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Authentication required' });
+        return;
+      }
+      const manufacturerId = parsed.data.manufacturer_id || parsed.data.processor_id || userId;
+      const result = await createBatchWithEvaluation(parsed.data, manufacturerId);
+      res.status(201).json({
+        success: true,
+        data: result.batch,
+        evaluation: result.evaluation,
+        verificationRequest: result.verificationRequest,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.put(
+  '/:id',
+  authenticateJWT,
+  requireRoles('processor', 'producer', 'sme', 'sme_owner', 'admin'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = UpdateBatchSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, error: 'Validation failed', details: parsed.error.issues });
+        return;
+      }
+      const result = await guardedUpdateBatch(req.params.id, parsed.data, accessContext(req));
+      if (result.error) {
+        res.status(result.status).json({ success: false, error: result.error });
+        return;
+      }
+      res.json({ success: true, data: result.batch });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  '/:id/ship',
+  authenticateJWT,
+  requireRoles('processor', 'producer', 'sme', 'sme_owner', 'admin'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId = getRequestUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Authentication required' });
+        return;
+      }
+      const result = await shipBatch(req.params.id, { userId, role: getRequestUserRole(req) });
+      if (result.error) {
+        res.status(result.status).json({ success: false, error: result.error });
+        return;
+      }
+      res.json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  '/:id/revoke',
+  authenticateJWT,
+  requireRoles('inspector', 'admin'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = RevokeSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, error: 'Validation failed', details: parsed.error.issues });
+        return;
+      }
+      const userId = getRequestUserId(req);
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Authentication required' });
+        return;
+      }
+      const result = await revokeBatch(req.params.id, { userId, role: getRequestUserRole(req) }, parsed.data.reason);
+      if (result.error) {
+        res.status(result.status).json({ success: false, error: result.error });
+        return;
+      }
+      res.json({ success: true, data: result.batch });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post('/:id/readings', authenticateJWT, requireRoles('processor', 'producer', 'admin'), async (req: Request, res: Response) => {
+  try {
     const parsed = RecordReadingsSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ success: false, error: 'Validation failed', details: parsed.error.issues });
       return;
     }
-    const { pH, EC, temperature, em1_ratio, fermentation_days } = parsed.data;
-    
     if (isSupabaseConfigured()) {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase.from('iot_readings').insert({
-        batch_id: id,
-        ph: pH,
-        ec: EC,
-        temperature,
-        em1_ratio,
-        fermentation_days
+        batch_id: req.params.id,
+        ph: parsed.data.pH,
+        ec: parsed.data.EC,
+        temperature: parsed.data.temperature,
+        em1_ratio: parsed.data.em1_ratio,
+        fermentation_days: parsed.data.fermentation_days,
       }).select('*').single();
       if (!error && data) {
         res.status(201).json({ success: true, data });
         return;
       }
     }
-    
-    res.status(201).json({
-      success: true,
-      data: {
-        id: `rdg-${Date.now().toString().slice(-6)}`,
-        batch_id: id,
-        ph: pH || 4.1,
-        ec: EC || 3.4,
-        temperature: temperature || 28,
-        em1_ratio: em1_ratio || '1:1:20',
-        fermentation_days: fermentation_days || 9,
-        recorded_at: new Date().toISOString()
-      }
-    });
-  } catch (err) {
+    if (process.env.NODE_ENV === 'production') {
+      res.status(503).json({ success: false, error: 'IoT readings require Supabase in production' });
+      return;
+    }
+    res.status(201).json({ success: true, data: { id: `rdg-${Date.now()}`, batch_id: req.params.id, ...parsed.data } });
+  } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to record readings' });
   }
 });
 
 router.get('/:id/readings', async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    if (!id || typeof id !== 'string' || id.length > 100) {
-      res.status(400).json({ success: false, error: 'Valid batch ID is required' });
-      return;
-    }
     if (isSupabaseConfigured()) {
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase.from('iot_readings').select('*').eq('batch_id', id);
+      const { data, error } = await getSupabaseClient().from('iot_readings').select('*').eq('batch_id', req.params.id);
       if (!error && data) {
         res.json({ success: true, data });
         return;
       }
     }
-    
-    res.json({
-      success: true,
-      data: [
-        {
-          id: `rdg-seed`,
-          batch_id: id,
-          ph: 4.1,
-          ec: 3.4,
-          temperature: 28,
-          em1_ratio: '1:1:20',
-          fermentation_days: 9,
-          recorded_at: new Date(Date.now() - 3600000).toISOString()
-        }
-      ]
-    });
-  } catch (err) {
+    res.json({ success: true, data: [] });
+  } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to retrieve readings' });
   }
 });
 
-// DELETE /api/batches/:id
-router.delete('/:id', authenticateJWT, requireRoles('processor'), async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    if (!id || typeof id !== 'string' || id.length > 100) {
-      res.status(400).json({ success: false, error: 'Valid batch ID is required' });
-      return;
-    }
-    
-    if (isSupabaseConfigured()) {
-      try {
-        const supabase = getSupabaseClient();
-        const { error } = await supabase.from('batches').delete().eq('id', id);
-        if (!error) {
-          deleteBatchFromStore(id);
-          res.json({ success: true, message: 'Batch deleted successfully' });
-          return;
-        }
-        console.warn('Supabase delete failed, using fallback:', error);
-      } catch (err) {
-        console.warn('Supabase delete threw, using fallback:', err);
-      }
-    }
-    
-    const deleted = deleteBatchFromStore(id);
-    if (deleted) {
-      res.json({ success: true, message: 'Batch deleted successfully' });
-    } else {
-      res.status(404).json({ success: false, error: 'Batch not found' });
-    }
-  } catch (error) {
-    console.error('Delete batch error:', error);
-    res.status(500).json({ success: false, error: 'Failed to delete batch' });
-  }
-});
-
-// GET /api/batches/:id/scans
-// Returns the QR scan history for a batch — the source-to-consumer journey
-// proof. Auth required (any authenticated user can view scan logs for
-// transparency in the supply chain).
 router.get('/:id/scans', authenticateJWT, async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    if (!id || typeof id !== 'string' || id.length > 100) {
-      res.status(400).json({ success: false, error: 'Valid batch ID is required' });
-      return;
-    }
-
     if (!isSupabaseConfigured()) {
       res.json({ success: true, data: { scans: [], total: 0 } });
       return;
     }
-
-    const supabase = getSupabaseClient();
-
-    // Try both batch_number and uuid-style id to be tolerant of input formats
-    const { data: scans, error } = await supabase
+    const { data, error } = await getSupabaseClient()
       .from('qr_scans')
-      .select('id, user_agent, ip_hash, scanned_at')
-      .or(`batch_id.eq.${id},batch_id.eq.${encodeURIComponent(id)}`)
+      .select('id, user_agent, ip_hash, scanned_at, status_returned')
+      .eq('batch_id', req.params.id)
       .order('scanned_at', { ascending: false })
       .limit(50);
-
     if (error) {
-      // Table may not exist yet on first deploy — degrade gracefully
-      console.warn('qr_scans query failed (table may not exist yet):', error.message);
       res.json({ success: true, data: { scans: [], total: 0 } });
       return;
     }
-
-    res.json({
-      success: true,
-      data: {
-        scans: (scans || []).map((s: any) => ({
-          id: s.id,
-          userAgent: s.user_agent,
-          ipHash: s.ip_hash,
-          scannedAt: s.scanned_at,
-        })),
-        total: scans?.length ?? 0,
-      },
-    });
+    res.json({ success: true, data: { scans: data || [], total: data?.length || 0 } });
   } catch (error) {
-    console.error('Get batch scans error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch scan history' });
   }
 });

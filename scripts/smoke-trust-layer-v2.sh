@@ -212,28 +212,16 @@ else
 fi
 
 echo
-echo "8) GET /api/verify/:batch_id — demo chain fallback"
+echo "8) GET /api/verify/:batch_id — unknown batch is not fabricated"
 RES=$(curl -s -w "\n%{http_code}" "$BASE/api/verify/DEMO-BATCH-001")
 STATUS=$(echo "$RES" | tail -n 1)
 BODY=$(echo "$RES" | sed -e '$ d')
-assert_status "$STATUS" "200" "verify status"
-SOURCE=$(jget 'data.source' "$BODY")
-assert_eq "$SOURCE" "demo" "verify source=demo"
-CHAIN_LEN=$(jget 'data.chain.events.length' "$BODY")
-assert_eq "$CHAIN_LEN" "3" "verify chain has 3 events"
-E0=$(jget 'data.chain.events[0].type' "$BODY")
-E1=$(jget 'data.chain.events[1].type' "$BODY")
-E2=$(jget 'data.chain.events[2].type' "$BODY")
-assert_eq "$E0" "genesis" "event[0]=genesis"
-assert_eq "$E1" "dispatched" "event[1]=dispatched"
-assert_eq "$E2" "delivered" "event[2]=delivered"
-VERIFIED=$(jget 'data.chain.verified' "$BODY")
-assert_eq "$VERIFIED" "true" "chain verifies"
-HEAD=$(jget 'data.chain.head_hash' "$BODY")
-if [[ "${#HEAD}" -eq 64 ]]; then
-  pass "head_hash is 64-char hex"
+assert_status "$STATUS" "404" "verify unknown status"
+ERR=$(jget 'error' "$BODY")
+if [[ "$ERR" == *"Batch not found"* ]]; then
+  pass "verify does not fabricate demo data"
 else
-  fail "head_hash length is ${#HEAD}, expected 64"
+  fail "verify unknown error — got '$ERR'"
 fi
 
 echo

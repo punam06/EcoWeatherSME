@@ -5,5 +5,19 @@ services:
     rootDir: backend
     buildCommand: npm install --include=dev && npm run build
     startCommand: node dist/app.js
-    envVarGroups:
-      - name: EcoSME
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: FRONTEND_URL
+        value: https://ecoweathersme.onrender.com
+      - key: BACKEND_API_URL
+        value: https://backsme.onrender.com
+      - key: PUBLIC_BACKEND_URL
+        value: https://backsme.onrender.com
+      # Set in Render dashboard (never commit secrets):
+      # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY,
+      # DATABASE_URL (Supabase pooler, sslmode=require),
+      # JWT_SECRET, GROQ_API_KEY, OPENWEATHER_API_KEY

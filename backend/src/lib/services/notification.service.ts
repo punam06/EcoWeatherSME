@@ -1,16 +1,14 @@
 /**
  * ═══════════════════════════════════════════════════════════════
  * CLIMALOGIX AI — NOTIFICATION SERVICE
- * File: src/lib/services/notification.service.ts
- *
- * Helper to create and persist notifications for authenticated
- * users. Called from Trust Score, DVS, and Order pipelines.
+ * Unified notification persistence + realtime fan-out.
  * ═══════════════════════════════════════════════════════════════
  */
 
 import { getSupabaseClient, isSupabaseConfigured } from '../supabase';
+import { allowMemoryFallback } from '../runtimeConfig';
+import { publishNotification } from './notificationStream.service';
 
-/** Allowed notification type values — must mirror the DB CHECK constraint. */
 export type NotificationType =
   | 'trust_pass'
   | 'trust_fail'
@@ -19,11 +17,17 @@ export type NotificationType =
   | 'dispatch_rejected'
   | 'order_update'
   | 'budget_alert'
-  | 'verification_request';
+  | 'verification_request'
+  | 'evaluation_failed'
+  | 'evaluation_passed'
+  | 'product_shipped'
+  | 'product_received'
+  | 'batch_rejected'
+  | 'qr_ready';
 
 export interface NotificationRow {
   id: string;
-  user_id: string;
+  user_id: string | null;
   type: NotificationType | string;
   title: string;
   body: string;
@@ -33,37 +37,29 @@ export interface NotificationRow {
   destination_zone?: string;
 }
 
-const localNotifications: NotificationRow[] = [
-  {
-    id: "notif-1",
-    user_id: "demo-user-id",
-    type: "verification_request",
-    title: "New Verification Request",
-    body: "SME Owner has submitted Batch BCH-3522026 for Quality & Trust Verification.",
-    is_read: false,
-    created_at: new Date(Date.now() - 3600000).toISOString(),
-    batch_id: "BCH-3522026",
-    destination_zone: "Old Dhaka"
-  }
-];
+const localNotifications: NotificationRow[] = [];
 
-export function getLocalNotifications(): NotificationRow[] {
-  return localNotifications;
+export function getLocalNotifications(userId?: string): NotificationRow[] {
+  if (!userId) return [...localNotifications];
+  return localNotifications.filter((n) => n.user_id === userId);
 }
 
-export function addLocalNotification(notif: Omit<NotificationRow, 'id' | 'created_at' | 'is_read'> & { id?: string }): NotificationRow {
+export function addLocalNotification(
+  notif: Omit<NotificationRow, 'id' | 'created_at' | 'is_read'> & { id?: string },
+): NotificationRow {
   const newNotif: NotificationRow = {
     ...notif,
-    id: notif.id || `notif-${Date.now()}`,
+    id: notif.id || `notif-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     created_at: new Date().toISOString(),
-    is_read: false
+    is_read: false,
   };
   localNotifications.unshift(newNotif);
+  if (newNotif.user_id) publishNotification(newNotif.user_id, newNotif);
   return newNotif;
 }
 
 export function markLocalNotificationAsRead(id: string): boolean {
-  const item = localNotifications.find(n => n.id === id);
+  const item = localNotifications.find((n) => n.id === id);
   if (item) {
     item.is_read = true;
     return true;
@@ -71,52 +67,87 @@ export function markLocalNotificationAsRead(id: string): boolean {
   return false;
 }
 
-export function markAllLocalNotificationsAsRead(): void {
-  localNotifications.forEach(n => n.is_read = true);
+export function markAllLocalNotificationsAsRead(userId?: string): void {
+  localNotifications.forEach((n) => {
+    if (!userId || n.user_id === userId) n.is_read = true;
+  });
 }
 
-/**
- * Creates a notification row in Supabase.
- * Best-effort: logs a warning but never throws, so calling pipelines
- * are never interrupted by notification failures.
- *
- * @param userId  - UUID of the target user
- * @param type    - One of NotificationType
- * @param title   - Short headline shown in the drawer header
- * @param body    - Full description text
- */
 export async function createNotification(
-  userId: string,
-  type: NotificationType,
+  userId: string | null | undefined,
+  type: NotificationType | string,
   title: string,
   body: string,
-): Promise<void> {
-  // Try adding locally first
-  addLocalNotification({
+  extras?: { batchId?: string; destinationZone?: string; id?: string },
+): Promise<NotificationRow | null> {
+  if (!userId) return null;
+
+  const row: NotificationRow = {
+    id: extras?.id || `notif-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     user_id: userId,
     type,
     title,
-    body
-  });
+    body,
+    is_read: false,
+    created_at: new Date().toISOString(),
+    batch_id: extras?.batchId,
+    destination_zone: extras?.destinationZone,
+  };
 
-  if (!isSupabaseConfigured()) {
-    return; // Gracefully skip when DB is not configured
+  if (allowMemoryFallback() && !isSupabaseConfigured()) {
+    localNotifications.unshift(row);
+    publishNotification(userId, row);
+    return row;
   }
 
-  try {
-    const supabase = getSupabaseClient();
-    const { error } = await supabase.from('notifications').insert({
-      user_id: userId,
-      type,
-      title,
-      body,
-      is_read: false,
-    });
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseClient();
+      const insertRow: Record<string, unknown> = {
+        user_id: userId,
+        type,
+        title,
+        body,
+        is_read: false,
+      };
+      if (extras?.batchId) insertRow.batch_id = extras.batchId;
+      if (extras?.destinationZone) insertRow.destination_zone = extras.destinationZone;
 
-    if (error) {
-      console.error('[NotificationService] Insert failed:', error.message);
+      const { data, error } = await supabase
+        .from('notifications')
+        .insert(insertRow)
+        .select('*')
+        .single();
+
+      if (!error && data) {
+        const persisted = data as NotificationRow;
+        publishNotification(userId, persisted);
+        return persisted;
+      }
+      console.error('[NotificationService] Insert failed:', error?.message);
+    } catch (err) {
+      console.error('[NotificationService] Unexpected error:', err instanceof Error ? err.message : String(err));
     }
-  } catch (err) {
-    console.error('[NotificationService] Unexpected error:', err instanceof Error ? err.message : String(err));
   }
+
+  if (allowMemoryFallback()) {
+    localNotifications.unshift(row);
+    publishNotification(userId, row);
+    return row;
+  }
+
+  return null;
+}
+
+export async function listNotificationsForUser(userId: string, limit = 50): Promise<NotificationRow[]> {
+  if (isSupabaseConfigured()) {
+    const { data, error } = await getSupabaseClient()
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (!error && data) return data as NotificationRow[];
+  }
+  return getLocalNotifications(userId).slice(0, limit);
 }

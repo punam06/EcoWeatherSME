@@ -166,6 +166,10 @@ export type ProvenanceEventType =
   | 'dispatched'
   | 'in_transit'
   | 'delivered'
+  | 'received'
+  | 'approved'
+  | 'rejected'
+  | 'revoked'
   | 'verified'
   | 'flagged';
 
@@ -259,4 +263,3 @@ export interface QRSMEClaimResult {
   custody_event_id: string;
   recommendations: SaleWindowRecommendations;
 }
-

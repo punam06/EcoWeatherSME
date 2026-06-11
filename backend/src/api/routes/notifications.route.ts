@@ -13,16 +13,72 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import nodemailer from 'nodemailer';
-import { authenticateJWT } from '../../middleware/authenticateJWT';
+import { authenticateJWT, getRequestUserId } from '../../middleware/authenticateJWT';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
+import { listNotificationsForUser } from '../../lib/services/notification.service';
+import { subscribeUserNotifications } from '../../lib/services/notificationStream.service';
+import { resolveUserForToken } from '../../middleware/authenticateJWT';
 
 const router = Router();
 
 /** Extracts the authenticated user's UUID from the JWT middleware result. */
 function getUserId(req: Request): string | null {
-  const user = (req as any).user;
-  return user?.id ?? user?.user_metadata?.id ?? null;
+  return getRequestUserId(req) ?? null;
 }
+
+// ── GET /api/notifications/stream (SSE) ───────────────────────────────────────
+
+router.get(
+  '/stream',
+  async (req: Request, res: Response): Promise<void> => {
+    const queryToken = typeof req.query.token === 'string' ? req.query.token : undefined;
+    if (queryToken && !(req as any).user) {
+      const user = await resolveUserForToken(queryToken);
+      if (user) (req as any).user = user;
+    }
+
+    const authHeader = req.headers['authorization'];
+    if (!authHeader && !queryToken) {
+      res.status(401).json({ success: false, error: 'Missing authorization' });
+      return;
+    }
+
+    if (!(req as any).user) {
+      res.status(401).json({ success: false, error: 'Invalid token' });
+      return;
+    }
+
+    const userId = getUserId(req);
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User ID not found in token' });
+      return;
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    const send = (payload: unknown) => {
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    send({ type: 'connected', userId, at: new Date().toISOString() });
+
+    const unsubscribe = subscribeUserNotifications(userId, (notification) => {
+      send({ type: 'notification', notification });
+    });
+
+    const heartbeat = setInterval(() => {
+      res.write(': heartbeat\n\n');
+    }, 25000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+    });
+  },
+);
 
 // ── GET /api/notifications ─────────────────────────────────────────────────────
 
@@ -41,28 +97,15 @@ router.get(
         return;
       }
 
-      if (!isSupabaseConfigured()) {
+      if (!isSupabaseConfigured() && process.env.NODE_ENV !== 'production') {
         const { getLocalNotifications } = require('../../lib/services/notification.service');
-        const notifications = getLocalNotifications();
+        const notifications = getLocalNotifications(userId);
         const unreadCount = notifications.filter((n: any) => !n.is_read).length;
         res.json({ success: true, data: { notifications, unreadCount } });
         return;
       }
 
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (error) {
-        res.status(500).json({ success: false, error: error.message });
-        return;
-      }
-
-      const notifications = data ?? [];
+      const notifications = await listNotificationsForUser(userId, 50);
       const unreadCount = notifications.filter((n: any) => !n.is_read).length;
 
       res.json({ success: true, data: { notifications, unreadCount } });

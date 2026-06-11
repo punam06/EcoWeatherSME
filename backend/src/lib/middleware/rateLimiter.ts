@@ -9,10 +9,13 @@
 
 import rateLimit from 'express-rate-limit';
 
+const skipInTest = () => process.env.NODE_ENV === 'test';
+
 // Global API Rate Limiter: 100 requests per 15 minutes per IP
 export const globalRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   limit: 100,
+  skip: skipInTest,
   standardHeaders: 'draft-7', // draft-6: `RateLimit-*` headers; draft-7: combined `RateLimit` header
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   message: {

@@ -224,5 +224,6 @@ export function pruneSessions(): void {
  * Starts a background interval to prune expired sessions.
  */
 export function startSessionPruningInterval(): void {
-  setInterval(pruneSessions, 5 * 60 * 1000); // Every 5 minutes
+  const timer = setInterval(pruneSessions, 5 * 60 * 1000); // Every 5 minutes
+  timer.unref?.();
 }

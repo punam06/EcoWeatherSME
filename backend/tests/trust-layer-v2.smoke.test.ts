@@ -14,8 +14,7 @@
  *   GET  /api/verify/:batch_id
  *   GET  /api/esg/report?months=3
  *
- * Asserts demo-fallback behavior so the test is hermetic —
- * it does NOT require a Supabase instance.
+ * Asserts hermetic no-Supabase behavior.
  *
  * Run with:  npm run test:smoke
  * ═══════════════════════════════════════════════════════════════
@@ -198,18 +197,11 @@ test('Trust Layer v2 smoke', async (t) => {
     assert.ok(res.json.data.score < 80, `expected lower grade, got ${res.json.data.score}`);
   });
 
-  await t.test('GET /api/verify/:batch_id falls back to demoChain', async () => {
+  await t.test('GET /api/verify/:batch_id returns not found for unknown batch', async () => {
     const res = await request(baseUrl, 'GET', '/api/verify/DEMO-BATCH-001');
-    assert.equal(res.status, 200);
-    assert.equal(res.json.source, 'demo');
-    assert.ok(Array.isArray(res.json.data.events));
-    assert.equal(res.json.data.events.length, 3);
-    assert.equal(res.json.data.events[0].type, 'genesis');
-    assert.equal(res.json.data.events[1].type, 'dispatched');
-    assert.equal(res.json.data.events[2].type, 'delivered');
-    assert.equal(res.json.data.verified, true);
-    // Head hash should be a 64-char hex
-    assert.match(res.json.data.head_hash, /^[a-f0-9]{64}$/);
+    assert.equal(res.status, 404);
+    assert.equal(res.json.success, false);
+    assert.match(res.json.error ?? '', /Batch not found/);
   });
 
   await t.test('GET /api/esg/report?months=3 returns 3-month demo aggregate', async () => {

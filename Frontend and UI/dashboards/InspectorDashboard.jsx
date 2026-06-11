@@ -133,16 +133,20 @@ function OverviewView({ lang, setTab }) {
 }
 
 function BatchReviewQueueView({ lang }) {
-  const [batches, setBatches] = useState([]);
+  const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedBatch, setSelectedBatch] = useState(null);
+  const [selectedRequest, setSelectedRequest] = useState(null);
 
   // QA Form State
-  const [qaSource, setQaSource] = useState("inspector");
-  const [checkedItems, setCheckedItems] = useState({});
-  const conf = STANDARDS_CONFIG.organic;
-  const [pH, setPH] = useState(conf.ph?.default || 7.0);
-  const [temp, setTemp] = useState(conf.temp?.default || 28);
+  const [checkedItems, setCheckedItems] = useState({
+    physical_condition: false,
+    packaging_integrity: false,
+    labeling_compliance: false,
+    ingredient_match: false,
+    certification_authenticity: false,
+  });
+  const [reasons, setReasons] = useState([]);
+  const [notes, setNotes] = useState("");
 
   const handleToggle = (id) => {
     setCheckedItems(prev => ({ ...prev, [id]: !prev[id] }));
@@ -155,38 +159,53 @@ function BatchReviewQueueView({ lang }) {
 
   const fetchBatches = () => {
     setLoading(true);
-    window.apiCall('/api/batches')
+    window.apiCall('/api/verification-requests')
       .then(res => {
         if (res && res.success && res.data) {
-          setBatches(res.data.filter(b => b.status === 'pending' || b.status === 'submitted'));
+          setRequests(res.data);
         }
       })
       .catch(err => console.warn(err))
       .finally(() => setLoading(false));
   };
 
+  const selectedBatch = selectedRequest?.batches || selectedRequest?.batch || selectedRequest;
+
+  const handleReceived = async () => {
+    if (!selectedRequest) return;
+    try {
+      const res = await window.apiCall(`/api/verification-requests/${selectedRequest.id}/received`, 'POST');
+      if (res?.success) {
+        if (window.showToast) window.showToast('Batch marked received', 'success');
+        setSelectedRequest(prev => ({ ...prev, status: 'under_review', batches: { ...(prev.batches || {}), status: 'under_review' } }));
+        fetchBatches();
+      }
+    } catch (err) {
+      if (window.showToast) window.showToast(err.message || 'Failed to mark received', 'error');
+    }
+  };
+
   const handleDecision = async (decision) => {
-    if (!selectedBatch) return;
+    if (!selectedRequest) return;
     const confirmMsg = decision === 'approved' 
       ? 'Are you sure you want to certify this batch?' 
       : 'Are you sure you want to reject this batch?';
     if (!confirm(confirmMsg)) return;
 
     try {
-      // Include QA form data with decision
       const payload = {
-        batch_id: selectedBatch.id,
-        decision,
-        qaSource,
-        metrics: qaSource === 'iot' || qaSource === 'inspector' ? { ph: pH, temp: temp } : {},
-        checklist: qaSource === 'manufacturer' ? checkedItems : {}
+        verdict: decision,
+        checklist: checkedItems,
+        reasons,
+        notes,
+        inspector_certification_id: selectedRequest.inspector_certification_id || 'DEMO-INSPECTOR-CERT-ID'
       };
 
-      const res = await window.apiCall('/api/qa/certify', 'POST', payload);
+      const res = await window.apiCall(`/api/verification-requests/${selectedRequest.id}/verdict`, 'POST', payload);
       if (res && res.success) {
         if (window.showToast) window.showToast(`Batch ${decision} successfully`, 'success');
-        setBatches(prev => prev.filter(b => b.id !== selectedBatch.id));
-        setSelectedBatch(null);
+        setRequests(prev => prev.filter(r => r.id !== selectedRequest.id));
+        setSelectedRequest(null);
       } else {
         throw new Error("Failed to process decision");
       }
@@ -195,11 +214,13 @@ function BatchReviewQueueView({ lang }) {
     }
   };
 
-  if (selectedBatch) {
+  const rejectionOptions = ['Safety Issue', 'Contamination Found', 'Labeling Non-compliance', 'Packaging Failure', 'Ingredient Mismatch', 'Other'];
+
+  if (selectedRequest) {
     return (
       <div style={{ animation: "fadeSlideIn 0.4s ease" }}>
         <button 
-          onClick={() => setSelectedBatch(null)} 
+          onClick={() => setSelectedRequest(null)} 
           style={{ background: "transparent", color: "var(--text-secondary)", border: "none", cursor: "pointer", marginBottom: 20, display: "flex", alignItems: "center", gap: 8 }}
         >
           ← {lang === 'bn' ? 'ফিরে যান' : 'Back to Queue'}
@@ -207,81 +228,57 @@ function BatchReviewQueueView({ lang }) {
 
         <Card>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-            <h2 style={{ margin: 0, color: "var(--text-primary)" }}>Batch {selectedBatch.batch_number || selectedBatch.id}</h2>
+            <h2 style={{ margin: 0, color: "var(--text-primary)" }}>Batch {selectedBatch.batch_number || selectedRequest.batch_id}</h2>
             <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={() => handleDecision('rejected')} style={{ background: "rgba(239, 68, 68, 0.1)", color: ACCENT.red, border: `1px solid ${ACCENT.red}`, padding: "8px 16px", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
-                {lang === 'bn' ? 'প্রত্যাখ্যান করুন' : 'Reject'}
-              </button>
-              <button onClick={() => handleDecision('approved')} style={{ background: ACCENT.green, color: "#fff", border: "none", padding: "8px 16px", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
-                {lang === 'bn' ? 'সার্টিফাই করুন' : 'Certify & Approve'}
-              </button>
+              {selectedBatch.status === 'shipped' || selectedRequest.status === 'shipped' ? (
+                <button onClick={handleReceived} style={{ background: ACCENT.blue, color: "#fff", border: "none", padding: "8px 16px", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>Received</button>
+              ) : (
+                <>
+                  <button onClick={() => handleDecision('rejected')} style={{ background: "rgba(239, 68, 68, 0.1)", color: ACCENT.red, border: `1px solid ${ACCENT.red}`, padding: "8px 16px", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
+                    {lang === 'bn' ? 'উন্নতি প্রয়োজন' : 'Needs Improvement'}
+                  </button>
+                  <button onClick={() => handleDecision('approved')} style={{ background: ACCENT.green, color: "#fff", border: "none", padding: "8px 16px", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
+                    {lang === 'bn' ? 'সার্টিফাই করুন' : 'Certify & Approve'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
             <div style={{ background: "rgba(255,255,255,0.03)", padding: 20, borderRadius: 12, border: "1px solid var(--border-primary)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                <h4 style={{ margin: 0, color: ACCENT.blue }}>QA Inspector Review</h4>
-                <select 
-                  value={qaSource} 
-                  onChange={e => setQaSource(e.target.value)}
-                  style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)", outline: "none", fontSize: 12 }}
-                >
-                  <option value="inspector">✅ Certified Inspector</option>
-                  <option value="iot">📡 IoT Sensors</option>
-                  <option value="manufacturer">🏭 Manufacturer Declaration</option>
-                </select>
-              </div>
-
-              {(qaSource === 'iot' || qaSource === 'inspector') && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                  {conf.ph && (
-                    <div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 8 }}>
-                        <span style={{ color: "var(--text-secondary)" }}>{conf.ph.label}</span>
-                        <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{pH}</span>
-                      </div>
-                      <input type="range" min={conf.ph.min} max={conf.ph.max} step={conf.ph.step} value={pH} onChange={e => setPH(parseFloat(e.target.value))} style={{ width: "100%", accentColor: ACCENT.blue }} />
-                    </div>
-                  )}
-                  {conf.temp && (
-                    <div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 8 }}>
-                        <span style={{ color: "var(--text-secondary)" }}>{conf.temp.label}</span>
-                        <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{temp} {conf.temp.unit}</span>
-                      </div>
-                      <input type="range" min={conf.temp.min} max={conf.temp.max} step={conf.temp.step} value={temp} onChange={e => setTemp(parseFloat(e.target.value))} style={{ width: "100%", accentColor: ACCENT.blue }} />
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {qaSource === 'manufacturer' && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 8 }}>
-                  {CHECKLIST_ITEMS.map(item => (
-                    <label key={item.id} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", color: "var(--text-secondary)", fontSize: 13 }}>
-                      <input 
-                        type="checkbox" 
-                        checked={!!checkedItems[item.id]} 
-                        onChange={() => handleToggle(item.id)} 
-                        style={{ width: 16, height: 16, accentColor: ACCENT.green, cursor: "pointer" }}
-                      />
-                      {lang === 'bn' ? item.bn : item.en}
-                    </label>
-                  ))}
-                </div>
-              )}
+              <h4 style={{ margin: "0 0 16px 0", color: ACCENT.blue }}>Structured Checklist</h4>
+              {[
+                ['physical_condition', 'Physical condition'],
+                ['packaging_integrity', 'Packaging integrity'],
+                ['labeling_compliance', 'Labeling compliance'],
+                ['ingredient_match', 'Ingredient match'],
+                ['certification_authenticity', 'Certification authenticity'],
+              ].map(([id, label]) => (
+                <label key={id} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", color: "var(--text-secondary)", fontSize: 13, marginBottom: 12 }}>
+                  <input type="checkbox" checked={!!checkedItems[id]} onChange={() => handleToggle(id)} style={{ width: 16, height: 16, accentColor: ACCENT.green, cursor: "pointer" }} />
+                  {label}
+                </label>
+              ))}
+              <h4 style={{ margin: "20px 0 12px 0", color: ACCENT.red }}>Reason Categories</h4>
+              {rejectionOptions.map(reason => (
+                <label key={reason} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", color: "var(--text-secondary)", fontSize: 13, marginBottom: 10 }}>
+                  <input type="checkbox" checked={reasons.includes(reason)} onChange={() => setReasons(prev => prev.includes(reason) ? prev.filter(r => r !== reason) : [...prev, reason])} style={{ width: 16, height: 16, accentColor: ACCENT.red, cursor: "pointer" }} />
+                  {reason}
+                </label>
+              ))}
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Inspector notes" style={{ width: "100%", minHeight: 86, marginTop: 8, padding: 10, borderRadius: 8, border: "1px solid var(--border-primary)", background: "var(--bg-input)", color: "var(--text-primary)" }} />
             </div>
 
             <div style={{ background: "rgba(255,255,255,0.03)", padding: 20, borderRadius: 12, border: "1px solid var(--border-primary)" }}>
               <h4 style={{ margin: "0 0 16px 0", color: ACCENT.amber }}>Trust Score Breakdown</h4>
               <div style={{ textAlign: "center", marginBottom: 16 }}>
                 <div style={{ fontSize: 48, fontWeight: 700, color: selectedBatch.trust_score >= 85 ? ACCENT.green : ACCENT.amber }}>
-                  {selectedBatch.trust_score || 'N/A'}
+                  {selectedBatch.trust_score || selectedRequest.preliminary_trust_score || 'N/A'}
                 </div>
               </div>
               <div style={{ fontSize: 12, color: "var(--text-dim)", textAlign: "center", lineHeight: 1.5 }}>
-                Score is calculated via ClimaLogix Math Engine based on BARI compliance and IoT data integrity.
+                Status: {(selectedBatch.status || selectedRequest.status || '').replace(/_/g, ' ')}
               </div>
             </div>
           </div>
@@ -297,7 +294,7 @@ function BatchReviewQueueView({ lang }) {
         
         {loading ? (
           <div style={{ color: "var(--text-dim)", padding: 20 }}>Loading...</div>
-        ) : batches.length === 0 ? (
+        ) : requests.length === 0 ? (
           <div style={{ textAlign: "center", padding: 40, color: "var(--text-dim)" }}>
             <p>{lang === 'bn' ? 'রিভিউ এর জন্য কোন ব্যাচ নেই।' : 'No batches awaiting review.'}</p>
           </div>
@@ -316,33 +313,36 @@ function BatchReviewQueueView({ lang }) {
                 </tr>
               </thead>
               <tbody>
-                {batches.map(b => (
-                  <tr key={b.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    <td style={{ padding: "12px 8px", color: "var(--text-primary)", fontWeight: 500 }}>{b.batch_number || b.id}</td>
-                    <td style={{ padding: "12px 8px", color: "var(--text-secondary)" }}>{b.producer_name || 'Producer'}</td>
-                    <td style={{ padding: "12px 8px", color: "var(--text-secondary)" }}>{b.product_name}</td>
+                {requests.map(r => {
+                  const b = r.batches || r.batch || r;
+                  return (
+                  <tr key={r.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                    <td style={{ padding: "12px 8px", color: "var(--text-primary)", fontWeight: 500 }}>{b.batch_number || r.batch_id}</td>
+                    <td style={{ padding: "12px 8px", color: "var(--text-secondary)" }}>{b.producer_name || r.manufacturer_id || 'Manufacturer'}</td>
+                    <td style={{ padding: "12px 8px", color: "var(--text-secondary)" }}>{b.product_name || 'Batch product'}</td>
                     <td style={{ padding: "12px 8px" }}>
-                      {b.trust_score ? (
+                      {(b.trust_score || r.preliminary_trust_score) ? (
                         <span style={{ 
                           padding: "2px 6px", borderRadius: 4, fontWeight: 600,
-                          background: b.trust_score >= 85 ? ACCENT.greenBg : b.trust_score >= 70 ? ACCENT.amberBg : "rgba(239, 68, 68, 0.1)",
-                          color: b.trust_score >= 85 ? ACCENT.green : b.trust_score >= 70 ? ACCENT.amber : ACCENT.red 
+                          background: (b.trust_score || r.preliminary_trust_score) >= 85 ? ACCENT.greenBg : (b.trust_score || r.preliminary_trust_score) >= 70 ? ACCENT.amberBg : "rgba(239, 68, 68, 0.1)",
+                          color: (b.trust_score || r.preliminary_trust_score) >= 85 ? ACCENT.green : (b.trust_score || r.preliminary_trust_score) >= 70 ? ACCENT.amber : ACCENT.red 
                         }}>
-                          {b.trust_score}
+                          {b.trust_score || r.preliminary_trust_score}
                         </span>
                       ) : '-'}
                     </td>
                     <td style={{ padding: "12px 8px", color: "var(--text-secondary)" }}>{b.dvs_score || '-'}</td>
                     <td style={{ padding: "12px 8px", color: "var(--text-dim)" }}>
-                      {b.created_at ? new Date(b.created_at).toLocaleDateString() : '-'}
+                      {r.created_at ? new Date(r.created_at).toLocaleDateString() : '-'}
                     </td>
                     <td style={{ padding: "12px 8px", textAlign: "right" }}>
-                      <button onClick={() => setSelectedBatch(b)} style={{ background: ACCENT.amber, border: "none", color: "#fff", padding: "6px 16px", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
-                        {lang === 'bn' ? 'পর্যালোচনা' : 'Review'}
+                      <button onClick={() => setSelectedRequest(r)} style={{ background: ACCENT.amber, border: "none", color: "#fff", padding: "6px 16px", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                        {r.status === 'shipped' ? 'Receive' : (lang === 'bn' ? 'পর্যালোচনা' : 'Review')}
                       </button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -675,7 +675,7 @@ function NotificationsView({ lang }) {
   useEffect(() => {
     window.apiCall('/api/notifications')
       .then(res => {
-        if (res && res.success && res.data) setNotifications(res.data);
+        if (res && res.success && res.data) setNotifications(res.data.notifications || res.data || []);
       })
       .catch(err => console.warn(err))
       .finally(() => setLoading(false));
