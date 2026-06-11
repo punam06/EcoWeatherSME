@@ -303,6 +303,9 @@ function createAccessToken(user) {
     { sub: user.id, role: user.role, email: user.email, type: 'access' },
     ACCESS_TOKEN_SECRET,
     { expiresIn: ACCESS_TOKEN_TTL }
+  );
+}
+
 function createRefreshToken(user) {
   ensureAuthSecrets();
   const nonce = crypto.randomBytes(32).toString('hex');

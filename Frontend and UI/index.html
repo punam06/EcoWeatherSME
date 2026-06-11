@@ -142,18 +142,23 @@
     <script src="./lang/languageManager.js"></script>
     <script src="./ThreeScene.compiled.js"></script>
     
-    <!-- React Router (v6 UMD ships under dist/umd/, not /umd/) -->
-    <script crossorigin src="https://unpkg.com/react-router-dom@6/dist/umd/react-router-dom.production.min.js"></script>
-    <!-- Expose React Router exports as bare globals so pre-compiled JSX (which references Routes/Route/etc. without a namespace) can resolve them. -->
+    <!-- React Router v6 UMD (history v5 is bundled internally by this build) -->
+    <script crossorigin src="https://unpkg.com/react-router@6.4.5/dist/umd/react-router.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-router-dom@6.4.5/dist/umd/react-router-dom.production.min.js"></script>
     <script>
       (function () {
+        // react-router-dom v6.4 UMD exposes a single global: ReactRouterDOM.
+        // It bundles history@5 internally, so BrowserRouter works without
+        // a separate createBrowserHistory global. We just need to surface
+        // the named exports as bare globals so JSX/compiled JS that references
+        // them without a namespace can resolve them.
         function applyAliases() {
           if (!window.ReactRouterDOM) return false;
           var names = [
             "BrowserRouter", "HashRouter", "MemoryRouter", "Router",
             "Routes", "Route", "Outlet", "Navigate",
             "Link", "NavLink", "useNavigate", "useLocation", "useParams",
-            "useMatch", "useRoutes", "useSearchParams", "useHistory"
+            "useMatch", "useRoutes", "useSearchParams"
           ];
           for (var i = 0; i < names.length; i++) {
             var n = names[i];
@@ -164,7 +169,6 @@
           return true;
         }
         if (!applyAliases()) {
-          // The UMD failed to load — surface a clear diagnostic instead of letting Babel throw #130.
           window.addEventListener("load", function () {
             if (!window.ReactRouterDOM) {
               console.error("[ClimateShield] react-router-dom UMD failed to load. window.ReactRouterDOM is undefined.");
