@@ -41,14 +41,26 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
   const canvasRef = useRef(null);
   const reqRef = useRef(null);
 
-  // Clear stale tokens/sessions on mount
-  useEffect(() => {
-    localStorage.removeItem("climaLogix_token");
+  // Clear stale tokens/sessions on mount — but ONLY on the first mount of
+  // the page-load. The original code cleared the token and called
+  // supabaseClient.auth.signOut() on every AuthPanel mount. The signOut is
+  // async, and in production (slower network) its SIGNED_OUT event arrives
+  // AFTER a fresh login, racing with the post-login onAuthSuccess handler
+  // and bouncing the user back to the hero landing page.
+  //
+  // The module-level guard ensures this cleanup runs at most once per
+  // page-load, so subsequent logins within the same SPA session are not
+  // clobbered by a phantom signOut.
+  if (!window.__climalogixAuthPanelMounted) {
+    window.__climalogixAuthPanelMounted = true;
+    try {
+      localStorage.removeItem("climaLogix_token");
+    } catch (e) { /* ignore */ }
     window.SUPABASE_SESSION_TOKEN = null;
     if (window.supabaseClient) {
       window.supabaseClient.auth.signOut().catch(() => {});
     }
-  }, []);
+  }
 
   // Three.js Scene Setup (Unchanged)
   useEffect(() => {

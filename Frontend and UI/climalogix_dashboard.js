@@ -13062,8 +13062,31 @@ function CLimaLogixApp() {
       if (subscription) subscription.unsubscribe();
     };
   }, []);
-  const [activeTab, setActiveTab] = useState("dashboard");
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  // Listen for the 'climalogix:auth-expired' event fired by api-integration.js
+  // when a 401 comes back from any backend call. The previous behaviour was
+  // a hard window.location.href = '/login' redirect, which Vercel resolves
+  // by re-serving index.html, dropping currentUser, and bouncing the user
+  // back to the hero landing page (the production-only bug).
+  //
+  // Instead, we show the auth overlay in place so the SPA stays mounted and
+  // the user's session context is preserved.
+  useEffect(() => {
+    const onAuthExpired = () => {
+      try {
+        setCurrentUser(null);
+        window.SUPABASE_SESSION_TOKEN = null;
+        setLoginWelcome(null);
+        setShowAuthOverlay(true);
+      } catch (e) {
+        console.warn("[auth-expired] handler failed:", e);
+      }
+    };
+    window.addEventListener("climalogix:auth-expired", onAuthExpired);
+    return () => {
+      window.removeEventListener("climalogix:auth-expired", onAuthExpired);
+    };
+  }, []);
   // marketplaceSubTab is lifted here so the chatbot can trigger cross-component navigation
   const [marketplaceSubTab, setMarketplaceSubTab] = useState("inventory");
   const [trustScore, setTrustScore] = useState(84);

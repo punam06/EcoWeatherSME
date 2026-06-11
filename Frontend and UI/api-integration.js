@@ -53,10 +53,24 @@ async function apiCall(path, method = 'GET', body = null) {
     const response = await fetch(`${BASE_URL}${path}`, options);
 
     if (response.status === 401) {
-      localStorage.removeItem('climaLogix_token');
-      localStorage.removeItem('climalogix_token');
-      sessionStorage.removeItem('climalogix_token');
-      window.location.href = '/login';
+      // ⚠️ Do NOT hard-redirect to /login on 401. The Vercel deployment serves
+      // index.html for any path, so window.location.href = '/login' reloads the
+      // SPA, drops currentUser, and bounces the user back to the hero landing
+      // page — which is the exact production-only failure this fix addresses.
+      //
+      // Instead, emit a custom event so the dashboard can show the auth
+      // overlay gracefully, and clear the cached tokens so a subsequent
+      // /api/auth/login succeeds instead of returning 401 from a stale token.
+      try {
+        localStorage.removeItem('climaLogix_token');
+        localStorage.removeItem('climalogix_token');
+        sessionStorage.removeItem('climalogix_token');
+      } catch (storageErr) { /* ignore */ }
+      try {
+        window.dispatchEvent(new CustomEvent('climalogix:auth-expired', {
+          detail: { path, method, status: 401 }
+        }));
+      } catch (eventErr) { /* ignore */ }
       throw new Error('Session expired. Please log in again.');
     }
 
