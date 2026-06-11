@@ -4,6 +4,6 @@ services:
     env: node
     rootDir: backend
     buildCommand: npm install && npm run build
-    startCommand: node dist/src/app.js
+    startCommand: node dist/app.js
     envVarGroups:
       - name: EcoSME
