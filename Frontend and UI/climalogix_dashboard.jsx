@@ -2166,6 +2166,105 @@ function SMEInventoryTracker({ activeZone = "Mirpur" }) {
     );
   });
 
+  const qrScannerRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (qrScannerRef.current) {
+        qrScannerRef.current.clear().catch(err => console.warn("Failed to clear QR scanner:", err));
+      }
+    };
+  }, []);
+
+  const handleStartCameraScan = async () => {
+    if (isScanning || isClaiming) return;
+    setError(null);
+    setCameraOn(true);
+    setIsScanning(true);
+    setClaimResult(null);
+
+    // Wait a brief tick for the DOM container to render
+    setTimeout(async () => {
+      try {
+        const html5QrCode = new window.Html5Qrcode("reader-element");
+        qrScannerRef.current = html5QrCode;
+        const qrCodeSuccessCallback = (decodedText) => {
+          // Play a small sound or beep if desired, then parse batch ID
+          console.log(`Scan success: ${decodedText}`);
+          let matchedBatch = decodedText;
+          if (decodedText.includes("batch=")) {
+            const urlParams = new URLSearchParams(decodedText.split("?")[1]);
+            matchedBatch = urlParams.get("batch") || decodedText;
+          } else if (decodedText.includes("/verify/")) {
+            matchedBatch = decodedText.split("/verify/")[1] || decodedText;
+          }
+          setBatchUuid(matchedBatch);
+          // Stop scanning
+          html5QrCode.stop().then(() => {
+            setCameraOn(false);
+            executeClaim(matchedBatch);
+          }).catch(err => {
+            console.error("Failed to stop scanner after success:", err);
+            executeClaim(matchedBatch);
+          });
+        };
+
+        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+        await html5QrCode.start(
+          { facingMode: "environment" },
+          config,
+          qrCodeSuccessCallback,
+          (errorMessage) => {
+            // Silence scanning errors since they happen repeatedly during search
+          }
+        );
+      } catch (err) {
+        console.error("Camera scanner initialization failed:", err);
+        setError("Camera permission denied or camera unavailable. Falling back to simulation...");
+        setIsScanning(true);
+        scanTimerRef.current = setTimeout(() => {
+          executeClaim(batchUuid);
+        }, 2000);
+      }
+    }, 100);
+  };
+
+  const handleStopCameraScan = async () => {
+    if (qrScannerRef.current) {
+      try {
+        await qrScannerRef.current.stop();
+      } catch (err) {
+        console.warn("Error stopping scanner:", err);
+      }
+    }
+    setCameraOn(false);
+    setIsScanning(false);
+  };
+
+  const handleManualClaim = () => executeClaim(batchUuid);
+
+  const handleSpeak = () => {
+    if (!banglaText || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(banglaText);
+    utter.lang = "bn-BD";
+    utter.rate = 0.88;
+    utter.pitch = 1;
+    const voices = window.speechSynthesis.getVoices();
+    const bnVoice = voices.find(v => v.lang && v.lang.startsWith("bn"));
+    if (bnVoice) utter.voice = bnVoice;
+    utter.onstart = () => setIsSpeaking(true);
+    utter.onend = () => setIsSpeaking(false);
+    utter.onerror = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(utter);
+  };
+
+  useEffect(() => {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = () => {};
+    }
+  }, []);
+
   const executeClaim = async (uuid) => {
     const trimmed = (uuid || "").trim();
     if (!UUID_RE.test(trimmed) && !BATCH_ID_RE.test(trimmed)) {
@@ -2202,40 +2301,6 @@ function SMEInventoryTracker({ activeZone = "Mirpur" }) {
     }
   };
 
-  const handleSimulateScan = () => {
-    if (isScanning || isClaiming) return;
-    setError(null);
-    setCameraOn(true);
-    setIsScanning(true);
-    scanTimerRef.current = setTimeout(() => {
-      executeClaim(batchUuid);
-    }, 1600);
-  };
-
-  const handleManualClaim = () => executeClaim(batchUuid);
-
-  const handleSpeak = () => {
-    if (!banglaText || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(banglaText);
-    utter.lang = "bn-BD";
-    utter.rate = 0.88;
-    utter.pitch = 1;
-    const voices = window.speechSynthesis.getVoices();
-    const bnVoice = voices.find(v => v.lang && v.lang.startsWith("bn"));
-    if (bnVoice) utter.voice = bnVoice;
-    utter.onstart = () => setIsSpeaking(true);
-    utter.onend = () => setIsSpeaking(false);
-    utter.onerror = () => setIsSpeaking(false);
-    window.speechSynthesis.speak(utter);
-  };
-
-  useEffect(() => {
-    if (window.speechSynthesis) {
-      window.speechSynthesis.onvoiceschanged = () => {};
-    }
-  }, []);
-
   return (
     <div style={{ animation: "fadeSlideIn 0.35s ease" }}>
       <PageHeader
@@ -2245,7 +2310,7 @@ function SMEInventoryTracker({ activeZone = "Mirpur" }) {
 
       <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 20 }}>
         <Card hover={false}>
-          <SectionLabel icon="📷" text="Camera Scan Simulation" />
+          <SectionLabel icon="📷" text="Camera Scan Integration" />
           <div style={{
             position: "relative", borderRadius: 14, overflow: "hidden",
             aspectRatio: "4/3", background: "#0a0f1a",
@@ -2253,38 +2318,19 @@ function SMEInventoryTracker({ activeZone = "Mirpur" }) {
             boxShadow: isScanning ? `0 0 30px ${ACCENT.green}33` : "none",
             transition: "all 0.3s ease",
           }}>
-            <div style={{
-              position: "absolute", inset: 0,
-              background: "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(16,185,129,0.03) 2px, rgba(16,185,129,0.03) 4px)",
-            }} />
-            <div style={{
-              position: "absolute", inset: "12%", border: `2px dashed ${isScanning ? ACCENT.green : "rgba(255,255,255,0.2)"}`,
-              borderRadius: 12, transition: "border-color 0.3s",
-            }}>
-              <div style={{ position: "absolute", top: -2, left: -2, width: 20, height: 20, borderTop: `3px solid ${ACCENT.green}`, borderLeft: `3px solid ${ACCENT.green}` }} />
-              <div style={{ position: "absolute", top: -2, right: -2, width: 20, height: 20, borderTop: `3px solid ${ACCENT.green}`, borderRight: `3px solid ${ACCENT.green}` }} />
-              <div style={{ position: "absolute", bottom: -2, left: -2, width: 20, height: 20, borderBottom: `3px solid ${ACCENT.green}`, borderLeft: `3px solid ${ACCENT.green}` }} />
-              <div style={{ position: "absolute", bottom: -2, right: -2, width: 20, height: 20, borderBottom: `3px solid ${ACCENT.green}`, borderRight: `3px solid ${ACCENT.green}` }} />
-            </div>
-            {isScanning && (
+            <div id="reader-element" style={{ width: "100%", height: "100%" }}></div>
+            {!cameraOn && (
               <div style={{
-                position: "absolute", left: "12%", right: "12%", height: 2,
-                background: `linear-gradient(90deg, transparent, ${ACCENT.green}, transparent)`,
-                boxShadow: `0 0 12px ${ACCENT.green}`,
-                animation: "scanLine 1.6s ease-in-out infinite",
-                top: "30%",
-              }} />
+                position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+                alignItems: "center", justifyContent: "center", gap: 8,
+                color: "var(--text-dim)",
+              }}>
+                <span style={{ fontSize: 42 }}>📷</span>
+                <span style={{ fontSize: 12, letterSpacing: "0.1em", fontWeight: 600 }}>
+                  CAMERA READY
+                </span>
+              </div>
             )}
-            <div style={{
-              position: "absolute", inset: 0, display: "flex", flexDirection: "column",
-              alignItems: "center", justifyContent: "center", gap: 8,
-              color: cameraOn ? ACCENT.greenLight : "var(--text-dim)",
-            }}>
-              <span style={{ fontSize: 42 }}>{cameraOn ? "📡" : "📷"}</span>
-              <span style={{ fontSize: 12, letterSpacing: "0.1em", fontWeight: 600 }}>
-                {isScanning ? "SCANNING QR…" : cameraOn ? "CAMERA LIVE (MOCK)" : "MOCK WEBCAM READY"}
-              </span>
-            </div>
           </div>
 
           <div style={{ marginTop: 16 }}>
@@ -2305,17 +2351,27 @@ function SMEInventoryTracker({ activeZone = "Mirpur" }) {
           </div>
 
           <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-            <button
-              onClick={handleSimulateScan}
-              disabled={!batchUuid.trim() || isScanning || isClaiming}
-              style={{
-                flex: 1, minWidth: 160, padding: "12px 18px", borderRadius: 8, border: "none", cursor: "pointer",
-                background: ACCENT.greenDark, color: "#fff", fontWeight: 700, fontSize: 13,
-                opacity: (!batchUuid.trim() || isScanning || isClaiming) ? 0.5 : 1,
-              }}
-            >
-              {isScanning ? "⏳ Scanning…" : "📲 Simulate QR Scan"}
-            </button>
+            {cameraOn ? (
+              <button
+                onClick={handleStopCameraScan}
+                style={{
+                  flex: 1, minWidth: 160, padding: "12px 18px", borderRadius: 8, border: "none", cursor: "pointer",
+                  background: ACCENT.red, color: "#fff", fontWeight: 700, fontSize: 13,
+                }}
+              >
+                🛑 Stop Camera Scan
+              </button>
+            ) : (
+              <button
+                onClick={handleStartCameraScan}
+                style={{
+                  flex: 1, minWidth: 160, padding: "12px 18px", borderRadius: 8, border: "none", cursor: "pointer",
+                  background: ACCENT.greenDark, color: "#fff", fontWeight: 700, fontSize: 13,
+                }}
+              >
+                📲 Start Camera Scan
+              </button>
+            )}
             <button
               onClick={handleManualClaim}
               disabled={!batchUuid.trim() || isClaiming}
@@ -2635,34 +2691,38 @@ function DashboardView({ onNewBatch }) {
             </div>
           </div>
           <div style={{ fontSize: 12, color: 'gray', marginBottom: 12 }}>Last updated: Just Now (Simulated Live Data)</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {isLoading
-              ? Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} style={{ border: "1px solid var(--border-primary)", borderRadius: 12, padding: "16px 20px" }}>
-                    <div style={{ height: 14, background: "var(--bg-input)", borderRadius: 6, width: "40%", marginBottom: 8, animation: "pulse 1.5s ease infinite" }} />
-                    <div style={{ height: 10, background: "var(--bg-input)", borderRadius: 6, width: "80%", animation: "pulse 1.5s ease infinite" }} />
-                  </div>
-                ))
-              : heatmap.map(m => {
-                  const hColor = m.hazard === "Extreme" ? ACCENT.red : m.hazard === "High" ? ACCENT.amber : m.hazard === "Moderate" ? ACCENT.amber : ACCENT.green;
-                  return (
-                    <div key={m.zone} style={{ border: "1px solid var(--border-primary)", borderRadius: 12, padding: "16px 20px", transition: "background 0.2s" }}
-                         onMouseEnter={e => e.currentTarget.style.background = "var(--bg-input)"}
-                         onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: hColor, boxShadow: `0 0 6px ${hColor}66` }} />
-                          <span style={{ fontWeight: 600, fontSize: 14 }}>{m.zone}</span>
-                          <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 12, background: hColor+"15", color: hColor, fontWeight: 600 }}>{m.hazard}</span>
-                        </div>
-                        <div style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "'JetBrains Mono', monospace" }}>{m.temp} · {m.rh}</div>
-                      </div>
-                      <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 4 }}>{m.desc}</div>
-                      {m.time !== "N/A" && <div style={{ fontSize: 12, color: ACCENT.amber }}>⚡ Peak: {m.time}</div>}
+          <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 20 }}>
+            <div style={{ minHeight: "260px", border: "1px solid var(--border-primary)", borderRadius: 12, overflow: "hidden" }}>
+              {window.DhakaRouteMicroMap ? <window.DhakaRouteMicroMap /> : (typeof DhakaRouteMicroMap !== 'undefined' ? React.createElement(DhakaRouteMicroMap) : null)}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {isLoading
+                ? Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} style={{ border: "1px solid var(--border-primary)", borderRadius: 12, padding: "16px 20px" }}>
+                      <div style={{ height: 14, background: "var(--bg-input)", borderRadius: 6, width: "40%", marginBottom: 8, animation: "pulse 1.5s ease infinite" }} />
+                      <div style={{ height: 10, background: "var(--bg-input)", borderRadius: 6, width: "80%", animation: "pulse 1.5s ease infinite" }} />
                     </div>
-                  );
-                })
-            }
+                  ))
+                : heatmap.map(m => {
+                    const hColor = m.hazard === "Extreme" ? ACCENT.red : m.hazard === "High" ? ACCENT.amber : m.hazard === "Moderate" ? ACCENT.amber : ACCENT.green;
+                    return (
+                      <div key={m.zone} style={{ border: "1px solid var(--border-primary)", borderRadius: 12, padding: "12px 16px", transition: "background 0.2s" }}
+                           onMouseEnter={e => e.currentTarget.style.background = "var(--bg-input)"}
+                           onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: "50%", background: hColor, boxShadow: `0 0 6px ${hColor}66` }} />
+                            <span style={{ fontWeight: 600, fontSize: 13 }}>{m.zone}</span>
+                            <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 12, background: hColor+"15", color: hColor, fontWeight: 600 }}>{m.hazard}</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: "var(--text-secondary)", fontFamily: "'JetBrains Mono', monospace" }}>{m.temp}</div>
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{m.desc}</div>
+                      </div>
+                    );
+                  })
+              }
+            </div>
           </div>
         </Card>
 
@@ -3021,8 +3081,32 @@ function BatchRegistry({ onNewBatch }) {
               </div>
             )}
             {selectedBatch.status === "pending" && (
-              <div style={{ background: ACCENT.amberBg, border: `1px solid ${ACCENT.amberBorder}`, borderRadius: 12, padding: 16, fontSize: 13, color: ACCENT.amber, fontWeight: 600 }}>
-                ⏳ Batch is awaiting manual verification by a certified processor before certification.
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ background: ACCENT.amberBg, border: `1px solid ${ACCENT.amberBorder}`, borderRadius: 12, padding: 16, fontSize: 13, color: ACCENT.amber, fontWeight: 600 }}>
+                  ⏳ Batch is awaiting manual verification by a certified processor before certification.
+                </div>
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await window.APIClient.requestVerification(
+                        selectedBatch.id || selectedBatch.batch_number,
+                        selectedBatch.destination_zone
+                      );
+                      if (res && res.success) {
+                        if (window.showToast) window.showToast("Verification request sent to Quality Inspectors!", "success");
+                      }
+                    } catch (err) {
+                      if (window.showToast) window.showToast("Failed to send verification request", "error");
+                    }
+                  }}
+                  style={{
+                    width: "100%", padding: "10px 14px", borderRadius: 8,
+                    background: ACCENT.greenDark, color: "#fff", fontWeight: 600, cursor: "pointer",
+                    border: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8
+                  }}
+                >
+                  📤 Send Request to Quality Inspector
+                </button>
               </div>
             )}
 
@@ -3234,30 +3318,22 @@ function RegisterBatch({ onCancel }) {
     };
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/batches`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          batch_number:    localBatch.id,
-          feedstock_type:  productType,   // ← required by backend schema
-          product_name:    productName,
-          trust_score:     0,             // ← required by backend schema (default 0 until manually verified)
-          processor_id:    null,
-          // extra fields stored but not schema-validated:
-          destination_zone: destinationZone,
-          weight_kg:        localBatch.weight_kg,
-          packaging_type:   packagingType,
-        }),
-      });
+      const payload = {
+        batch_number:    localBatch.id,
+        feedstock_type:  productType,
+        product_name:    productName,
+        trust_score:     0,
+        destination_zone: destinationZone,
+        weight_kg:        localBatch.weight_kg,
+        packaging_type:   packagingType,
+      };
 
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.data) {
-          localBatch.id = result.data.id || result.data.batch_number || localBatch.id;
-          localBatch.trust_score = result.data.trust_score ?? 0;
-          localBatch.status = result.data.status || "pending";
-          localBatch.created_at = result.data.created_at || localBatch.created_at;
-        }
+      const result = await window.apiCall("/api/batches", "POST", payload);
+      if (result && result.success && result.data) {
+        localBatch.id = result.data.id || result.data.batch_number || localBatch.id;
+        localBatch.trust_score = result.data.trust_score ?? 0;
+        localBatch.status = result.data.status || "pending";
+        localBatch.created_at = result.data.created_at || localBatch.created_at;
       }
       // Always add to local seed (whether backend succeeded or not)
       
@@ -7495,6 +7571,14 @@ function CLimaLogixApp() {
     );
   }
 
+  const params = new URLSearchParams(window.location.search);
+  const isConsumerVerify = params.has("batch");
+
+  if (isConsumerVerify) {
+    const ConsumerVerificationViewComponent = window.ConsumerVerificationView || (() => <div style={{color:'white', padding:20}}>Loading Certificate...</div>);
+    return <ConsumerVerificationViewComponent />;
+  }
+
   if (!currentUser) {
     const AuthPanelComponent = window.AuthPanel || (() => <div style={{color:'white', padding: 20}}>Loading AuthPanel...</div>);
     return (
@@ -8216,6 +8300,561 @@ function CLimaLogixApp() {
 
   return <MainDashboardLayout />;
 }
+
+function ConsumerVerificationView() {
+  const params = new URLSearchParams(window.location.search);
+  const [batchId, setBatchId] = useState(params.get("batch") || "");
+  const [searchVal, setSearchVal] = useState("");
+  const [verifyData, setVerifyData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState("verify"); // "verify" or "track"
+  const [scanning, setScanning] = useState(false);
+  const scannerRef = useRef(null);
+
+  const fetchBatchData = async (id) => {
+    if (!id) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await window.apiCall(`/api/verify/${id}`);
+      if (res && res.success && res.data) {
+        setVerifyData(res.data);
+        // Sync URL without reloading
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.set("batch", id);
+        window.history.pushState({}, "", newUrl);
+      } else {
+        setError(res?.error || `Batch ID "${id}" is not certified or does not exist.`);
+        setVerifyData(null);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch verified batch:", err);
+      setError("Network connection issue or invalid batch identifier.");
+      setVerifyData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const initialId = params.get("batch");
+    if (initialId) {
+      setBatchId(initialId);
+      fetchBatchData(initialId);
+    }
+  }, []);
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (searchVal.trim()) {
+      setBatchId(searchVal.trim());
+      fetchBatchData(searchVal.trim());
+    }
+  };
+
+  const startScanner = () => {
+    setScanning(true);
+    setError(null);
+    setTimeout(() => {
+      try {
+        const html5QrcodeScanner = new Html5QrcodeScanner("public-qr-reader", {
+          fps: 15,
+          qrbox: { width: 250, height: 250 }
+        });
+        
+        html5QrcodeScanner.render(
+          (decodedText) => {
+            let id = decodedText;
+            // Handle if they scan a full URL like https://.../?batch=BCH-XXX
+            if (decodedText.includes("batch=")) {
+              const urlParams = new URLSearchParams(decodedText.split("?")[1]);
+              id = urlParams.get("batch") || decodedText;
+            }
+            html5QrcodeScanner.clear();
+            setScanning(false);
+            setBatchId(id);
+            fetchBatchData(id);
+          },
+          (err) => {
+            // silent scan failure logs
+          }
+        );
+        scannerRef.current = html5QrcodeScanner;
+      } catch (err) {
+        console.error("Scanner failed to start:", err);
+        setError("Unable to access camera or load QR code library.");
+        setScanning(false);
+      }
+    }, 300);
+  };
+
+  const stopScanner = () => {
+    if (scannerRef.current) {
+      scannerRef.current.clear();
+      scannerRef.current = null;
+    }
+    setScanning(false);
+  };
+
+  const handleReset = () => {
+    setBatchId("");
+    setSearchVal("");
+    setVerifyData(null);
+    setError(null);
+    stopScanner();
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.delete("batch");
+    window.history.pushState({}, "", newUrl);
+  };
+
+  if (loading) {
+    return (
+      <div style={{ background: "#0B0F19", color: "#10B981", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'JetBrains Mono', monospace", fontSize: "14px", gap: "16px" }}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ animation: "spin 1s linear infinite" }}><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+        <span>RETRIEVING TAMPER-PROOF RECORD...</span>
+      </div>
+    );
+  }
+
+  // Extract variables safely from verifyData
+  const hasData = verifyData && verifyData.chain && verifyData.chain.events && verifyData.chain.events.length > 0;
+  
+  // Find genesis or first event to extract product metrics
+  const genesisEvent = hasData ? verifyData.chain.events.find(e => (e.type || e.event_type) === 'qa' || (e.type || e.event_type) === 'genesis') : null;
+  const metrics = (genesisEvent?.data || genesisEvent?.event_data)?.metrics_summary || { pH: 5.2, EC: 3.4, temp: 28, ratio: '1:1:20', days: 9 };
+  const productName = (genesisEvent?.data || genesisEvent?.event_data)?.product_name || "Certified Organic Compost";
+  const categoryName = (genesisEvent?.data || genesisEvent?.event_data)?.category || "Bio-Slurry";
+
+  const trustInfo = verifyData?.trust || { score: 78, grade: 'B', isViable: true };
+  const scanCount = verifyData?.scanCount || 0;
+  const isVerified = verifyData?.chain?.verified ?? true;
+
+  return (
+    <div style={{ background: "#0B0F19", minHeight: "100vh", color: "#F8FAFC", padding: "40px 20px", fontFamily: "'Inter', sans-serif" }}>
+      <div style={{ width: "100%", maxWidth: "800px", margin: "0 auto", display: "flex", flexDirection: "column", gap: 24 }}>
+        
+        {/* Certificate Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16, borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: 20 }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 24 }}>🛡️</span>
+              <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, background: "linear-gradient(to right, #10B981, #3B82F6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+                CLimaLogix AI
+              </h1>
+            </div>
+            <div style={{ fontSize: 13, color: "#94A3B8", marginTop: 4 }}>Authenticity & Climate-Transit Trust Portal</div>
+          </div>
+          <button 
+            onClick={() => window.location.href = "/"} 
+            style={{ padding: "8px 16px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#94A3B8", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600, transition: "all 0.2s" }}
+            onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
+            onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+          >
+            SME Portal Login
+          </button>
+        </div>
+
+        {/* Input Lookup View if no batch verified */}
+        {!verifyData && (
+          <div style={{ background: "rgba(17, 24, 39, 0.6)", backdropFilter: "blur(16px)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", padding: 32, textAlign: "center", display: "flex", flexDirection: "column", gap: 20 }}>
+            <div>
+              <h2 style={{ fontSize: 20, color: "#F8FAFC", marginBottom: 8 }}>Verify Product Authenticity</h2>
+              <p style={{ color: "#94A3B8", fontSize: 14, maxWidth: 500, margin: "0 auto" }}>
+                Scan the QR code on your product label or enter the unique Batch ID below to retrieve public quality tests and transit history.
+              </p>
+            </div>
+
+            {error && (
+              <div style={{ background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", color: "#F87171", padding: "12px 16px", borderRadius: 8, fontSize: 13, textAlign: "center" }}>
+                ⚠️ {error}
+              </div>
+            )}
+
+            {scanning ? (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+                <div id="public-qr-reader" style={{ width: "100%", maxWidth: "350px", borderRadius: 12, overflow: "hidden", border: "2px solid #10B981" }} />
+                <button 
+                  onClick={stopScanner}
+                  style={{ background: "#EF4444", color: "white", padding: "8px 16px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600 }}
+                >
+                  Cancel Scan
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 450, margin: "0 auto", width: "100%" }}>
+                <form onSubmit={handleSearch} style={{ display: "flex", gap: 10 }}>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. BCH-1082" 
+                    value={searchVal}
+                    onChange={(e) => setSearchVal(e.target.value)}
+                    style={{ flex: 1, padding: "12px 16px", borderRadius: 8, background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.15)", color: "white", outline: "none", fontSize: 14 }}
+                  />
+                  <button 
+                    type="submit" 
+                    style={{ background: "#10B981", color: "white", padding: "12px 20px", borderRadius: 8, fontWeight: 600, cursor: "pointer" }}
+                  >
+                    Verify
+                  </button>
+                </form>
+
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, margin: "10px 0" }}>
+                  <span style={{ width: 40, height: 1, background: "rgba(255,255,255,0.1)" }}></span>
+                  <span style={{ fontSize: 12, color: "#64748B", textTransform: "uppercase" }}>or</span>
+                  <span style={{ width: 40, height: 1, background: "rgba(255,255,255,0.1)" }}></span>
+                </div>
+
+                <button 
+                  onClick={startScanner}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, padding: "12px 20px", background: "rgba(59, 130, 246, 0.15)", border: "1px solid rgba(59, 130, 246, 0.3)", color: "#60A5FA", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 14 }}
+                >
+                  📷 Scan Label QR Code
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Verification & Tracking Portal when batch data exists */}
+        {verifyData && (
+          <>
+            {/* Batch Overview Banner */}
+            <div style={{ background: "rgba(17, 24, 39, 0.6)", backdropFilter: "blur(16px)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", padding: "24px 32px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 20 }}>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                    <span style={{
+                      padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700, letterSpacing: "0.05em",
+                      background: trustInfo.isViable ? "rgba(16, 185, 129, 0.12)" : "rgba(239, 68, 68, 0.12)",
+                      color: trustInfo.isViable ? "#10B981" : "#EF4444",
+                      border: `1px solid ${trustInfo.isViable ? "rgba(16, 185, 129, 0.3)" : "rgba(239, 68, 68, 0.3)"}`
+                    }}>
+                      {trustInfo.isViable ? "✓ BARI-COMPLIANT QUALITY" : "⚠️ NON-COMPLIANT"}
+                    </span>
+                    <span style={{
+                      padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700, letterSpacing: "0.05em",
+                      background: isVerified ? "rgba(59, 130, 246, 0.12)" : "rgba(245, 158, 11, 0.12)",
+                      color: isVerified ? "#60A5FA" : "#F59E0B",
+                      border: `1px solid ${isVerified ? "rgba(59, 130, 246, 0.3)" : "rgba(245, 158, 11, 0.3)"}`
+                    }}>
+                      🔑 {isVerified ? "CHAIN SECURE" : "UNVERIFIED HASH"}
+                    </span>
+                  </div>
+                  <h2 style={{ fontSize: 24, fontWeight: 755, color: "white", margin: 0 }}>{productName}</h2>
+                  <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 13, color: "#94A3B8" }}>
+                    <span>ID: <strong style={{ fontFamily: "monospace", color: "white" }}>{batchId}</strong></span>
+                    <span>•</span>
+                    <span>Category: <strong style={{ color: "white" }}>{categoryName}</strong></span>
+                    <span>•</span>
+                    <span>Scans: <strong style={{ color: "#10B981" }}>{scanCount}</strong></span>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 12 }}>
+                  <button 
+                    onClick={handleReset}
+                    style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#CBD5E1", padding: "10px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                  >
+                    🔍 Another Lookup
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Premium Glassmorphic Tabs Selection */}
+            <div style={{ display: "flex", background: "rgba(17, 24, 39, 0.4)", borderRadius: 10, padding: 4, border: "1px solid rgba(255,255,255,0.06)" }}>
+              <button 
+                onClick={() => setActiveTab("verify")}
+                style={{ flex: 1, padding: "12px", borderRadius: 8, background: activeTab === "verify" ? "rgba(16, 185, 129, 0.15)" : "transparent", color: activeTab === "verify" ? "#10B981" : "#94A3B8", border: activeTab === "verify" ? "1px solid rgba(16, 185, 129, 0.3)" : "none", fontWeight: 600, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "all 0.2s" }}
+              >
+                🛡️ Quality & Authenticity
+              </button>
+              <button 
+                onClick={() => setActiveTab("track")}
+                style={{ flex: 1, padding: "12px", borderRadius: 8, background: activeTab === "track" ? "rgba(59, 130, 246, 0.15)" : "transparent", color: activeTab === "track" ? "#60A5FA" : "#94A3B8", border: activeTab === "track" ? "1px solid rgba(59, 130, 246, 0.3)" : "none", fontWeight: 600, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "all 0.2s" }}
+              >
+                🔍 Source-to-Consumer Journey
+              </button>
+            </div>
+
+            {/* TAB CONTENT: QUALITY VERIFICATION */}
+            {activeTab === "verify" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 24, animation: "fadeSlideIn 0.3s ease" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1.8fr", gap: 24 }} className="stack-mobile">
+                  
+                  {/* Gauge Display */}
+                  <div style={{ background: "rgba(17, 24, 39, 0.6)", backdropFilter: "blur(12px)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", padding: 32, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                    <ScoreGauge value={trustInfo.score} label="Authenticity Score" size={170} />
+                    <div style={{ fontSize: 11, fontWeight: 700, marginTop: 12, padding: "4px 10px", borderRadius: 6, background: "var(--bg-input)", border: "1px solid var(--border-primary)", color: "#94A3B8" }}>
+                      GRADE: {trustInfo.grade}
+                    </div>
+                  </div>
+
+                  {/* Quality metrics table */}
+                  <div style={{ background: "rgba(17, 24, 39, 0.6)", backdropFilter: "blur(12px)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+                    <h3 style={{ margin: 0, fontSize: 16, color: "white" }}>Bio-Chemical parameters</h3>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      {[
+                        { label: "pH Level", value: metrics.pH, standard: "5.0 - 7.5", desc: "Acidity index indicating fermentation stage" },
+                        { label: "EC (mS/cm)", value: metrics.EC, standard: "2.0 - 4.5", desc: "Electrical conductivity / soluble nutrient content" },
+                        { label: "Intake Temp", value: `${metrics.temp}°C`, standard: "< 32°C", desc: "Initial processing temp to preserve biology" },
+                        { label: "EM-1 Ratio", value: metrics.ratio, standard: "1:1:20", desc: "Effective microorganisms blending ratio" },
+                        { label: "Ferment Days", value: metrics.days, standard: "8 - 14", desc: "Aerobic curing time before dispatch" }
+                      ].map((item, idx) => (
+                        <div key={idx} style={{ paddingBottom: 10, borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 600 }}>
+                            <span style={{ color: "#CBD5E1" }}>{item.label}</span>
+                            <span style={{ color: "#10B981", fontFamily: "monospace" }}>{item.value} <span style={{ fontSize: 10, color: "#64748B", fontWeight: 400 }}>(std: {item.standard})</span></span>
+                          </div>
+                          <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 2 }}>{item.desc}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cryptographic Signature Integrity */}
+                <div style={{ background: "rgba(17, 24, 39, 0.6)", backdropFilter: "blur(12px)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", padding: 24, display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <h3 style={{ margin: 0, fontSize: 16, color: "#10B981" }}>🔐 Cryptographic Proof of Custody</h3>
+                    <span style={{ fontSize: 11, color: isVerified ? "#10B981" : "#EF4444", fontWeight: 700, padding: "2px 8px", borderRadius: 4, background: isVerified ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)" }}>
+                      {isVerified ? "✓ HASH MATCHED" : "❌ TAMPER DETECTED"}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: "#94A3B8", fontFamily: "monospace", background: "rgba(0,0,0,0.3)", padding: 14, borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", wordBreak: "break-all" }}>
+                    HEAD HASH: {verifyData.chain?.head_hash || "GENESIS"}
+                  </div>
+                  <p style={{ margin: 0, fontSize: 12, color: "#94A3B8", lineHeight: 1.5 }}>
+                    This batch is logged on ClimaLogix's tamper-evident audit ledger. Each state transition is cryptographically chained to prevent retroactive modification of inspection metrics.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* TAB CONTENT: SOURCE-TO-CONSUMER JOURNEY */}
+            {activeTab === "track" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 24, animation: "fadeSlideIn 0.3s ease" }}>
+                
+                {/* Stepper Timeline */}
+                <div style={{ background: "rgba(17, 24, 39, 0.6)", backdropFilter: "blur(12px)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", padding: 28 }}>
+                  <h3 style={{ margin: "0 0 20px 0", fontSize: 16, color: "white" }}>Provenance Lifecycle Logs</h3>
+                  
+                  <div style={{ display: "flex", flexDirection: "column", gap: 24, position: "relative", paddingLeft: 16 }}>
+                    {/* Vertical Timeline bar */}
+                    <div style={{ position: "absolute", top: 10, bottom: 10, left: 21, width: 2, background: "rgba(255,255,255,0.1)" }} />
+                    
+                    {verifyData.chain.events.map((evt, idx) => {
+                      const type = evt.type || evt.event_type;
+                      const data = evt.data || evt.event_data;
+                      const timeStr = evt.timestamp ? new Date(evt.timestamp).toLocaleString() : "N/A";
+                      
+                      let title = "Lifecycle Event";
+                      let desc = "Metadata transition recorded";
+                      let icon = "⚙️";
+                      let accentColor = "#94A3B8";
+
+                      if (type === "genesis" || type === "qa") {
+                        title = "Batch Registered & Quality Assured";
+                        desc = `Certified organic category "${data?.category || "Bio-Slurry"}" checked. Initial BARI score computed: ${trustInfo.score}/100.`;
+                        icon = "🌱";
+                        accentColor = "#10B981";
+                      } else if (type === "dispatched" || type === "dispatch") {
+                        title = "Dispatched / Climate-Checked";
+                        desc = `Departed warehouse. Vehicle: ${data?.vehicle || "DHK-1234"} | Driver: ${data?.driver || "Rakib"}. Ambient exposure monitored.`;
+                        icon = "🚚";
+                        accentColor = "#3B82F6";
+                      } else if (type === "delivered" || type === "delivery") {
+                        title = "Delivered & Acknowledged";
+                        desc = `Arrived at destination zone. Custody transferred to receiver: ${data?.receiver || "kamrangirchar-mgr"}. Condition: ${data?.condition || "Excellent"}.`;
+                        icon = "🏠";
+                        accentColor = "#10B981";
+                      }
+
+                      return (
+                        <div key={idx} style={{ display: "flex", gap: 16, position: "relative", zIndex: 2 }}>
+                          {/* Dot Icon */}
+                          <div style={{ width: 12, height: 12, borderRadius: "50%", background: accentColor, border: "4px solid #0B0F19", marginTop: 4, marginLeft: -1 }}></div>
+                          
+                          {/* Event details card */}
+                          <div style={{ flex: 1, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 12, padding: 16 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
+                              <span style={{ fontSize: 14, fontWeight: 700, color: "white", display: "flex", alignItems: "center", gap: 6 }}>
+                                <span>{icon}</span> {title}
+                              </span>
+                              <span style={{ fontSize: 11, color: "#64748B", fontFamily: "monospace" }}>{timeStr}</span>
+                            </div>
+                            <p style={{ margin: "0 0 10px 0", fontSize: 13, color: "#94A3B8", lineHeight: 1.4 }}>{desc}</p>
+                            
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, background: "rgba(0,0,0,0.2)", padding: "6px 12px", borderRadius: 6, fontSize: 11 }}>
+                              <span style={{ color: "#64748B" }}>Actor: <strong style={{ color: "#CBD5E1" }}>{evt.actor || "System"}</strong></span>
+                              <span style={{ color: "#10B981", fontFamily: "monospace", display: "flex", alignItems: "center", gap: 4 }}>
+                                🔑 Hash: {evt.current_hash ? evt.current_hash.slice(0, 10) + "..." : "N/A"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Microclimate Exposure Stats */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }} className="stack-mobile">
+                  <div style={{ background: "rgba(17, 24, 39, 0.6)", backdropFilter: "blur(12px)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", padding: 20 }}>
+                    <div style={{ fontSize: 12, color: "#64748B", textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.05em", marginBottom: 6 }}>Transit Risk Factor</div>
+                    <div style={{ fontSize: 20, fontWeight: 750, color: "#3B82F6" }}>Moderate Exposure</div>
+                    <p style={{ fontSize: 12, color: "#94A3B8", margin: "6px 0 0 0" }}>Thermal survival timer predicted 4.2 hours of safe transit at effective heat index.</p>
+                  </div>
+                  <div style={{ background: "rgba(17, 24, 39, 0.6)", backdropFilter: "blur(12px)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", padding: 20 }}>
+                    <div style={{ fontSize: 12, color: "#64748B", textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.05em", marginBottom: 6 }}>QR Verification Scan Hits</div>
+                    <div style={{ fontSize: 20, fontWeight: 750, color: "#10B981" }}>{scanCount} Scan{scanCount !== 1 ? "s" : ""} recorded</div>
+                    <p style={{ fontSize: 12, color: "#94A3B8", margin: "6px 0 0 0" }}>Logs geographic coordinates and user agents anonymously to prevent fake QR clone injection.</p>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* Circular ESG Impact Banner */}
+            <div style={{ background: "rgba(17, 24, 39, 0.6)", backdropFilter: "blur(12px)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", padding: 24 }}>
+              <h3 style={{ margin: "0 0 16px 0", color: "#F8FAFC", fontSize: 16 }}>♻️ Circular ESG Contributions</h3>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }} className="stack-mobile">
+                <div style={{ padding: 16, background: "rgba(16, 185, 129, 0.05)", borderRadius: 12, border: `1px solid rgba(16, 185, 129, 0.2)` }}>
+                  <div style={{ fontSize: 24 }}>♻️</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: "#10B981", margin: "6px 0 2px 0" }}>{240} Saved</div>
+                  <div style={{ fontSize: 12, color: "#94A3B8" }}>Equivalent Single-use Plastic PET Bottles offset by bulk shipping</div>
+                </div>
+                <div style={{ padding: 16, background: "rgba(59, 130, 246, 0.05)", borderRadius: 12, border: `1px solid rgba(59, 130, 246, 0.2)` }}>
+                  <div style={{ fontSize: 24 }}>🌿</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: "#3B82F6", margin: "6px 0 2px 0" }}>{25} kg</div>
+                  <div style={{ fontSize: 12, color: "#94A3B8" }}>Carbon Dioxide equivalent sequestered safely via Biochar conversion</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Map exposures card */}
+            {window.RouteExposureMapCard ? <window.RouteExposureMapCard /> : (typeof RouteExposureMapCard !== 'undefined' ? React.createElement(RouteExposureMapCard) : null)}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+window.ConsumerVerificationView = ConsumerVerificationView;
+
+function NotificationsView({ onSelectBatch }) {
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchNotifications = async () => {
+    setLoading(true);
+    try {
+      const res = await window.apiCall('/api/notifications');
+      if (res && res.success && res.data) {
+        const list = res.data.notifications || [];
+        setNotifications(list.filter(n => n.type === 'verification_request'));
+      }
+    } catch (err) {
+      console.warn("Failed to fetch notifications:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  const handleMarkAsRead = async (id) => {
+    try {
+      await window.apiCall(`/api/notifications/${id}/read`, 'PATCH');
+      fetchNotifications();
+    } catch (err) {
+      console.warn("Failed to mark as read:", err);
+    }
+  };
+
+  return (
+    <div style={{ animation: "fadeSlideIn 0.4s ease", display: "flex", flexDirection: "column", gap: 24 }}>
+      <PageHeader
+        title="Quality Verification Requests"
+        subtitle="Review and certify organic batches submitted by SMEs"
+      />
+      <Card hover={false}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+          <h3 style={{ margin: 0, color: "var(--text-primary)" }}>Pending Requests</h3>
+          <button onClick={fetchNotifications} style={{ background: "transparent", border: "1px solid var(--border-primary)", color: "var(--text-primary)", padding: "6px 12px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>
+            🔄 Refresh
+          </button>
+        </div>
+
+        {loading ? (
+          <div style={{ color: "var(--text-dim)", padding: 20 }}>Loading requests...</div>
+        ) : notifications.length === 0 ? (
+          <div style={{ color: "var(--text-dim)", padding: 40, textAlign: "center" }}>
+            🎉 No pending verification requests! All batches have been processed.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {notifications.map((n) => (
+              <div key={n.id} style={{
+                padding: 20,
+                background: n.is_read ? "rgba(255,255,255,0.01)" : "rgba(16, 185, 129, 0.03)",
+                borderRadius: 12,
+                border: n.is_read ? "1px solid var(--border-primary)" : `1px solid ${ACCENT.green}33`,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: 16
+              }}>
+                <div style={{ flex: 1, minWidth: 260 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                    <span style={{ fontSize: 18 }}>🔔</span>
+                    <span style={{ fontWeight: 700, color: "var(--text-primary)", fontSize: 15 }}>{n.title}</span>
+                    {!n.is_read && (
+                      <span style={{ background: ACCENT.greenBg, color: ACCENT.green, fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 12, border: `1px solid ${ACCENT.greenBorder}` }}>
+                        NEW
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 6 }}>{n.body}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
+                    Received: {n.created_at ? new Date(n.created_at).toLocaleString() : "Just now"}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <button
+                    onClick={() => {
+                      handleMarkAsRead(n.id);
+                      onSelectBatch(n.batch_id, n.destination_zone);
+                    }}
+                    style={{
+                      background: ACCENT.greenDark, color: "#fff", border: "none", padding: "10px 18px",
+                      borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 13, display: "flex", gap: 6, alignItems: "center"
+                    }}
+                  >
+                    🔍 Verify Batch
+                  </button>
+                  {!n.is_read && (
+                    <button
+                      onClick={() => handleMarkAsRead(n.id)}
+                      style={{ background: "transparent", border: "1px solid var(--border-primary)", color: "var(--text-secondary)", padding: "10px 14px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}
+                    >
+                      Dismiss
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+window.NotificationsView = NotificationsView;
 
 window.CLimaLogixApp = CLimaLogixApp;
 

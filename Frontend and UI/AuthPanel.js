@@ -229,32 +229,44 @@ function AuthPanel({
       const API_BASE = IS_STATIC ? 'http://localhost:5001' : 'https://backsme.onrender.com';
       if (mode === "login") {
         // Try backend auth first (public.users + Argon2)
-        const loginRes = await fetch(`${API_BASE}/api/auth/login`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            email,
-            password
-          })
-        });
-        const loginData = await loginRes.json();
-        if (loginRes.ok && loginData.success) {
-          // Backend login succeeded
-          setIsSuccess(true);
-          localStorage.setItem("climaLogix_token", loginData.token);
-          window.SUPABASE_SESSION_TOKEN = loginData.token;
-          // Also store user info for dashboard
-          localStorage.setItem("climaLogix_user", JSON.stringify(loginData.user));
-          setTimeout(() => {
-            if (onAuthSuccess) onAuthSuccess(loginData.user, loginData.token);
-            if (onClose) onClose();
-          }, 800);
-          return;
+        let loginRes;
+        let loginData;
+        let fetchFailed = false;
+        try {
+          loginRes = await fetch(`${API_BASE}/api/auth/login`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              email,
+              password
+            })
+          });
+          loginData = await loginRes.json();
+        } catch (fetchErr) {
+          fetchFailed = true;
+        }
+        if (!fetchFailed && loginRes) {
+          if (loginRes.ok && loginData.success) {
+            // Backend login succeeded
+            setIsSuccess(true);
+            localStorage.setItem("climaLogix_token", loginData.token);
+            window.SUPABASE_SESSION_TOKEN = loginData.token;
+            // Also store user info for dashboard
+            localStorage.setItem("climaLogix_user", JSON.stringify(loginData.user));
+            setTimeout(() => {
+              if (onAuthSuccess) onAuthSuccess(loginData.user, loginData.token);
+              if (onClose) onClose();
+            }, 800);
+            return;
+          } else {
+            // Backend returned a response with an error
+            throw new Error(loginData.error || loginData.message || "Invalid email or password");
+          }
         }
 
-        // Backend failed — fall back to Supabase Auth
+        // Backend was completely unreachable — fall back to Supabase Auth
         const sb = window.supabaseClient;
         if (!sb) throw new Error("Authentication service unavailable");
         const result = await sb.auth.signInWithPassword({
@@ -272,30 +284,41 @@ function AuthPanel({
         }, 800);
       } else {
         // Register — try backend first
-        const signupRes = await fetch(`${API_BASE}/api/auth/signup`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            email,
-            password,
-            name,
-            role: backendRole
-          })
-        });
-        const signupData = await signupRes.json();
-        if (signupRes.ok && signupData.success) {
-          // Backend signup succeeded — auto-login
-          setIsSuccess(true);
-          localStorage.setItem("climaLogix_token", signupData.token);
-          window.SUPABASE_SESSION_TOKEN = signupData.token;
-          localStorage.setItem("climaLogix_user", JSON.stringify(signupData.user));
-          setTimeout(() => {
-            if (onAuthSuccess) onAuthSuccess(signupData.user, signupData.token);
-            if (onClose) onClose();
-          }, 800);
-          return;
+        let signupRes;
+        let signupData;
+        let fetchFailed = false;
+        try {
+          signupRes = await fetch(`${API_BASE}/api/auth/signup`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              email,
+              password,
+              name,
+              role: backendRole
+            })
+          });
+          signupData = await signupRes.json();
+        } catch (fetchErr) {
+          fetchFailed = true;
+        }
+        if (!fetchFailed && signupRes) {
+          if (signupRes.ok && signupData.success) {
+            // Backend signup succeeded — auto-login
+            setIsSuccess(true);
+            localStorage.setItem("climaLogix_token", signupData.token);
+            window.SUPABASE_SESSION_TOKEN = signupData.token;
+            localStorage.setItem("climaLogix_user", JSON.stringify(signupData.user));
+            setTimeout(() => {
+              if (onAuthSuccess) onAuthSuccess(signupData.user, signupData.token);
+              if (onClose) onClose();
+            }, 800);
+            return;
+          } else {
+            throw new Error(signupData.error || signupData.message || "Registration failed");
+          }
         }
 
         // Backend signup failed — fall back to Supabase Auth

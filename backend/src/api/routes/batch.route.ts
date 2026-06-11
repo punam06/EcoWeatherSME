@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import { z } from 'zod';
 import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
 import { getBatchesList, addBatch, updateBatchInStore, getBatchFromStore, deleteBatchFromStore } from '../../lib/services/batchStore.service';
-import { authenticateJWT } from '../../middleware/authenticateJWT';
+import { authenticateJWT, optionalJWT } from '../../middleware/authenticateJWT';
 import { requireRoles } from '../../middleware/roleGuard';
 
 const router = Router();
@@ -20,12 +20,11 @@ const CreateBatchSchema = z.object({
   destination_zone: z.string().min(1).max(100).optional(),
   processor_id: z.string().min(1).max(100).optional(),
   batch_number: z.string().min(1).max(100).optional(),
-}).strict();
+});
 
 const UpdateBatchSchema = z.object({
   product_name: z.string().min(1).max(255).optional(),
   feedstock_type: z.string().min(1).max(255).optional(),
-  trust_score: z.number().optional(),
   weight_kg: z.coerce.number().min(0).max(1000000).optional(),
   packaging_type: z.string().min(1).max(100).optional(),
   destination_zone: z.string().min(1).max(100).optional(),
@@ -87,7 +86,7 @@ router.get('/', authenticateJWT, async (req: Request, res: Response) => {
 });
 
 // GET /api/batches/:id
-router.get('/:id', authenticateJWT, async (req: Request, res: Response) => {
+router.get('/:id', optionalJWT, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!id || typeof id !== 'string' || id.length > 100) {
@@ -117,7 +116,7 @@ router.get('/:id', authenticateJWT, async (req: Request, res: Response) => {
 });
 
 // POST /api/batches
-router.post('/', authenticateJWT, requireRoles('sme', 'sme_owner', 'buyer'), async (req: Request, res: Response) => {
+router.post('/', authenticateJWT, requireRoles('sme', 'sme_owner', 'buyer', 'processor'), async (req: Request, res: Response) => {
   try {
     const parsed = CreateBatchSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -143,6 +142,7 @@ router.post('/', authenticateJWT, requireRoles('sme', 'sme_owner', 'buyer'), asy
     const batchData = {
       batch_number: displayBatchId,
       product_name: product_name || 'Unnamed Organic Product',
+      product_type: resolvedProductType || 'Bio-Slurry',
       feedstock_type: resolvedProductType || 'Bio-Slurry',
       weight_kg: weightNum,
       packaging_type: packaging_type || 'Standard',

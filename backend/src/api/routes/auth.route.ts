@@ -41,35 +41,29 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 
     const { email, password } = parsed.data;
 
-    if (!isSupabaseConfigured()) {
-      // Dev fallback: check hardcoded demo credentials
-      const DEMO_USERS: Record<string, { id: string; password_hash: string; name: string; role: string }> = {
-        'processor.demo@climalogix.local': {
-          id: '00000000-0000-0000-0000-000000000001',
-          password_hash: '$argon2id$v=19$m=65536,t=3,p=4$SZ5P2auoBrj86fK+Jme1Ug$B0EgO63xNZiLejJBJ9p6UFW4zjCaAXnxS4Zh/pXoNeY',
-          name: 'Demo Processor',
-          role: 'processor',
-        },
-        'buyer.demo@climalogix.local': {
-          id: '00000000-0000-0000-0000-000000000002',
-          password_hash: '$argon2id$v=19$m=65536,t=3,p=4$SZ5P2auoBrj86fK+Jme1Ug$B0EgO63xNZiLejJBJ9p6UFW4zjCaAXnxS4Zh/pXoNeY',
-          name: 'Demo Buyer',
-          role: 'buyer',
-        },
-        'admin.demo@climalogix.local': {
-          id: '00000000-0000-0000-0000-000000000003',
-          password_hash: '$argon2id$v=19$m=65536,t=3,p=4$SZ5P2auoBrj86fK+Jme1Ug$B0EgO63xNZiLejJBJ9p6UFW4zjCaAXnxS4Zh/pXoNeY',
-          name: 'Demo Admin',
-          role: 'admin',
-        },
-      };
+    const DEMO_USERS: Record<string, { id: string; password_hash: string; name: string; role: string }> = {
+      'processor.demo@climalogix.local': {
+        id: '00000000-0000-0000-0000-000000000001',
+        password_hash: '$argon2id$v=19$m=65536,t=3,p=4$SZ5P2auoBrj86fK+Jme1Ug$B0EgO63xNZiLejJBJ9p6UFW4zjCaAXnxS4Zh/pXoNeY',
+        name: 'Demo Processor',
+        role: 'processor',
+      },
+      'buyer.demo@climalogix.local': {
+        id: '00000000-0000-0000-0000-000000000002',
+        password_hash: '$argon2id$v=19$m=65536,t=3,p=4$SZ5P2auoBrj86fK+Jme1Ug$B0EgO63xNZiLejJBJ9p6UFW4zjCaAXnxS4Zh/pXoNeY',
+        name: 'Demo Buyer',
+        role: 'buyer',
+      },
+      'admin.demo@climalogix.local': {
+        id: '00000000-0000-0000-0000-000000000003',
+        password_hash: '$argon2id$v=19$m=65536,t=3,p=4$SZ5P2auoBrj86fK+Jme1Ug$B0EgO63xNZiLejJBJ9p6UFW4zjCaAXnxS4Zh/pXoNeY',
+        name: 'Demo Admin',
+        role: 'admin',
+      },
+    };
 
-      const demoUser = DEMO_USERS[email.toLowerCase()];
-      if (!demoUser) {
-        res.status(401).json({ success: false, error: 'Invalid email or password' });
-        return;
-      }
-
+    const demoUser = DEMO_USERS[email.toLowerCase()];
+    if (demoUser) {
       const valid = await argon2.verify(demoUser.password_hash, password).catch(() => false);
       if (!valid) {
         res.status(401).json({ success: false, error: 'Invalid email or password' });
@@ -78,6 +72,11 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 
       const token = signToken({ id: demoUser.id, email: email.toLowerCase(), role: demoUser.role });
       res.json({ success: true, token, user: { id: demoUser.id, email: email.toLowerCase(), name: demoUser.name, role: demoUser.role } });
+      return;
+    }
+
+    if (!isSupabaseConfigured()) {
+      res.status(401).json({ success: false, error: 'Invalid email or password' });
       return;
     }
 
