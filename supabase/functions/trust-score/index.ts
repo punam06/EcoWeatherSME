@@ -1,4 +1,4 @@
-// Removed Deno serve import
+/// <reference path="../_shared/deno.d.ts" />
 import { corsHeaders } from "../_shared/cors.ts";
 
 export interface IoTReadings {

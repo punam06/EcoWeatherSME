@@ -263,11 +263,31 @@ function createRefreshToken(user) {
 async function storeRefreshToken(req, userId, refreshToken) {
   const expiresAt = new Date(Date.now() + parseDurationMs(REFRESH_TOKEN_TTL));
   const tokenHash = hashRefreshToken(refreshToken);
-  await queryDB(
-    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, user_agent, ip_address)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [userId, tokenHash, expiresAt, req.get('user-agent') || null, req.ip || null]
-  );
+  // Use Supabase REST (IPv4-friendly HTTPS) instead of pg.Pool, which on
+  // Render's IPv4-only network can't reach Supabase's IPv6 pooler. The
+  // refresh_tokens table is a regular Supabase Postgres table, so we hit
+  // PostgREST with the service-role key.
+  const url = `${process.env.SUPABASE_URL}/rest/v1/refresh_tokens`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY,
+      'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    },
+    body: JSON.stringify({
+      user_id: userId,
+      token_hash: tokenHash,
+      expires_at: expiresAt.toISOString(),
+      user_agent: req.get('user-agent') || null,
+      ip_address: req.ip || null
+    })
+  });
+  if (!resp.ok) {
+    const txt = await resp.text();
+    throw new Error(`refresh_tokens insert failed (${resp.status}): ${txt}`);
+  }
   return tokenHash;
 }
 
@@ -284,7 +304,13 @@ function setRefreshCookie(res, refreshToken) {
 async function issueAuthTokens(req, res, user) {
   const accessToken = createAccessToken(user);
   const { token: refreshToken } = createRefreshToken(user);
-  await storeRefreshToken(req, user.id, refreshToken);
+  // Persist the refresh token but DO NOT fail login if the write fails.
+  // Worst case: the user has to log in again when the access token expires.
+  try {
+    await storeRefreshToken(req, user.id, refreshToken);
+  } catch (e) {
+    console.warn('[auth] refresh-token persistence failed (non-fatal):', e.message);
+  }
   setRefreshCookie(res, refreshToken);
   return { accessToken };
 }
@@ -299,14 +325,24 @@ const requireAuth = asyncHandler(async (req, res, next) => {
 
   try {
     const payload = jwt.verify(token, ACCESS_TOKEN_SECRET);
-    const result = await queryDB(
-      'SELECT id, email, name, role, created_at FROM users WHERE id = $1',
-      [payload.sub]
-    );
-    if (result.rows.length === 0) {
+    // Use Supabase REST to fetch the user — see storeRefreshToken() above
+    // for why we avoid pg.Pool on Render's IPv4-only network.
+    const lookupUrl = `${process.env.SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(payload.sub)}&select=id,email,name,role,created_at&limit=1`;
+    const lookupRes = await fetch(lookupUrl, {
+      headers: {
+        'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY,
+        'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    if (!lookupRes.ok) {
       return res.status(401).json({ success: false, error: 'Invalid access token' });
     }
-    req.user = result.rows[0];
+    const rows = await lookupRes.json();
+    if (!rows || rows.length === 0) {
+      return res.status(401).json({ success: false, error: 'Invalid access token' });
+    }
+    req.user = rows[0];
     return next();
   } catch (error) {
     return res.status(401).json({ success: false, error: 'Invalid or expired access token' });
@@ -594,11 +630,25 @@ app.post('/api/auth/login', asyncHandler(async (req, res) => {
   const payload = parseBody(loginSchema, req, res);
   if (!payload) return;
 
-  const result = await queryDB(
-    'SELECT id, email, password_hash, name, role, created_at FROM users WHERE email = $1 LIMIT 1',
-    [payload.email]
-  );
-  const user = result.rows[0];
+  // Look up the user via Supabase REST (IPv4-friendly HTTPS) instead of
+  // pg.Pool, which on Render's IPv4-only network can't reach Supabase's
+  // IPv6 pooler. We still verify the password with Argon2 against the
+  // stored password_hash so security is unchanged.
+  const lookupUrl = `${process.env.SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(payload.email)}&select=id,email,password_hash,name,role,created_at&limit=1`;
+  const lookupRes = await fetch(lookupUrl, {
+    headers: {
+      'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY,
+      'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  if (!lookupRes.ok) {
+    return res.status(503).json({ success: false, error: `User lookup failed (${lookupRes.status})` });
+  }
+
+  const userRows = await lookupRes.json();
+  const user = userRows && userRows[0];
   if (!user) {
     return res.status(401).json({ success: false, error: 'Invalid credentials' });
   }
@@ -643,31 +693,62 @@ app.post('/api/auth/refresh', asyncHandler(async (req, res) => {
   }
 
   const oldTokenHash = hashRefreshToken(refreshToken);
-  const result = await queryDB(
-    `SELECT rt.id, rt.user_id, u.email, u.name, u.role, u.created_at
-     FROM refresh_tokens rt
-     JOIN users u ON u.id = rt.user_id
-     WHERE rt.token_hash = $1 AND rt.revoked = false AND rt.expires_at > NOW()
-     LIMIT 1`,
-    [oldTokenHash]
-  );
+  // Use Supabase REST to look up the refresh token + user (no pg.Pool).
+  // PostgREST supports filter-and-embed; if your schema doesn't have a
+  // FK relationship, fall back to two queries.
+  const rtUrl = `${process.env.SUPABASE_URL}/rest/v1/refresh_tokens?token_hash=eq.${encodeURIComponent(oldTokenHash)}&revoked=eq.false&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=id,user_id&limit=1`;
+  const rtRes = await fetch(rtUrl, {
+    headers: {
+      'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY,
+      'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json'
+    }
+  });
 
-  if (result.rows.length === 0 || decoded.sub !== result.rows[0].user_id) {
+  if (!rtRes.ok) {
+    return res.status(401).json({ success: false, error: 'Refresh token is invalid or revoked' });
+  }
+  const rtRows = await rtRes.json();
+  const rtRow = rtRows && rtRows[0];
+  if (!rtRow || decoded.sub !== rtRow.user_id) {
     return res.status(401).json({ success: false, error: 'Refresh token is invalid or revoked' });
   }
 
-  await queryDB(
-    'UPDATE refresh_tokens SET revoked = true, revoked_at = NOW() WHERE token_hash = $1',
-    [oldTokenHash]
-  );
+  // Look up the user record.
+  const userUrl = `${process.env.SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(rtRow.user_id)}&select=id,email,name,role,created_at&limit=1`;
+  const userRes = await fetch(userUrl, {
+    headers: {
+      'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY,
+      'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json'
+    }
+  });
+  if (!userRes.ok) {
+    return res.status(401).json({ success: false, error: 'Refresh token is invalid or revoked' });
+  }
+  const userRows = await userRes.json();
+  const user = userRows && userRows[0];
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Refresh token is invalid or revoked' });
+  }
 
-  const user = {
-    id: result.rows[0].user_id,
-    email: result.rows[0].email,
-    name: result.rows[0].name,
-    role: result.rows[0].role,
-    created_at: result.rows[0].created_at
-  };
+  // Revoke the old refresh token (best-effort, non-fatal).
+  try {
+    const revokeUrl = `${process.env.SUPABASE_URL}/rest/v1/refresh_tokens?token_hash=eq.${encodeURIComponent(oldTokenHash)}`;
+    await fetch(revokeUrl, {
+      method: 'PATCH',
+      headers: {
+        'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY,
+        'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({ revoked: true, revoked_at: new Date().toISOString() })
+    });
+  } catch (e) {
+    console.warn('[auth] refresh-token revoke failed (non-fatal):', e.message);
+  }
+
   const { accessToken } = await issueAuthTokens(req, res, user);
   res.json({
     success: true,
@@ -687,10 +768,22 @@ app.post('/api/auth/logout', asyncHandler(async (req, res) => {
   const refreshToken = getCookieValue(req, REFRESH_COOKIE_NAME) || payload.refreshToken;
   if (refreshToken) {
     const tokenHash = hashRefreshToken(refreshToken);
-    await queryDB(
-      'UPDATE refresh_tokens SET revoked = true, revoked_at = NOW() WHERE token_hash = $1',
-      [tokenHash]
-    );
+    // Best-effort revoke via Supabase REST (non-fatal).
+    try {
+      const revokeUrl = `${process.env.SUPABASE_URL}/rest/v1/refresh_tokens?token_hash=eq.${encodeURIComponent(tokenHash)}`;
+      await fetch(revokeUrl, {
+        method: 'PATCH',
+        headers: {
+          'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY,
+          'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({ revoked: true, revoked_at: new Date().toISOString() })
+      });
+    } catch (e) {
+      console.warn('[auth] logout revoke failed (non-fatal):', e.message);
+    }
   }
 
   res.clearCookie(REFRESH_COOKIE_NAME, {
