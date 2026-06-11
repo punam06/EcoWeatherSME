@@ -202,6 +202,13 @@ const APIClient = {
   // Forecast
   getDemandForecast: () => APIClient.request('/demand-forecast'),
 
+  // Request verification for a batch
+  requestVerification: (batchId, destinationZone) =>
+    APIClient.request('/notifications/request-verification', {
+      method: 'POST',
+      body: JSON.stringify({ batchId, destinationZone }),
+    }),
+
   // AI Recommend
   getAIRecommendations: (payload) => APIClient.request('/ai/recommend', {
     method: 'POST',

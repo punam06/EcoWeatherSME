@@ -42,7 +42,10 @@ router.get(
       }
 
       if (!isSupabaseConfigured()) {
-        res.json({ success: true, data: { notifications: [], unreadCount: 0 } });
+        const { getLocalNotifications } = require('../../lib/services/notification.service');
+        const notifications = getLocalNotifications();
+        const unreadCount = notifications.filter((n: any) => !n.is_read).length;
+        res.json({ success: true, data: { notifications, unreadCount } });
         return;
       }
 
@@ -88,7 +91,9 @@ router.patch(
       }
 
       if (!isSupabaseConfigured()) {
-        res.json({ success: true, data: { updated: 0 } });
+        const { markAllLocalNotificationsAsRead } = require('../../lib/services/notification.service');
+        markAllLocalNotificationsAsRead();
+        res.json({ success: true, data: { message: 'All notifications marked as read' } });
         return;
       }
 
@@ -135,7 +140,9 @@ router.patch(
       }
 
       if (!isSupabaseConfigured()) {
-        res.json({ success: true, data: { updated: 0 } });
+        const { markLocalNotificationAsRead } = require('../../lib/services/notification.service');
+        markLocalNotificationAsRead(id);
+        res.json({ success: true, data: { id, is_read: true } });
         return;
       }
 
@@ -256,7 +263,7 @@ router.post(
             </div>
 
             <div style="text-align: center; margin-bottom: 24px;">
-              <a href="https://climalogix.onrender.com" style="background-color: ${accentColor}; color: #0B0F17; text-decoration: none; padding: 12px 28px; font-size: 14px; font-weight: bold; border-radius: 8px; display: inline-block;">
+              <a href="https://backsme.onrender.com" style="background-color: ${accentColor}; color: #0B0F17; text-decoration: none; padding: 12px 28px; font-size: 14px; font-weight: bold; border-radius: 8px; display: inline-block;">
                 Go to ClimaLogix Dashboard
               </a>
             </div>
@@ -279,6 +286,60 @@ router.post(
       await transporter.sendMail(mailOptions);
       console.log(`[Webhook] Sent notification email to: ${recipientEmails.join(', ')}`);
       res.json({ success: true });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ── POST /api/notifications/request-verification ──────────────────────────────
+router.post(
+  '/request-verification',
+  authenticateJWT,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { batchId, destinationZone } = req.body;
+      if (!batchId) {
+        res.status(400).json({ success: false, error: 'batchId is required' });
+        return;
+      }
+      
+      const title = 'New Verification Request';
+      const body = `SME Owner has submitted Batch ${batchId} for Quality & Trust Verification.`;
+      
+      // 1. Add locally
+      const { addLocalNotification } = require('../../lib/services/notification.service');
+      addLocalNotification({
+        user_id: 'demo-inspector-id',
+        type: 'verification_request',
+        title,
+        body,
+        batch_id: batchId,
+        destination_zone: destinationZone || 'Old Dhaka'
+      });
+      
+      // 2. Add to Supabase for all inspectors/admins
+      if (isSupabaseConfigured()) {
+        try {
+          const supabase = getSupabaseClient();
+          // Find all inspectors/admins
+          const { data: users } = await supabase.from('users').select('id').in('role', ['admin', 'inspector']);
+          if (users && users.length > 0) {
+            const inserts = users.map((u: any) => ({
+              user_id: u.id,
+              type: 'verification_request',
+              title,
+              body,
+              is_read: false
+            }));
+            await supabase.from('notifications').insert(inserts);
+          }
+        } catch (err) {
+          console.warn('Failed to insert verification request to Supabase:', err);
+        }
+      }
+      
+      res.status(201).json({ success: true, message: 'Verification request sent successfully' });
     } catch (err) {
       next(err);
     }

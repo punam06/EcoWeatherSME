@@ -18,16 +18,61 @@ export type NotificationType =
   | 'dispatch_approved'
   | 'dispatch_rejected'
   | 'order_update'
-  | 'budget_alert';
+  | 'budget_alert'
+  | 'verification_request';
 
 export interface NotificationRow {
   id: string;
   user_id: string;
-  type: NotificationType;
+  type: NotificationType | string;
   title: string;
   body: string;
   is_read: boolean;
   created_at: string;
+  batch_id?: string;
+  destination_zone?: string;
+}
+
+const localNotifications: NotificationRow[] = [
+  {
+    id: "notif-1",
+    user_id: "demo-user-id",
+    type: "verification_request",
+    title: "New Verification Request",
+    body: "SME Owner has submitted Batch BCH-3522026 for Quality & Trust Verification.",
+    is_read: false,
+    created_at: new Date(Date.now() - 3600000).toISOString(),
+    batch_id: "BCH-3522026",
+    destination_zone: "Old Dhaka"
+  }
+];
+
+export function getLocalNotifications(): NotificationRow[] {
+  return localNotifications;
+}
+
+export function addLocalNotification(notif: Omit<NotificationRow, 'id' | 'created_at' | 'is_read'> & { id?: string }): NotificationRow {
+  const newNotif: NotificationRow = {
+    ...notif,
+    id: notif.id || `notif-${Date.now()}`,
+    created_at: new Date().toISOString(),
+    is_read: false
+  };
+  localNotifications.unshift(newNotif);
+  return newNotif;
+}
+
+export function markLocalNotificationAsRead(id: string): boolean {
+  const item = localNotifications.find(n => n.id === id);
+  if (item) {
+    item.is_read = true;
+    return true;
+  }
+  return false;
+}
+
+export function markAllLocalNotificationsAsRead(): void {
+  localNotifications.forEach(n => n.is_read = true);
 }
 
 /**
@@ -46,6 +91,14 @@ export async function createNotification(
   title: string,
   body: string,
 ): Promise<void> {
+  // Try adding locally first
+  addLocalNotification({
+    user_id: userId,
+    type,
+    title,
+    body
+  });
+
   if (!isSupabaseConfigured()) {
     return; // Gracefully skip when DB is not configured
   }

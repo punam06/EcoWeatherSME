@@ -235,12 +235,7 @@ function CreateBatchView({ lang, setTab }) {
   const [productType, setProductType] = useState("Bio-Slurry");
   const [weight, setWeight] = useState("100");
   const [destinationZone, setDestinationZone] = useState("Old Dhaka");
-  const [category, setCategory] = useState("organic");
-  const [qaSource, setQaSource] = useState("iot");
-  const [checkedItems, setCheckedItems] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-
 
   const handleSubmit = async () => {
     if (!productName.trim()) {
@@ -313,7 +308,7 @@ function CreateBatchView({ lang, setTab }) {
               <option value="pharma">Pharmaceuticals (DGDA)</option>
             </select>
           </div>
-
+        </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 32 }}>
           <button 

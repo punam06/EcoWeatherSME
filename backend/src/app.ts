@@ -100,6 +100,7 @@ const FRONTEND_ORIGINS = [
   process.env.FRONTEND_URL,
   'https://eco-sortha.vercel.app',
   'https://climalogix.onrender.com',
+  'https://backsme.onrender.com',
   'http://localhost:3000',
   'http://localhost:5173',
   'http://localhost:5001',
@@ -152,7 +153,7 @@ const CleverResponderTrustScoreSchema = z.object({
   temp: z.coerce.number().min(-50).max(100).default(28),
   ratio: z.string().min(1).max(50).default('1:1:20'),
   days: z.coerce.number().int().min(0).max(365).default(9),
-}).strict();
+});
 
 const CleverResponderMicroclimateSchema = z.object({
   action: z.literal('microclimate-metrics'),
@@ -163,7 +164,7 @@ const CleverResponderMicroclimateSchema = z.object({
   baseTemp: z.coerce.number().min(-10).max(60).default(31),
   windSpeed: z.coerce.number().min(0).max(200).default(8),
   routeDuration: z.coerce.number().min(0).max(10080).default(90),
-}).strict();
+});
 
 // ═══════════════════════════════════════════════════════════════
 // HEALTH & DIAGNOSTICS
@@ -378,7 +379,9 @@ app.get('/api/dashboard', async (req: Request, res: Response) => {
           plasticSaved: total * 240, co2Sequestered: Math.round(totalWeightKg * 0.25),
         };
         recentActivity = batches.slice(0, 5).map((r: any) => {
-          const elapsed = Math.round((Date.now() - new Date(r.created_at).getTime()) / 60000);
+          const rawDate = r.created_at ? new Date(r.created_at) : new Date();
+          const parsedTime = isNaN(rawDate.getTime()) ? Date.now() : rawDate.getTime();
+          const elapsed = Math.max(0, Math.round((Date.now() - parsedTime) / 60000));
           const timeAgo = elapsed < 60 ? `${elapsed} min ago` : elapsed < 1440 ? `${Math.round(elapsed / 60)} hr ago` : `${Math.round(elapsed / 1440)} day ago`;
           const isCert = r.status === 'certified';
           const isDispatched = ['dispatched', 'delivered'].includes(r.status);
@@ -411,7 +414,9 @@ app.get('/api/dashboard', async (req: Request, res: Response) => {
     };
 
     recentActivity = localBatches.slice(0, 5).map((r: any) => {
-      const elapsed = Math.round((Date.now() - new Date(r.created_at).getTime()) / 60000);
+      const rawDate = r.created_at ? new Date(r.created_at) : new Date();
+      const parsedTime = isNaN(rawDate.getTime()) ? Date.now() : rawDate.getTime();
+      const elapsed = Math.max(0, Math.round((Date.now() - parsedTime) / 60000));
       const timeAgo = elapsed < 60 ? `${elapsed} min ago` : elapsed < 1440 ? `${Math.round(elapsed / 60)} hr ago` : `${Math.round(elapsed / 1440)} day ago`;
       const isCert = r.status === 'certified';
       const isDispatched = ['dispatched', 'delivered'].includes(r.status);
