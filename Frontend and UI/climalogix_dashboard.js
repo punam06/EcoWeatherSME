@@ -15591,7 +15591,10 @@ const initializeAndMount = async () => {
       window.supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
     }
     const root = ReactDOM.createRoot(document.getElementById("root"));
-    const AppWithRouter = window.ReactRouterDOM ? /*#__PURE__*/React.createElement(window.ReactRouterDOM.BrowserRouter, null, /*#__PURE__*/React.createElement(window.ErrorBoundary, null, /*#__PURE__*/React.createElement(CLimaLogixApp, null))) : /*#__PURE__*/React.createElement(window.ErrorBoundary, null, /*#__PURE__*/React.createElement(CLimaLogixApp, null));
+    // Defensive: if window.ErrorBoundary failed to load (e.g. CDN blocked, order issue),
+    // fall back to a Fragment so we never render <undefined> and trigger React #130.
+    const SafeBoundary = window.ErrorBoundary || window.React.Fragment;
+    const AppWithRouter = window.ReactRouterDOM ? /*#__PURE__*/React.createElement(window.ReactRouterDOM.BrowserRouter, null, /*#__PURE__*/React.createElement(SafeBoundary, null, /*#__PURE__*/React.createElement(CLimaLogixApp, null))) : /*#__PURE__*/React.createElement(SafeBoundary, null, /*#__PURE__*/React.createElement(CLimaLogixApp, null));
     root.render(AppWithRouter);
   }
 };

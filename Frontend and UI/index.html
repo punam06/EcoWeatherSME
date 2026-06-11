@@ -174,8 +174,8 @@
       })();
     </script>
 
-    <!-- Error Boundary -->
-    <script type="text/babel" src="./ErrorBoundary.jsx"></script>
+    <!-- Error Boundary (pre-compiled so window.ErrorBoundary is available synchronously) -->
+    <script src="./ErrorBoundary.js"></script>
     
     <!-- Component files in dependency order -->
     <script type="text/babel" src="./components/DhakaRouteMicroMap.jsx"></script>

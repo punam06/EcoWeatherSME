@@ -8922,7 +8922,10 @@ const initializeAndMount = async () => {
       );
     }
     const root = ReactDOM.createRoot(document.getElementById("root"));
-    const AppWithRouter = window.ReactRouterDOM ? <window.ReactRouterDOM.BrowserRouter><window.ErrorBoundary><CLimaLogixApp /></window.ErrorBoundary></window.ReactRouterDOM.BrowserRouter> : <window.ErrorBoundary><CLimaLogixApp /></window.ErrorBoundary>;
+    // Defensive: if window.ErrorBoundary failed to load (e.g. CDN blocked, order issue),
+    // fall back to a Fragment so we never render <undefined> and trigger React #130.
+    const SafeBoundary = window.ErrorBoundary || window.React.Fragment;
+    const AppWithRouter = window.ReactRouterDOM ? <window.ReactRouterDOM.BrowserRouter><SafeBoundary><CLimaLogixApp /></SafeBoundary></window.ReactRouterDOM.BrowserRouter> : <SafeBoundary><CLimaLogixApp /></SafeBoundary>;
       root.render(AppWithRouter);
   }
 };

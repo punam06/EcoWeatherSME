@@ -53,9 +53,24 @@ function main() {
     console.log('Saved compiled ThreeScene to ThreeScene.compiled.js');
   }
 
+  // Compile ErrorBoundary.jsx -> ErrorBoundary.js
+  // IMPORTANT: ErrorBoundary must be pre-compiled to a plain <script> so that
+  // window.ErrorBoundary is defined synchronously by the time the pre-compiled
+  // climalogix_dashboard.js calls React.createElement(window.ErrorBoundary, ...).
+  // If we leave it as type="text/babel", Babel-standalone processes it
+  // asynchronously, and the dashboard renders <undefined> -> React #130.
+  const errorBoundaryPath = path.join(frontendDir, 'ErrorBoundary.jsx');
+  if (fs.existsSync(errorBoundaryPath)) {
+    const ebCode = fs.readFileSync(errorBoundaryPath, 'utf8');
+    const compiledEb = compileJSX(ebCode, 'ErrorBoundary.jsx');
+    fs.writeFileSync(path.join(frontendDir, 'ErrorBoundary.js'), compiledEb);
+    console.log('Saved compiled ErrorBoundary to ErrorBoundary.js');
+  }
+
   // 3. Update script tags in index.html
   html = html.replace('<script type="text/babel" src="./ThreeScene.js"></script>', '<script src="./ThreeScene.compiled.js"></script>');
   html = html.replace('<script type="text/babel" src="./AuthPanel.jsx"></script>', '<script src="./AuthPanel.js"></script>');
+  html = html.replace('<script type="text/babel" src="./ErrorBoundary.jsx"></script>', '<script src="./ErrorBoundary.js"></script>');
   
   // Also link climalogix_dashboard.js if not already linked
   if (!html.includes('src="./climalogix_dashboard.js"')) {
