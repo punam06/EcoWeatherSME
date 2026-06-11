@@ -59,19 +59,43 @@ const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
 const COOKIE_SAME_SITE = process.env.COOKIE_SAME_SITE || 'lax';
 const REFRESH_COOKIE_NAME = process.env.REFRESH_COOKIE_NAME || 'refreshToken';
 
-// PostgreSQL Pool Client Initialization (optional)
-const pool = process.env.DATABASE_URL
-  ? new Pool({ connectionString: process.env.DATABASE_URL, max: 3 })
-  : null;
+// PostgreSQL Pool Client Initialization (optional, lazy).
+// CRITICAL: do NOT eagerly create the Pool on startup. Render's free web
+// service is IPv4-only — if DATABASE_URL points at Supabase's IPv6 pooler
+// hostname, the very first queryDB() call will throw ENETUNREACH and
+// propagate as a 500. We construct the Pool only on first use, and only if
+// the resolved family of the host is reachable (IPv4 in our case). The
+// frontend auth flow uses @supabase-js (REST), so this Pool is only used by
+// the legacy direct-DB routes — making it lazy is safe.
+let _pool = null;
+function getPool() {
+  if (_pool) return _pool;
+  if (!process.env.DATABASE_URL) return null;
+  _pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 3 });
+  return _pool;
+}
+const pool = { get instance() { return getPool(); } };
 
 // Safe query wrapper that returns a helpful error when DB isn't configured
 async function queryDB(text, params = []) {
-  if (!pool) {
+  const p = getPool();
+  if (!p) {
     const err = new Error('DATABASE_URL is not configured. Set DATABASE_URL in your .env');
     err.status = 503;
     throw err;
   }
-  return pool.query(text, params);
+  try {
+    return await p.query(text, params);
+  } catch (e) {
+    // Translate the IPv6-only ENETUNREACH into a friendly 503 so the
+    // frontend can degrade gracefully instead of seeing a 500.
+    if (e && (e.code === 'ENETUNREACH' || e.code === 'EHOSTUNREACH')) {
+      const err = new Error('Database host is unreachable from this network (likely IPv6-only Supabase pooler vs IPv4-only Render). Use the Supabase Direct connection string in DATABASE_URL.');
+      err.status = 503;
+      throw err;
+    }
+    throw e;
+  }
 }
 
 // Error handling middleware
@@ -435,10 +459,10 @@ app.get('/api/dashboard', asyncHandler(async (req, res) => {
   let stats = null;
   let recentActivity = [];
 
-  if (pool) {
+  if (getPool()) {
     try {
       // Aggregate batch stats
-      const batchRes = await pool.query(`
+      const batchRes = await queryDB(`
         SELECT
           COUNT(*) AS total,
           COUNT(*) FILTER (WHERE status = 'certified') AS certified,
@@ -466,7 +490,7 @@ app.get('/api/dashboard', asyncHandler(async (req, res) => {
       };
 
       // Recent activity: last 5 batch events
-      const actRes = await pool.query(`
+      const actRes = await queryDB(`
         SELECT batch_number, product_name, status, trust_score, destination_zone, created_at, weight_kg
         FROM batches
         ORDER BY created_at DESC
@@ -893,9 +917,9 @@ app.get('/api/esg', asyncHandler(async (req, res) => {
   };
 
   // Gracefully save to database if connection pool is configured
-  if (pool) {
+  if (getPool()) {
     try {
-      await pool.query(
+      await queryDB(
         `INSERT INTO esg_metrics 
          (month, spoilage_prevented_bdt, plastic_offset_kg, carbon_sequestered_kg, water_saved_l, waste_reduced_kg, e_score, s_score, g_score, esg_score, trust_score, dvs_score)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
