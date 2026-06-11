@@ -59,8 +59,13 @@ app.use('/api', apiRateLimit);
 const ROLE_VALUES = ['processor', 'buyer', 'admin'];
 const ACCESS_TOKEN_TTL = process.env.JWT_ACCESS_TTL || '15m';
 const REFRESH_TOKEN_TTL = process.env.JWT_REFRESH_TTL || '30d';
-const ACCESS_TOKEN_SECRET = process.env.JWT_ACCESS_SECRET;
-const REFRESH_TOKEN_SECRET = process.env.JWT_REFRESH_SECRET;
+// Split secrets (preferred) with a fall-back to a single JWT_SECRET. The
+// legacy backend historically used two distinct secrets (access vs refresh),
+// but some deployments (incl. Render in this project) only configure
+// JWT_SECRET. The fall-back lets a single secret cover both — slightly less
+// secure than two distinct keys, but it keeps the auth flow working.
+const ACCESS_TOKEN_SECRET = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET;
+const REFRESH_TOKEN_SECRET = process.env.JWT_REFRESH_SECRET || process.env.JWT_REFRESH_FALLBACK || process.env.JWT_SECRET;
 const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
 const COOKIE_SAME_SITE = process.env.COOKIE_SAME_SITE || 'lax';
 const REFRESH_COOKIE_NAME = process.env.REFRESH_COOKIE_NAME || 'refreshToken';
@@ -102,6 +107,39 @@ async function queryDB(text, params = []) {
     }
     throw e;
   }
+}
+
+// Supabase REST (PostgREST) helper. Render's free tier is IPv4-only, so the
+// `pg` driver can't reach Supabase's IPv6 pooler. PostgREST over HTTPS works
+// fine, so any read-only or simple-write route that was hitting queryDB()
+// can call this helper instead. Returns the parsed JSON body on 2xx, throws
+// an Error with the upstream status + body text otherwise.
+async function supabaseRest(path, options = {}) {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const err = new Error('Supabase is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
+    err.status = 503;
+    throw err;
+  }
+  const url = `${process.env.SUPABASE_URL}/rest/v1${path}`;
+  const resp = await fetch(url, {
+    ...options,
+    headers: {
+      'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY,
+      'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+      ...(options.headers || {})
+    }
+  });
+  if (!resp.ok) {
+    const txt = await resp.text().catch(() => '');
+    const err = new Error(`Supabase REST ${resp.status}: ${txt.substring(0, 300)}`);
+    err.status = 502;
+    err.upstreamStatus = resp.status;
+    throw err;
+  }
+  // Some PostgREST calls (e.g. POST with Prefer: return=minimal) return 204
+  if (resp.status === 204) return null;
+  return resp.json();
 }
 
 // Error handling middleware
@@ -209,7 +247,10 @@ function parseBody(schema, req, res) {
 
 function ensureAuthSecrets() {
   if (!ACCESS_TOKEN_SECRET || !REFRESH_TOKEN_SECRET) {
-    const err = new Error('JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be configured');
+    const err = new Error(
+      'JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be configured ' +
+      '(or set JWT_SECRET as a single shared secret)'
+    );
     err.status = 500;
     throw err;
   }
@@ -444,12 +485,17 @@ app.get('/api/weather', asyncHandler(async (req, res) => {
 }));
 
 app.get('/api/test-db', asyncHandler(async (req, res) => {
+  // Render is IPv4-only and pg.Pool can't reach Supabase's IPv6 pooler, so
+  // we probe via Supabase REST (PostgREST HTTPS, IPv4-friendly) instead of
+  // `queryDB('SELECT NOW()')`. A 200 response to a tiny SELECT confirms the
+  // service-role key + URL are both live.
   try {
-    const result = await queryDB('SELECT NOW();');
+    const rows = await supabaseRest('/users?select=id&limit=1');
     res.status(200).json({
       status: 'success',
-      message: 'Database connection successful.',
-      timestamp: result.rows[0].now
+      message: 'Database connection successful (via Supabase REST).',
+      timestamp: new Date().toISOString(),
+      rowCount: Array.isArray(rows) ? rows.length : 0
     });
   } catch (error) {
     console.error('Database connection error:', error);
@@ -802,28 +848,50 @@ app.post('/api/auth/logout', asyncHandler(async (req, res) => {
 
 // Get all zones with microclimate data
 app.get('/api/zones', asyncHandler(async (req, res) => {
-  const result = await queryDB(`
-    SELECT * FROM zone_microclimate_profiles 
-    ORDER BY zone ASC;
-  `);
-  res.json({ 
-    success: true, 
-    data: result.rows,
-    count: result.rows.length 
+  // Use Supabase REST (PostgREST) instead of pg.Pool — Render is IPv4-only
+  // and can't reach Supabase's IPv6 pooler. PostgREST's `order` syntax
+  // matches the SQL equivalent.
+  const rows = await supabaseRest('/zone_microclimate_profiles?select=*&order=zone.asc');
+  res.json({
+    success: true,
+    data: rows || [],
+    count: Array.isArray(rows) ? rows.length : 0
   });
 }));
 
 // Get specific zone data
 app.get('/api/zones/:zone', asyncHandler(async (req, res) => {
   const { zone } = req.params;
-  const result = await queryDB(
-    'SELECT * FROM zone_microclimate_profiles WHERE zone = $1',
-    [zone]
+  const rows = await supabaseRest(
+    `/zone_microclimate_profiles?zone=eq.${encodeURIComponent(zone)}&select=*&limit=1`
   );
-  if (result.rows.length === 0) {
+  if (!rows || rows.length === 0) {
     return res.status(404).json({ success: false, error: 'Zone not found' });
   }
-  res.json({ success: true, data: result.rows[0] });
+  res.json({ success: true, data: rows[0] });
+}));
+
+// List products — used by the SME marketplace dashboard. The TS app at
+// `backend/src/app.ts` has a `/api/products` route, but Render actually runs
+// this legacy `backend/index.js`, which never declared the route — that's why
+// the dashboard was getting 404s. Implemented here on top of Supabase REST.
+app.get('/api/products', asyncHandler(async (req, res) => {
+  const { category, status, seller } = req.query;
+  const params = new URLSearchParams({ select: '*', order: 'created_at.desc' });
+  if (category) params.append('category', `eq.${category}`);
+  if (status) params.append('status', `eq.${status}`);
+  if (seller) params.append('seller', `eq.${seller}`);
+  const rows = await supabaseRest(`/products?${params.toString()}`);
+  res.json({ success: true, data: rows || [], count: Array.isArray(rows) ? rows.length : 0 });
+}));
+
+app.get('/api/products/:id', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const rows = await supabaseRest(`/products?id=eq.${encodeURIComponent(id)}&select=*&limit=1`);
+  if (!rows || rows.length === 0) {
+    return res.status(404).json({ success: false, error: 'Product not found' });
+  }
+  res.json({ success: true, data: rows[0] });
 }));
 
 // Create/update zone profile
@@ -834,17 +902,19 @@ app.post('/api/zones', requireAuth, requireRole('admin'), asyncHandler(async (re
     zone, uhi_offset, building_density, vegetation_fraction, wind_corridor_factor, thermal_mass_coefficient
   } = payload;
 
-  const result = await queryDB(`
-    INSERT INTO zone_microclimate_profiles 
-    (zone, uhi_offset, building_density, vegetation_fraction, wind_corridor_factor, thermal_mass_coefficient)
-    VALUES ($1, $2, $3, $4, $5, $6)
-    ON CONFLICT (zone) DO UPDATE SET
-    uhi_offset = $2, building_density = $3, vegetation_fraction = $4, 
-    wind_corridor_factor = $5, thermal_mass_coefficient = $6
-    RETURNING *;
-  `, [zone, uhi_offset, building_density, vegetation_fraction, wind_corridor_factor, thermal_mass_coefficient]);
-  
-  res.status(201).json({ success: true, data: result.rows[0] });
+  // PostgREST upsert: use Prefer: resolution=merge-duplicate to do
+  // INSERT ... ON CONFLICT equivalent. We need a UNIQUE constraint on
+  // `zone` for this to work — see supabase/migrations.
+  const body = [{
+    zone, uhi_offset, building_density, vegetation_fraction, wind_corridor_factor, thermal_mass_coefficient
+  }];
+  const rows = await supabaseRest('/zone_microclimate_profiles?on_conflict=zone', {
+    method: 'POST',
+    headers: { 'Prefer': 'resolution=merge-duplicate,return=representation' },
+    body: JSON.stringify(body)
+  });
+
+  res.status(201).json({ success: true, data: rows && rows[0] });
 }));
 
 /* ═══════════════════════════════════════════════════════════════
