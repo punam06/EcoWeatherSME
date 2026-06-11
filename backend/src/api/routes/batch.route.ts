@@ -22,7 +22,6 @@ const CreateBatchSchema = z.object({
 const UpdateBatchSchema = z.object({
   product_name: z.string().min(1).max(255).optional(),
   feedstock_type: z.string().min(1).max(255).optional(),
-  trust_score: z.number().optional(),
   weight_kg: z.coerce.number().min(0).max(1000000).optional(),
   packaging_type: z.string().min(1).max(100).optional(),
   destination_zone: z.string().min(1).max(100).optional(),
@@ -137,6 +136,7 @@ router.post('/', authenticateJWT, requireRoles('sme', 'sme_owner', 'buyer'), asy
     const batchData = {
       batch_number: displayBatchId,
       product_name: product_name || 'Unnamed Organic Product',
+      product_type: feedstock_type || 'Bio-Slurry',
       feedstock_type: feedstock_type || 'Bio-Slurry',
       weight_kg: weightNum,
       packaging_type: packaging_type || 'Standard',

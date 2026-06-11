@@ -479,6 +479,7 @@ function QAChecklistView({ lang }) {
               </div>
             </div>
           )}
+        </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {BARI_STANDARDS.map(item => (

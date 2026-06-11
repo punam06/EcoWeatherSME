@@ -252,30 +252,22 @@ function CreateBatchView({ lang, setTab }) {
 
     try {
       const localBatchNumber = `BCH-${Date.now().toString().slice(-6)}`;
-      const response = await fetch('/api/batches', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(localStorage.getItem('climalogix_token') ? { 'Authorization': `Bearer ${localStorage.getItem('climalogix_token')}` } : {})
-        },
-        body: JSON.stringify({
-          batch_number: localBatchNumber,
-          feedstock_type: productType,
-          product_name: productName,
-          trust_score: 0,
-          destination_zone: destinationZone,
-          weight_kg: parseFloat(weight) || 0,
-          packaging_type: 'Standard'
-        })
+      const result = await window.apiCall('/api/batches', 'POST', {
+        batch_number: localBatchNumber,
+        feedstock_type: productType,
+        product_name: productName,
+        trust_score: 0,
+        destination_zone: destinationZone,
+        weight_kg: parseFloat(weight) || 0,
+        packaging_type: 'Standard'
       });
-      const result = await response.json();
 
-      if (result.success && result.data) {
+      if (result && result.success && result.data) {
         const newId = result.data.id || result.data.batch_number || localBatchNumber;
         if (window.showToast) window.showToast(`Batch ${newId} registered successfully!`, 'success');
         setTab('batches');
       } else {
-        throw new Error("Failed to register batch");
+        throw new Error(result?.error || "Failed to register batch");
       }
     } catch (err) {
       if (window.showToast) window.showToast(err.message || 'Error registering batch', 'error');

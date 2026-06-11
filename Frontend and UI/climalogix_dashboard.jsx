@@ -4831,7 +4831,7 @@ function CustomSmeView({ products, setProducts, customSmeName, setCustomSmeName 
   );
 }
 
-function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerificationDispatchZone }) {
+function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerificationDispatchZone, setMarketplaceSubTab }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     {
@@ -5036,7 +5036,12 @@ function AgentPanel({ setTab, products = [], setVerificationBatchId, setVerifica
           }
           setTimeout(() => {
             const target = agentData.navigationTarget.toLowerCase();
-            if (target.includes("marketplace") || target.includes("market")) {
+            if (target === "confirmed_orders") {
+              if (setMarketplaceSubTab) setMarketplaceSubTab("confirmed");
+              setTab(7);
+            } else if (target === "batches" || target === "batch_registry") {
+              setTab(1);
+            } else if (target.includes("marketplace") || target.includes("market")) {
               setTab(7);
             } else if (target.includes("dashboard")) {
               setTab(0);
@@ -7079,6 +7084,67 @@ function safeComponent(name, props, displayName) {
   );
 }
 
+function BatchVerificationQRView() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const batchId = urlParams.get('batch') || 'BCH-10024';
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#0B0F19", color: "#F9FAFB", padding: "40px 20px", fontFamily: "'Inter', sans-serif" }}>
+      <div style={{ maxWidth: 600, margin: "0 auto", background: "#111827", borderRadius: 16, border: "1px solid rgba(16, 185, 129, 0.2)", overflow: "hidden", boxShadow: "0 10px 30px rgba(0,0,0,0.5)" }}>
+        <div style={{ background: "linear-gradient(135deg, #10B981, #059669)", padding: 24, textAlign: "center" }}>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: "#000" }}>Verified Batch Scan</h1>
+          <p style={{ margin: "8px 0 0", fontSize: 14, color: "rgba(0,0,0,0.7)" }}>ClimaLogix Trust Ledger</p>
+        </div>
+        
+        <div style={{ padding: 40, textAlign: "center", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+          <div style={{ background: "#FFF", padding: 16, borderRadius: 12, display: "inline-block", marginBottom: 24 }}>
+            <img 
+              src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://climalogix.vercel.app/batch-verification-qr?batch=BCH-10024" 
+              alt="Batch QR Code" 
+              width="200" 
+              height="200" 
+            />
+          </div>
+          <h2 style={{ margin: 0, fontSize: 28, fontFamily: "'JetBrains Mono', monospace", color: "#10B981" }}>{batchId}</h2>
+          <div style={{ display: "inline-block", background: "rgba(16, 185, 129, 0.1)", color: "#10B981", padding: "4px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600, marginTop: 12, border: "1px solid rgba(16, 185, 129, 0.3)" }}>
+            BARI CERTIFIED ✓
+          </div>
+        </div>
+
+        <div style={{ padding: 32 }}>
+          <h3 style={{ fontSize: 14, textTransform: "uppercase", color: "#94A3B8", letterSpacing: "0.05em", marginBottom: 16 }}>Batch Details</h3>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+            <tbody>
+              <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                <td style={{ padding: "12px 0", color: "#94A3B8" }}>Product</td>
+                <td style={{ padding: "12px 0", textAlign: "right", fontWeight: 600 }}>Premium Organic Compost</td>
+              </tr>
+              <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                <td style={{ padding: "12px 0", color: "#94A3B8" }}>Status</td>
+                <td style={{ padding: "12px 0", textAlign: "right", color: "#10B981", fontWeight: 700 }}>Active</td>
+              </tr>
+              <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                <td style={{ padding: "12px 0", color: "#94A3B8" }}>Initial DVS</td>
+                <td style={{ padding: "12px 0", textAlign: "right", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>92/100</td>
+              </tr>
+              <tr>
+                <td style={{ padding: "12px 0", color: "#94A3B8" }}>Origin</td>
+                <td style={{ padding: "12px 0", textAlign: "right", fontWeight: 600 }}>Savar Green Refineries</td>
+              </tr>
+            </tbody>
+          </table>
+          
+          <div style={{ marginTop: 32, textAlign: "center" }}>
+            <button onClick={() => window.location.href = "/"} style={{ padding: "12px 24px", background: "transparent", border: "1px solid rgba(16, 185, 129, 0.3)", color: "#10B981", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
+              Return to Platform
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CLimaLogixApp() {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
@@ -7514,6 +7580,10 @@ function CLimaLogixApp() {
   );
 
   if (loading) return <LoadingSpinner />;
+
+  if (typeof window !== "undefined" && window.location.pathname.includes('/batch-verification-qr')) {
+    return <BatchVerificationQRView />;
+  }
 
   return (
     <div style={{
@@ -8159,6 +8229,7 @@ function CLimaLogixApp() {
         products={productsList} 
         setVerificationBatchId={setVerificationBatchId}
         setVerificationDispatchZone={setVerificationDispatchZone}
+        setMarketplaceSubTab={setMarketplaceSubTab}
       />
     </div>
   );
