@@ -29,6 +29,9 @@ function unwrap(payload) {
 
 function getAuthHeaders() {
   const token = localStorage.getItem('climaLogix_token') || localStorage.getItem('climalogix_token') || sessionStorage.getItem('climalogix_token');
+  if (token) {
+    window.SUPABASE_SESSION_TOKEN = token;
+  }
   return token ? { 'Authorization': `Bearer ${token}` } : {};
 }
 
@@ -50,6 +53,7 @@ async function apiCall(path, method = 'GET', body = null) {
     const response = await fetch(`${BASE_URL}${path}`, options);
 
     if (response.status === 401) {
+      localStorage.removeItem('climaLogix_token');
       localStorage.removeItem('climalogix_token');
       sessionStorage.removeItem('climalogix_token');
       window.location.href = '/login';
@@ -69,10 +73,11 @@ const APIClient = {
   async request(endpoint, options = {}) {
     try {
       const url = `${API_BASE_URL}/api${endpoint}`;
+      const token = localStorage.getItem('climaLogix_token') || localStorage.getItem('climalogix_token') || window.SUPABASE_SESSION_TOKEN;
       const response = await fetch(url, {
         headers: {
           'Content-Type': 'application/json',
-          ...(window.SUPABASE_SESSION_TOKEN ? { 'Authorization': `Bearer ${window.SUPABASE_SESSION_TOKEN}` } : {}),
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
           ...options.headers,
         },
         ...options,

@@ -117,7 +117,7 @@ function OverviewView({ lang }) {
   );
 }
 
-function MyBatchesView({ lang, setTab }) {
+function MyBatchesView({ lang, setTab, refreshKey }) {
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -130,7 +130,7 @@ function MyBatchesView({ lang, setTab }) {
       })
       .catch(err => console.error("Batches fetch error:", err))
       .finally(() => setLoading(false));
-  }, []);
+  }, [refreshKey]);
 
   const handleDelete = async (id) => {
     if (!confirm('Are you sure you want to delete this batch?')) return;
@@ -230,7 +230,7 @@ function MyBatchesView({ lang, setTab }) {
   );
 }
 
-function CreateBatchView({ lang, setTab }) {
+function CreateBatchView({ lang, setTab, onBatchCreated }) {
   const [productName, setProductName] = useState("");
   const [productType, setProductType] = useState("Bio-Slurry");
   const [weight, setWeight] = useState("100");
@@ -260,16 +260,19 @@ function CreateBatchView({ lang, setTab }) {
       if (result && result.success && result.data) {
         const newId = result.data.id || result.data.batch_number || localBatchNumber;
         if (window.showToast) window.showToast(`Batch ${newId} registered successfully!`, 'success');
+        if (onBatchCreated) onBatchCreated();
         setTab('batches');
       } else {
         throw new Error(result?.error || "Failed to register batch");
       }
     } catch (err) {
+      console.error('[BatchCreate] Full response error:', err);
       if (window.showToast) window.showToast(err.message || 'Error registering batch', 'error');
     } finally {
       setIsSubmitting(false);
     }
   };
+
 
   return (
     <div style={{ animation: "fadeSlideIn 0.4s ease", maxWidth: 800, margin: "0 auto" }}>
@@ -494,6 +497,7 @@ function DeliveriesView({ lang }) {
 function ProducerDashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [lang, setLang] = useState('en');
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Handle language changes dynamically if LanguageSelector exists
   useEffect(() => {
@@ -600,8 +604,8 @@ function ProducerDashboard({ user, onLogout }) {
         {/* Scrollable Content */}
         <main style={{ flex: 1, overflowY: "auto", padding: 32 }}>
           {activeTab === 'overview' && <OverviewView lang={lang} setTab={setActiveTab} />}
-          {activeTab === 'batches' && <MyBatchesView lang={lang} setTab={setActiveTab} />}
-          {activeTab === 'create' && <CreateBatchView lang={lang} setTab={setActiveTab} />}
+          {activeTab === 'batches' && <MyBatchesView lang={lang} setTab={setActiveTab} refreshKey={refreshKey} />}
+          {activeTab === 'create' && <CreateBatchView lang={lang} setTab={setActiveTab} onBatchCreated={() => setRefreshKey(prev => prev + 1)} />}
           {activeTab === 'dispatch' && <DvsDispatchView lang={lang} />}
           {activeTab === 'deliveries' && <DeliveriesView lang={lang} />}
           {activeTab === 'notifications' && <NotificationsView lang={lang} />}
