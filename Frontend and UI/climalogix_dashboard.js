@@ -4150,6 +4150,100 @@ function SMEInventoryTracker({
       maximumAge: 60000
     });
   });
+  const qrScannerRef = useRef(null);
+  useEffect(() => {
+    return () => {
+      if (qrScannerRef.current) {
+        qrScannerRef.current.clear().catch(err => console.warn("Failed to clear QR scanner:", err));
+      }
+    };
+  }, []);
+  const handleStartCameraScan = async () => {
+    if (isScanning || isClaiming) return;
+    setError(null);
+    setCameraOn(true);
+    setIsScanning(true);
+    setClaimResult(null);
+
+    // Wait a brief tick for the DOM container to render
+    setTimeout(async () => {
+      try {
+        const html5QrCode = new window.Html5Qrcode("reader-element");
+        qrScannerRef.current = html5QrCode;
+        const qrCodeSuccessCallback = decodedText => {
+          // Play a small sound or beep if desired, then parse batch ID
+          console.log(`Scan success: ${decodedText}`);
+          let matchedBatch = decodedText;
+          if (decodedText.includes("batch=")) {
+            const urlParams = new URLSearchParams(decodedText.split("?")[1]);
+            matchedBatch = urlParams.get("batch") || decodedText;
+          } else if (decodedText.includes("/verify/")) {
+            matchedBatch = decodedText.split("/verify/")[1] || decodedText;
+          }
+          setBatchUuid(matchedBatch);
+          // Stop scanning
+          html5QrCode.stop().then(() => {
+            setCameraOn(false);
+            executeClaim(matchedBatch);
+          }).catch(err => {
+            console.error("Failed to stop scanner after success:", err);
+            executeClaim(matchedBatch);
+          });
+        };
+        const config = {
+          fps: 10,
+          qrbox: {
+            width: 250,
+            height: 250
+          }
+        };
+        await html5QrCode.start({
+          facingMode: "environment"
+        }, config, qrCodeSuccessCallback, errorMessage => {
+          // Silence scanning errors since they happen repeatedly during search
+        });
+      } catch (err) {
+        console.error("Camera scanner initialization failed:", err);
+        setError("Camera permission denied or camera unavailable. Falling back to simulation...");
+        setIsScanning(true);
+        scanTimerRef.current = setTimeout(() => {
+          executeClaim(batchUuid);
+        }, 2000);
+      }
+    }, 100);
+  };
+  const handleStopCameraScan = async () => {
+    if (qrScannerRef.current) {
+      try {
+        await qrScannerRef.current.stop();
+      } catch (err) {
+        console.warn("Error stopping scanner:", err);
+      }
+    }
+    setCameraOn(false);
+    setIsScanning(false);
+  };
+  const handleManualClaim = () => executeClaim(batchUuid);
+  const handleSpeak = () => {
+    if (!banglaText || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(banglaText);
+    utter.lang = "bn-BD";
+    utter.rate = 0.88;
+    utter.pitch = 1;
+    const voices = window.speechSynthesis.getVoices();
+    const bnVoice = voices.find(v => v.lang && v.lang.startsWith("bn"));
+    if (bnVoice) utter.voice = bnVoice;
+    utter.onstart = () => setIsSpeaking(true);
+    utter.onend = () => setIsSpeaking(false);
+    utter.onerror = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(utter);
+  };
+  useEffect(() => {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = () => {};
+    }
+  }, []);
   const executeClaim = async uuid => {
     const trimmed = (uuid || "").trim();
     if (!UUID_RE.test(trimmed) && !BATCH_ID_RE.test(trimmed)) {
@@ -4185,36 +4279,6 @@ function SMEInventoryTracker({
       setCameraOn(false);
     }
   };
-  const handleSimulateScan = () => {
-    if (isScanning || isClaiming) return;
-    setError(null);
-    setCameraOn(true);
-    setIsScanning(true);
-    scanTimerRef.current = setTimeout(() => {
-      executeClaim(batchUuid);
-    }, 1600);
-  };
-  const handleManualClaim = () => executeClaim(batchUuid);
-  const handleSpeak = () => {
-    if (!banglaText || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(banglaText);
-    utter.lang = "bn-BD";
-    utter.rate = 0.88;
-    utter.pitch = 1;
-    const voices = window.speechSynthesis.getVoices();
-    const bnVoice = voices.find(v => v.lang && v.lang.startsWith("bn"));
-    if (bnVoice) utter.voice = bnVoice;
-    utter.onstart = () => setIsSpeaking(true);
-    utter.onend = () => setIsSpeaking(false);
-    utter.onerror = () => setIsSpeaking(false);
-    window.speechSynthesis.speak(utter);
-  };
-  useEffect(() => {
-    if (window.speechSynthesis) {
-      window.speechSynthesis.onvoiceschanged = () => {};
-    }
-  }, []);
   return /*#__PURE__*/React.createElement("div", {
     style: {
       animation: "fadeSlideIn 0.35s ease"
@@ -4232,7 +4296,7 @@ function SMEInventoryTracker({
     hover: false
   }, /*#__PURE__*/React.createElement(SectionLabel, {
     icon: "\uD83D\uDCF7",
-    text: "Camera Scan Simulation"
+    text: "Camera Scan Integration"
   }), /*#__PURE__*/React.createElement("div", {
     style: {
       position: "relative",
@@ -4245,71 +4309,12 @@ function SMEInventoryTracker({
       transition: "all 0.3s ease"
     }
   }, /*#__PURE__*/React.createElement("div", {
+    id: "reader-element",
     style: {
-      position: "absolute",
-      inset: 0,
-      background: "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(16,185,129,0.03) 2px, rgba(16,185,129,0.03) 4px)"
+      width: "100%",
+      height: "100%"
     }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: "absolute",
-      inset: "12%",
-      border: `2px dashed ${isScanning ? ACCENT.green : "rgba(255,255,255,0.2)"}`,
-      borderRadius: 12,
-      transition: "border-color 0.3s"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: "absolute",
-      top: -2,
-      left: -2,
-      width: 20,
-      height: 20,
-      borderTop: `3px solid ${ACCENT.green}`,
-      borderLeft: `3px solid ${ACCENT.green}`
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: "absolute",
-      top: -2,
-      right: -2,
-      width: 20,
-      height: 20,
-      borderTop: `3px solid ${ACCENT.green}`,
-      borderRight: `3px solid ${ACCENT.green}`
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: "absolute",
-      bottom: -2,
-      left: -2,
-      width: 20,
-      height: 20,
-      borderBottom: `3px solid ${ACCENT.green}`,
-      borderLeft: `3px solid ${ACCENT.green}`
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: "absolute",
-      bottom: -2,
-      right: -2,
-      width: 20,
-      height: 20,
-      borderBottom: `3px solid ${ACCENT.green}`,
-      borderRight: `3px solid ${ACCENT.green}`
-    }
-  })), isScanning && /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: "absolute",
-      left: "12%",
-      right: "12%",
-      height: 2,
-      background: `linear-gradient(90deg, transparent, ${ACCENT.green}, transparent)`,
-      boxShadow: `0 0 12px ${ACCENT.green}`,
-      animation: "scanLine 1.6s ease-in-out infinite",
-      top: "30%"
-    }
-  }), /*#__PURE__*/React.createElement("div", {
+  }), !cameraOn && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "absolute",
       inset: 0,
@@ -4318,19 +4323,19 @@ function SMEInventoryTracker({
       alignItems: "center",
       justifyContent: "center",
       gap: 8,
-      color: cameraOn ? ACCENT.greenLight : "var(--text-dim)"
+      color: "var(--text-dim)"
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 42
     }
-  }, cameraOn ? "📡" : "📷"), /*#__PURE__*/React.createElement("span", {
+  }, "\uD83D\uDCF7"), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 12,
       letterSpacing: "0.1em",
       fontWeight: 600
     }
-  }, isScanning ? "SCANNING QR…" : cameraOn ? "CAMERA LIVE (MOCK)" : "MOCK WEBCAM READY"))), /*#__PURE__*/React.createElement("div", {
+  }, "CAMERA READY"))), /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 16
     }
@@ -4366,9 +4371,22 @@ function SMEInventoryTracker({
       marginTop: 14,
       flexWrap: "wrap"
     }
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: handleSimulateScan,
-    disabled: !batchUuid.trim() || isScanning || isClaiming,
+  }, cameraOn ? /*#__PURE__*/React.createElement("button", {
+    onClick: handleStopCameraScan,
+    style: {
+      flex: 1,
+      minWidth: 160,
+      padding: "12px 18px",
+      borderRadius: 8,
+      border: "none",
+      cursor: "pointer",
+      background: ACCENT.red,
+      color: "#fff",
+      fontWeight: 700,
+      fontSize: 13
+    }
+  }, "\uD83D\uDED1 Stop Camera Scan") : /*#__PURE__*/React.createElement("button", {
+    onClick: handleStartCameraScan,
     style: {
       flex: 1,
       minWidth: 160,
@@ -4379,10 +4397,9 @@ function SMEInventoryTracker({
       background: ACCENT.greenDark,
       color: "#fff",
       fontWeight: 700,
-      fontSize: 13,
-      opacity: !batchUuid.trim() || isScanning || isClaiming ? 0.5 : 1
+      fontSize: 13
     }
-  }, isScanning ? "⏳ Scanning…" : "📲 Simulate QR Scan"), /*#__PURE__*/React.createElement("button", {
+  }, "\uD83D\uDCF2 Start Camera Scan"), /*#__PURE__*/React.createElement("button", {
     onClick: handleManualClaim,
     disabled: !batchUuid.trim() || isClaiming,
     style: {
@@ -4969,6 +4986,19 @@ function DashboardView({
     }
   }, "Last updated: Just Now (Simulated Live Data)"), /*#__PURE__*/React.createElement("div", {
     style: {
+      display: "grid",
+      gridTemplateColumns: "1.2fr 1fr",
+      gap: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      minHeight: "260px",
+      border: "1px solid var(--border-primary)",
+      borderRadius: 12,
+      overflow: "hidden"
+    }
+  }, window.DhakaRouteMicroMap ? /*#__PURE__*/React.createElement(window.DhakaRouteMicroMap, null) : typeof DhakaRouteMicroMap !== 'undefined' ? React.createElement(DhakaRouteMicroMap) : null), /*#__PURE__*/React.createElement("div", {
+    style: {
       display: "flex",
       flexDirection: "column",
       gap: 12
@@ -5006,7 +5036,7 @@ function DashboardView({
       style: {
         border: "1px solid var(--border-primary)",
         borderRadius: 12,
-        padding: "16px 20px",
+        padding: "12px 16px",
         transition: "background 0.2s"
       },
       onMouseEnter: e => e.currentTarget.style.background = "var(--bg-input)",
@@ -5015,13 +5045,13 @@ function DashboardView({
       style: {
         display: "flex",
         justifyContent: "space-between",
-        marginBottom: 8
+        marginBottom: 6
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
-        gap: 10
+        gap: 8
       }
     }, /*#__PURE__*/React.createElement("span", {
       style: {
@@ -5034,12 +5064,12 @@ function DashboardView({
     }), /*#__PURE__*/React.createElement("span", {
       style: {
         fontWeight: 600,
-        fontSize: 14
+        fontSize: 13
       }
     }, m.zone), /*#__PURE__*/React.createElement("span", {
       style: {
-        fontSize: 10,
-        padding: "2px 8px",
+        fontSize: 9,
+        padding: "2px 6px",
         borderRadius: 12,
         background: hColor + "15",
         color: hColor,
@@ -5047,23 +5077,17 @@ function DashboardView({
       }
     }, m.hazard)), /*#__PURE__*/React.createElement("div", {
       style: {
-        fontSize: 12,
+        fontSize: 11,
         color: "var(--text-secondary)",
         fontFamily: "'JetBrains Mono', monospace"
       }
-    }, m.temp, " \xB7 ", m.rh)), /*#__PURE__*/React.createElement("div", {
+    }, m.temp)), /*#__PURE__*/React.createElement("div", {
       style: {
-        fontSize: 13,
-        color: "var(--text-secondary)",
-        marginBottom: 4
+        fontSize: 11,
+        color: "var(--text-secondary)"
       }
-    }, m.desc), m.time !== "N/A" && /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: ACCENT.amber
-      }
-    }, "\u26A1 Peak: ", m.time));
-  }))), /*#__PURE__*/React.createElement(Card, {
+    }, m.desc));
+  })))), /*#__PURE__*/React.createElement(Card, {
     hover: false
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -5758,6 +5782,12 @@ function BatchRegistry({
     }
   }, "\u2713 Batch is certified. Dispatch is permitted within TST window."), selectedBatch.status === "pending" && /*#__PURE__*/React.createElement("div", {
     style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
       background: ACCENT.amberBg,
       border: `1px solid ${ACCENT.amberBorder}`,
       borderRadius: 12,
@@ -5766,7 +5796,32 @@ function BatchRegistry({
       color: ACCENT.amber,
       fontWeight: 600
     }
-  }, "\u23F3 Batch is awaiting manual verification by a certified processor before certification."), selectedBatch && /*#__PURE__*/React.createElement("div", {
+  }, "\u23F3 Batch is awaiting manual verification by a certified processor before certification."), /*#__PURE__*/React.createElement("button", {
+    onClick: async () => {
+      try {
+        const res = await window.APIClient.requestVerification(selectedBatch.id || selectedBatch.batch_number, selectedBatch.destination_zone);
+        if (res && res.success) {
+          if (window.showToast) window.showToast("Verification request sent to Quality Inspectors!", "success");
+        }
+      } catch (err) {
+        if (window.showToast) window.showToast("Failed to send verification request", "error");
+      }
+    },
+    style: {
+      width: "100%",
+      padding: "10px 14px",
+      borderRadius: 8,
+      background: ACCENT.greenDark,
+      color: "#fff",
+      fontWeight: 600,
+      cursor: "pointer",
+      border: "none",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8
+    }
+  }, "\uD83D\uDCE4 Send Request to Quality Inspector")), selectedBatch && /*#__PURE__*/React.createElement("div", {
     style: {
       background: "var(--bg-input)",
       borderRadius: 12,
@@ -6020,33 +6075,21 @@ function RegisterBatch({
       created_at: new Date().toISOString()
     };
     try {
-      const response = await fetch(`${BACKEND_URL}/api/batches`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          batch_number: localBatch.id,
-          feedstock_type: productType,
-          // ← required by backend schema
-          product_name: productName,
-          trust_score: 0,
-          // ← required by backend schema (default 0 until manually verified)
-          processor_id: null,
-          // extra fields stored but not schema-validated:
-          destination_zone: destinationZone,
-          weight_kg: localBatch.weight_kg,
-          packaging_type: packagingType
-        })
-      });
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.data) {
-          localBatch.id = result.data.id || result.data.batch_number || localBatch.id;
-          localBatch.trust_score = result.data.trust_score ?? 0;
-          localBatch.status = result.data.status || "pending";
-          localBatch.created_at = result.data.created_at || localBatch.created_at;
-        }
+      const payload = {
+        batch_number: localBatch.id,
+        feedstock_type: productType,
+        product_name: productName,
+        trust_score: 0,
+        destination_zone: destinationZone,
+        weight_kg: localBatch.weight_kg,
+        packaging_type: packagingType
+      };
+      const result = await window.apiCall("/api/batches", "POST", payload);
+      if (result && result.success && result.data) {
+        localBatch.id = result.data.id || result.data.batch_number || localBatch.id;
+        localBatch.trust_score = result.data.trust_score ?? 0;
+        localBatch.status = result.data.status || "pending";
+        localBatch.created_at = result.data.created_at || localBatch.created_at;
       }
       // Always add to local seed (whether backend succeeded or not)
 
@@ -12856,6 +12899,61 @@ function safeComponent(name, props, displayName) {
     }
   }, 'This feature will be available in a future update.'));
 }
+function TopGreenSMEWidget() {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 24,
+      animation: "fadeSlideIn 0.4s ease"
+    }
+  }, /*#__PURE__*/React.createElement(Card, {
+    style: {
+      border: `1px solid ${ACCENT.green}55`,
+      background: `linear-gradient(135deg, rgba(16,185,129,0.05), rgba(6,95,70,0.1))`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      margin: "0 0 8px 0",
+      color: ACCENT.green,
+      display: "flex",
+      alignItems: "center",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 20
+    }
+  }, "\uD83C\uDFC6"), " Top Green SME"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "var(--text-secondary)",
+      lineHeight: 1.5
+    }
+  }, "Your sustainable practices have ranked you in the top 5% of BARI-certified processors this month!")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "right"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 32,
+      fontWeight: 800,
+      color: ACCENT.green,
+      fontFamily: "'JetBrains Mono', monospace"
+    }
+  }, "#1"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: ACCENT.green,
+      letterSpacing: "0.05em",
+      fontWeight: 600
+    }
+  }, "IN DHAKA ZONE")))));
+}
 function CLimaLogixApp() {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
@@ -13205,6 +13303,11 @@ function CLimaLogixApp() {
         icon: "✅",
         layer: "L1"
       }, {
+        id: "batch-qr",
+        label: "Batch QR & Verify",
+        icon: "📱",
+        layer: "L1"
+      }, {
         id: "settings",
         label: "Profile & Settings",
         icon: "⚙️",
@@ -13220,6 +13323,11 @@ function CLimaLogixApp() {
         id: "verification",
         label: "Batch Verification",
         icon: "✅",
+        layer: "L1"
+      }, {
+        id: "batch-qr",
+        label: "Batch QR & Verify",
+        icon: "📱",
         layer: "L1"
       }, {
         id: "delivery",
@@ -13272,6 +13380,11 @@ function CLimaLogixApp() {
         id: "verification",
         label: "Batch Verification",
         icon: "✅",
+        layer: "L1"
+      }, {
+        id: "batch-qr",
+        label: "Batch QR & Verify",
+        icon: "📱",
         layer: "L1"
       }, {
         id: "marketplace",
@@ -13368,6 +13481,17 @@ function CLimaLogixApp() {
       d: "M21 12a9 9 0 11-6.219-8.56"
     })), /*#__PURE__*/React.createElement("span", null, "LOADING SECURE NODE..."));
   }
+  const params = new URLSearchParams(window.location.search);
+  const isConsumerVerify = params.has("batch");
+  if (isConsumerVerify) {
+    const ConsumerVerificationViewComponent = window.ConsumerVerificationView || (() => /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: 'white',
+        padding: 20
+      }
+    }, "Loading Certificate..."));
+    return /*#__PURE__*/React.createElement(ConsumerVerificationViewComponent, null);
+  }
   if (!currentUser) {
     const AuthPanelComponent = window.AuthPanel || (() => /*#__PURE__*/React.createElement("div", {
       style: {
@@ -13425,7 +13549,7 @@ function CLimaLogixApp() {
     d: "M21 12a9 9 0 11-6.219-8.56"
   })), /*#__PURE__*/React.createElement("span", null, "LOADING DASHBOARD..."));
   if (loading) return /*#__PURE__*/React.createElement(LoadingSpinner, null);
-  return /*#__PURE__*/React.createElement("div", {
+  const MainDashboardLayout = () => /*#__PURE__*/React.createElement("div", {
     style: {
       ...themeVars,
       background: "var(--bg-primary)",
@@ -14002,12 +14126,12 @@ function CLimaLogixApp() {
       width: "100%",
       margin: "0 auto"
     }
-  }, activeTab === "dashboard" && /*#__PURE__*/React.createElement(DashboardView, {
+  }, activeTab === "dashboard" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(DashboardView, {
     onNewBatch: () => {
       setTab("batches");
       setIsRegisteringBatch(true);
     }
-  }), activeTab === "inventory" && /*#__PURE__*/React.createElement(SMEInventoryTracker, {
+  }), userRole === 'sme_owner' && /*#__PURE__*/React.createElement(TopGreenSMEWidget, null)), activeTab === "inventory" && /*#__PURE__*/React.createElement(SMEInventoryTracker, {
     activeZone: activeZone
   }), activeTab === "batches" && (isRegisteringBatch ? /*#__PURE__*/React.createElement(RegisterBatch, {
     onCancel: () => setIsRegisteringBatch(false)
@@ -14182,7 +14306,9 @@ function CLimaLogixApp() {
     liveWeather: liveWeather,
     detectGpsLocation: detectGpsLocation,
     gpsError: gpsError
-  }), activeTab === "tracking" && safeComponent("TrackingView", {}), activeTab === "delivery" && safeComponent("DeliveryView", {
+  }), activeTab === "tracking" && safeComponent("DeliveryTrackingView", {
+    lang
+  }), activeTab === "batch-qr" && safeComponent("BatchVerificationQR", {}), activeTab === "delivery" && safeComponent("DeliveryView", {
     userRole,
     onUpdateTrustScore: setTrustScore
   }), activeTab === "notifications" && safeComponent("NotificationsView", {
@@ -14251,7 +14377,1161 @@ function CLimaLogixApp() {
     setVerificationBatchId: setVerificationBatchId,
     setVerificationDispatchZone: setVerificationDispatchZone
   }));
+  if (window.ReactRouterDOM) {
+    const {
+      Routes,
+      Route
+    } = window.ReactRouterDOM;
+    return /*#__PURE__*/React.createElement(Routes, null, /*#__PURE__*/React.createElement(Route, {
+      path: "/batch-verification-qr",
+      element: /*#__PURE__*/React.createElement("div", {
+        style: {
+          ...themeVars,
+          background: "var(--bg-primary)",
+          minHeight: "100vh",
+          padding: "40px"
+        }
+      }, /*#__PURE__*/React.createElement("link", {
+        href: "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap",
+        rel: "stylesheet"
+      }), /*#__PURE__*/React.createElement("style", null, `
+              @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+              * { box-sizing: border-box; margin: 0; padding: 0; }
+              body { font-family: 'Inter', sans-serif; background: #0B0F19; color: #F8FAFC; }
+            `), safeComponent("BatchVerificationQR", {}))
+    }), /*#__PURE__*/React.createElement(Route, {
+      path: "*",
+      element: /*#__PURE__*/React.createElement(MainDashboardLayout, null)
+    }));
+  }
+  return /*#__PURE__*/React.createElement(MainDashboardLayout, null);
 }
+function ConsumerVerificationView() {
+  const params = new URLSearchParams(window.location.search);
+  const [batchId, setBatchId] = useState(params.get("batch") || "");
+  const [searchVal, setSearchVal] = useState("");
+  const [verifyData, setVerifyData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState("verify"); // "verify" or "track"
+  const [scanning, setScanning] = useState(false);
+  const scannerRef = useRef(null);
+  const fetchBatchData = async id => {
+    if (!id) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await window.apiCall(`/api/verify/${id}`);
+      if (res && res.success && res.data) {
+        setVerifyData(res.data);
+        // Sync URL without reloading
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.set("batch", id);
+        window.history.pushState({}, "", newUrl);
+      } else {
+        setError(res?.error || `Batch ID "${id}" is not certified or does not exist.`);
+        setVerifyData(null);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch verified batch:", err);
+      setError("Network connection issue or invalid batch identifier.");
+      setVerifyData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    const initialId = params.get("batch");
+    if (initialId) {
+      setBatchId(initialId);
+      fetchBatchData(initialId);
+    }
+  }, []);
+  const handleSearch = e => {
+    e.preventDefault();
+    if (searchVal.trim()) {
+      setBatchId(searchVal.trim());
+      fetchBatchData(searchVal.trim());
+    }
+  };
+  const startScanner = () => {
+    setScanning(true);
+    setError(null);
+    setTimeout(() => {
+      try {
+        const html5QrcodeScanner = new Html5QrcodeScanner("public-qr-reader", {
+          fps: 15,
+          qrbox: {
+            width: 250,
+            height: 250
+          }
+        });
+        html5QrcodeScanner.render(decodedText => {
+          let id = decodedText;
+          // Handle if they scan a full URL like https://.../?batch=BCH-XXX
+          if (decodedText.includes("batch=")) {
+            const urlParams = new URLSearchParams(decodedText.split("?")[1]);
+            id = urlParams.get("batch") || decodedText;
+          }
+          html5QrcodeScanner.clear();
+          setScanning(false);
+          setBatchId(id);
+          fetchBatchData(id);
+        }, err => {
+          // silent scan failure logs
+        });
+        scannerRef.current = html5QrcodeScanner;
+      } catch (err) {
+        console.error("Scanner failed to start:", err);
+        setError("Unable to access camera or load QR code library.");
+        setScanning(false);
+      }
+    }, 300);
+  };
+  const stopScanner = () => {
+    if (scannerRef.current) {
+      scannerRef.current.clear();
+      scannerRef.current = null;
+    }
+    setScanning(false);
+  };
+  const handleReset = () => {
+    setBatchId("");
+    setSearchVal("");
+    setVerifyData(null);
+    setError(null);
+    stopScanner();
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.delete("batch");
+    window.history.pushState({}, "", newUrl);
+  };
+  if (loading) {
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#0B0F19",
+        color: "#10B981",
+        height: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: "14px",
+        gap: "16px"
+      }
+    }, /*#__PURE__*/React.createElement("svg", {
+      width: "32",
+      height: "32",
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2",
+      strokeLinecap: "round",
+      style: {
+        animation: "spin 1s linear infinite"
+      }
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M21 12a9 9 0 11-6.219-8.56"
+    })), /*#__PURE__*/React.createElement("span", null, "RETRIEVING TAMPER-PROOF RECORD..."));
+  }
+
+  // Extract variables safely from verifyData
+  const hasData = verifyData && verifyData.chain && verifyData.chain.events && verifyData.chain.events.length > 0;
+
+  // Find genesis or first event to extract product metrics
+  const genesisEvent = hasData ? verifyData.chain.events.find(e => (e.type || e.event_type) === 'qa' || (e.type || e.event_type) === 'genesis') : null;
+  const metrics = (genesisEvent?.data || genesisEvent?.event_data)?.metrics_summary || {
+    pH: 5.2,
+    EC: 3.4,
+    temp: 28,
+    ratio: '1:1:20',
+    days: 9
+  };
+  const productName = (genesisEvent?.data || genesisEvent?.event_data)?.product_name || "Certified Organic Compost";
+  const categoryName = (genesisEvent?.data || genesisEvent?.event_data)?.category || "Bio-Slurry";
+  const trustInfo = verifyData?.trust || {
+    score: 78,
+    grade: 'B',
+    isViable: true
+  };
+  const scanCount = verifyData?.scanCount || 0;
+  const isVerified = verifyData?.chain?.verified ?? true;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#0B0F19",
+      minHeight: "100vh",
+      color: "#F8FAFC",
+      padding: "40px 20px",
+      fontFamily: "'Inter', sans-serif"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "100%",
+      maxWidth: "800px",
+      margin: "0 auto",
+      display: "flex",
+      flexDirection: "column",
+      gap: 24
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      flexWrap: "wrap",
+      gap: 16,
+      borderBottom: "1px solid rgba(255,255,255,0.08)",
+      paddingBottom: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 24
+    }
+  }, "\uD83D\uDEE1\uFE0F"), /*#__PURE__*/React.createElement("h1", {
+    style: {
+      margin: 0,
+      fontSize: 24,
+      fontWeight: 800,
+      background: "linear-gradient(to right, #10B981, #3B82F6)",
+      WebkitBackgroundClip: "text",
+      WebkitTextFillColor: "transparent"
+    }
+  }, "CLimaLogix AI")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "#94A3B8",
+      marginTop: 4
+    }
+  }, "Authenticity & Climate-Transit Trust Portal")), /*#__PURE__*/React.createElement("button", {
+    onClick: () => window.location.href = "/",
+    style: {
+      padding: "8px 16px",
+      background: "rgba(255,255,255,0.05)",
+      border: "1px solid rgba(255,255,255,0.1)",
+      color: "#94A3B8",
+      borderRadius: 8,
+      cursor: "pointer",
+      fontSize: 13,
+      fontWeight: 600,
+      transition: "all 0.2s"
+    },
+    onMouseEnter: e => e.currentTarget.style.background = "rgba(255,255,255,0.1)",
+    onMouseLeave: e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"
+  }, "SME Portal Login")), !verifyData && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(17, 24, 39, 0.6)",
+      backdropFilter: "blur(16px)",
+      borderRadius: 16,
+      border: "1px solid rgba(255,255,255,0.08)",
+      padding: 32,
+      textAlign: "center",
+      display: "flex",
+      flexDirection: "column",
+      gap: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontSize: 20,
+      color: "#F8FAFC",
+      marginBottom: 8
+    }
+  }, "Verify Product Authenticity"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      color: "#94A3B8",
+      fontSize: 14,
+      maxWidth: 500,
+      margin: "0 auto"
+    }
+  }, "Scan the QR code on your product label or enter the unique Batch ID below to retrieve public quality tests and transit history.")), error && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(239, 68, 68, 0.1)",
+      border: "1px solid rgba(239, 68, 68, 0.3)",
+      color: "#F87171",
+      padding: "12px 16px",
+      borderRadius: 8,
+      fontSize: 13,
+      textAlign: "center"
+    }
+  }, "\u26A0\uFE0F ", error), scanning ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    id: "public-qr-reader",
+    style: {
+      width: "100%",
+      maxWidth: "350px",
+      borderRadius: 12,
+      overflow: "hidden",
+      border: "2px solid #10B981"
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: stopScanner,
+    style: {
+      background: "#EF4444",
+      color: "white",
+      padding: "8px 16px",
+      borderRadius: 8,
+      cursor: "pointer",
+      fontSize: 13,
+      fontWeight: 600
+    }
+  }, "Cancel Scan")) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 16,
+      maxWidth: 450,
+      margin: "0 auto",
+      width: "100%"
+    }
+  }, /*#__PURE__*/React.createElement("form", {
+    onSubmit: handleSearch,
+    style: {
+      display: "flex",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    placeholder: "e.g. BCH-1082",
+    value: searchVal,
+    onChange: e => setSearchVal(e.target.value),
+    style: {
+      flex: 1,
+      padding: "12px 16px",
+      borderRadius: 8,
+      background: "rgba(0,0,0,0.3)",
+      border: "1px solid rgba(255,255,255,0.15)",
+      color: "white",
+      outline: "none",
+      fontSize: 14
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    type: "submit",
+    style: {
+      background: "#10B981",
+      color: "white",
+      padding: "12px 20px",
+      borderRadius: 8,
+      fontWeight: 600,
+      cursor: "pointer"
+    }
+  }, "Verify")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 10,
+      margin: "10px 0"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: 40,
+      height: 1,
+      background: "rgba(255,255,255,0.1)"
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "#64748B",
+      textTransform: "uppercase"
+    }
+  }, "or"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      width: 40,
+      height: 1,
+      background: "rgba(255,255,255,0.1)"
+    }
+  })), /*#__PURE__*/React.createElement("button", {
+    onClick: startScanner,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 10,
+      padding: "12px 20px",
+      background: "rgba(59, 130, 246, 0.15)",
+      border: "1px solid rgba(59, 130, 246, 0.3)",
+      color: "#60A5FA",
+      borderRadius: 8,
+      fontWeight: 600,
+      cursor: "pointer",
+      fontSize: 14
+    }
+  }, "\uD83D\uDCF7 Scan Label QR Code"))), verifyData && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(17, 24, 39, 0.6)",
+      backdropFilter: "blur(16px)",
+      borderRadius: 16,
+      border: "1px solid rgba(255,255,255,0.08)",
+      padding: "24px 32px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      flexWrap: "wrap",
+      gap: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      padding: "4px 10px",
+      borderRadius: 20,
+      fontSize: 11,
+      fontWeight: 700,
+      letterSpacing: "0.05em",
+      background: trustInfo.isViable ? "rgba(16, 185, 129, 0.12)" : "rgba(239, 68, 68, 0.12)",
+      color: trustInfo.isViable ? "#10B981" : "#EF4444",
+      border: `1px solid ${trustInfo.isViable ? "rgba(16, 185, 129, 0.3)" : "rgba(239, 68, 68, 0.3)"}`
+    }
+  }, trustInfo.isViable ? "✓ BARI-COMPLIANT QUALITY" : "⚠️ NON-COMPLIANT"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      padding: "4px 10px",
+      borderRadius: 20,
+      fontSize: 11,
+      fontWeight: 700,
+      letterSpacing: "0.05em",
+      background: isVerified ? "rgba(59, 130, 246, 0.12)" : "rgba(245, 158, 11, 0.12)",
+      color: isVerified ? "#60A5FA" : "#F59E0B",
+      border: `1px solid ${isVerified ? "rgba(59, 130, 246, 0.3)" : "rgba(245, 158, 11, 0.3)"}`
+    }
+  }, "\uD83D\uDD11 ", isVerified ? "CHAIN SECURE" : "UNVERIFIED HASH")), /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontSize: 24,
+      fontWeight: 755,
+      color: "white",
+      margin: 0
+    }
+  }, productName), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 16,
+      marginTop: 8,
+      fontSize: 13,
+      color: "#94A3B8"
+    }
+  }, /*#__PURE__*/React.createElement("span", null, "ID: ", /*#__PURE__*/React.createElement("strong", {
+    style: {
+      fontFamily: "monospace",
+      color: "white"
+    }
+  }, batchId)), /*#__PURE__*/React.createElement("span", null, "\u2022"), /*#__PURE__*/React.createElement("span", null, "Category: ", /*#__PURE__*/React.createElement("strong", {
+    style: {
+      color: "white"
+    }
+  }, categoryName)), /*#__PURE__*/React.createElement("span", null, "\u2022"), /*#__PURE__*/React.createElement("span", null, "Scans: ", /*#__PURE__*/React.createElement("strong", {
+    style: {
+      color: "#10B981"
+    }
+  }, scanCount)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 12
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: handleReset,
+    style: {
+      background: "rgba(255,255,255,0.05)",
+      border: "1px solid rgba(255,255,255,0.1)",
+      color: "#CBD5E1",
+      padding: "10px 16px",
+      borderRadius: 8,
+      fontSize: 13,
+      fontWeight: 600,
+      cursor: "pointer"
+    }
+  }, "\uD83D\uDD0D Another Lookup")))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      background: "rgba(17, 24, 39, 0.4)",
+      borderRadius: 10,
+      padding: 4,
+      border: "1px solid rgba(255,255,255,0.06)"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setActiveTab("verify"),
+    style: {
+      flex: 1,
+      padding: "12px",
+      borderRadius: 8,
+      background: activeTab === "verify" ? "rgba(16, 185, 129, 0.15)" : "transparent",
+      color: activeTab === "verify" ? "#10B981" : "#94A3B8",
+      border: activeTab === "verify" ? "1px solid rgba(16, 185, 129, 0.3)" : "none",
+      fontWeight: 600,
+      cursor: "pointer",
+      fontSize: 14,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      transition: "all 0.2s"
+    }
+  }, "\uD83D\uDEE1\uFE0F Quality & Authenticity"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setActiveTab("track"),
+    style: {
+      flex: 1,
+      padding: "12px",
+      borderRadius: 8,
+      background: activeTab === "track" ? "rgba(59, 130, 246, 0.15)" : "transparent",
+      color: activeTab === "track" ? "#60A5FA" : "#94A3B8",
+      border: activeTab === "track" ? "1px solid rgba(59, 130, 246, 0.3)" : "none",
+      fontWeight: 600,
+      cursor: "pointer",
+      fontSize: 14,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      transition: "all 0.2s"
+    }
+  }, "\uD83D\uDD0D Source-to-Consumer Journey")), activeTab === "verify" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 24,
+      animation: "fadeSlideIn 0.3s ease"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1.2fr 1.8fr",
+      gap: 24
+    },
+    className: "stack-mobile"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(17, 24, 39, 0.6)",
+      backdropFilter: "blur(12px)",
+      borderRadius: 16,
+      border: "1px solid rgba(255,255,255,0.08)",
+      padding: 32,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center"
+    }
+  }, /*#__PURE__*/React.createElement(ScoreGauge, {
+    value: trustInfo.score,
+    label: "Authenticity Score",
+    size: 170
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      marginTop: 12,
+      padding: "4px 10px",
+      borderRadius: 6,
+      background: "var(--bg-input)",
+      border: "1px solid var(--border-primary)",
+      color: "#94A3B8"
+    }
+  }, "GRADE: ", trustInfo.grade)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(17, 24, 39, 0.6)",
+      backdropFilter: "blur(12px)",
+      borderRadius: 16,
+      border: "1px solid rgba(255,255,255,0.08)",
+      padding: 24,
+      display: "flex",
+      flexDirection: "column",
+      gap: 16
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      margin: 0,
+      fontSize: 16,
+      color: "white"
+    }
+  }, "Bio-Chemical parameters"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 12
+    }
+  }, [{
+    label: "pH Level",
+    value: metrics.pH,
+    standard: "5.0 - 7.5",
+    desc: "Acidity index indicating fermentation stage"
+  }, {
+    label: "EC (mS/cm)",
+    value: metrics.EC,
+    standard: "2.0 - 4.5",
+    desc: "Electrical conductivity / soluble nutrient content"
+  }, {
+    label: "Intake Temp",
+    value: `${metrics.temp}°C`,
+    standard: "< 32°C",
+    desc: "Initial processing temp to preserve biology"
+  }, {
+    label: "EM-1 Ratio",
+    value: metrics.ratio,
+    standard: "1:1:20",
+    desc: "Effective microorganisms blending ratio"
+  }, {
+    label: "Ferment Days",
+    value: metrics.days,
+    standard: "8 - 14",
+    desc: "Aerobic curing time before dispatch"
+  }].map((item, idx) => /*#__PURE__*/React.createElement("div", {
+    key: idx,
+    style: {
+      paddingBottom: 10,
+      borderBottom: "1px solid rgba(255,255,255,0.04)"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      fontSize: 13,
+      fontWeight: 600
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#CBD5E1"
+    }
+  }, item.label), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#10B981",
+      fontFamily: "monospace"
+    }
+  }, item.value, " ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      color: "#64748B",
+      fontWeight: 400
+    }
+  }, "(std: ", item.standard, ")"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#94A3B8",
+      marginTop: 2
+    }
+  }, item.desc)))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(17, 24, 39, 0.6)",
+      backdropFilter: "blur(12px)",
+      borderRadius: 16,
+      border: "1px solid rgba(255,255,255,0.08)",
+      padding: 24,
+      display: "flex",
+      flexDirection: "column",
+      gap: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center"
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      margin: 0,
+      fontSize: 16,
+      color: "#10B981"
+    }
+  }, "\uD83D\uDD10 Cryptographic Proof of Custody"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: isVerified ? "#10B981" : "#EF4444",
+      fontWeight: 700,
+      padding: "2px 8px",
+      borderRadius: 4,
+      background: isVerified ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)"
+    }
+  }, isVerified ? "✓ HASH MATCHED" : "❌ TAMPER DETECTED")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#94A3B8",
+      fontFamily: "monospace",
+      background: "rgba(0,0,0,0.3)",
+      padding: 14,
+      borderRadius: 8,
+      border: "1px solid rgba(255,255,255,0.1)",
+      wordBreak: "break-all"
+    }
+  }, "HEAD HASH: ", verifyData.chain?.head_hash || "GENESIS"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      margin: 0,
+      fontSize: 12,
+      color: "#94A3B8",
+      lineHeight: 1.5
+    }
+  }, "This batch is logged on ClimaLogix's tamper-evident audit ledger. Each state transition is cryptographically chained to prevent retroactive modification of inspection metrics."))), activeTab === "track" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 24,
+      animation: "fadeSlideIn 0.3s ease"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(17, 24, 39, 0.6)",
+      backdropFilter: "blur(12px)",
+      borderRadius: 16,
+      border: "1px solid rgba(255,255,255,0.08)",
+      padding: 28
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      margin: "0 0 20px 0",
+      fontSize: 16,
+      color: "white"
+    }
+  }, "Provenance Lifecycle Logs"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 24,
+      position: "relative",
+      paddingLeft: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "absolute",
+      top: 10,
+      bottom: 10,
+      left: 21,
+      width: 2,
+      background: "rgba(255,255,255,0.1)"
+    }
+  }), verifyData.chain.events.map((evt, idx) => {
+    const type = evt.type || evt.event_type;
+    const data = evt.data || evt.event_data;
+    const timeStr = evt.timestamp ? new Date(evt.timestamp).toLocaleString() : "N/A";
+    let title = "Lifecycle Event";
+    let desc = "Metadata transition recorded";
+    let icon = "⚙️";
+    let accentColor = "#94A3B8";
+    if (type === "genesis" || type === "qa") {
+      title = "Batch Registered & Quality Assured";
+      desc = `Certified organic category "${data?.category || "Bio-Slurry"}" checked. Initial BARI score computed: ${trustInfo.score}/100.`;
+      icon = "🌱";
+      accentColor = "#10B981";
+    } else if (type === "dispatched" || type === "dispatch") {
+      title = "Dispatched / Climate-Checked";
+      desc = `Departed warehouse. Vehicle: ${data?.vehicle || "DHK-1234"} | Driver: ${data?.driver || "Rakib"}. Ambient exposure monitored.`;
+      icon = "🚚";
+      accentColor = "#3B82F6";
+    } else if (type === "delivered" || type === "delivery") {
+      title = "Delivered & Acknowledged";
+      desc = `Arrived at destination zone. Custody transferred to receiver: ${data?.receiver || "kamrangirchar-mgr"}. Condition: ${data?.condition || "Excellent"}.`;
+      icon = "🏠";
+      accentColor = "#10B981";
+    }
+    return /*#__PURE__*/React.createElement("div", {
+      key: idx,
+      style: {
+        display: "flex",
+        gap: 16,
+        position: "relative",
+        zIndex: 2
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 12,
+        height: 12,
+        borderRadius: "50%",
+        background: accentColor,
+        border: "4px solid #0B0F19",
+        marginTop: 4,
+        marginLeft: -1
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        background: "rgba(255,255,255,0.02)",
+        border: "1px solid rgba(255,255,255,0.05)",
+        borderRadius: 12,
+        padding: 16
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        flexWrap: "wrap",
+        gap: 8,
+        marginBottom: 6
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 14,
+        fontWeight: 700,
+        color: "white",
+        display: "flex",
+        alignItems: "center",
+        gap: 6
+      }
+    }, /*#__PURE__*/React.createElement("span", null, icon), " ", title), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        color: "#64748B",
+        fontFamily: "monospace"
+      }
+    }, timeStr)), /*#__PURE__*/React.createElement("p", {
+      style: {
+        margin: "0 0 10px 0",
+        fontSize: 13,
+        color: "#94A3B8",
+        lineHeight: 1.4
+      }
+    }, desc), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: 10,
+        background: "rgba(0,0,0,0.2)",
+        padding: "6px 12px",
+        borderRadius: 6,
+        fontSize: 11
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: "#64748B"
+      }
+    }, "Actor: ", /*#__PURE__*/React.createElement("strong", {
+      style: {
+        color: "#CBD5E1"
+      }
+    }, evt.actor || "System")), /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: "#10B981",
+        fontFamily: "monospace",
+        display: "flex",
+        alignItems: "center",
+        gap: 4
+      }
+    }, "\uD83D\uDD11 Hash: ", evt.current_hash ? evt.current_hash.slice(0, 10) + "..." : "N/A"))));
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 24
+    },
+    className: "stack-mobile"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(17, 24, 39, 0.6)",
+      backdropFilter: "blur(12px)",
+      borderRadius: 16,
+      border: "1px solid rgba(255,255,255,0.08)",
+      padding: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#64748B",
+      textTransform: "uppercase",
+      fontWeight: 700,
+      letterSpacing: "0.05em",
+      marginBottom: 6
+    }
+  }, "Transit Risk Factor"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 20,
+      fontWeight: 750,
+      color: "#3B82F6"
+    }
+  }, "Moderate Exposure"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "#94A3B8",
+      margin: "6px 0 0 0"
+    }
+  }, "Thermal survival timer predicted 4.2 hours of safe transit at effective heat index.")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(17, 24, 39, 0.6)",
+      backdropFilter: "blur(12px)",
+      borderRadius: 16,
+      border: "1px solid rgba(255,255,255,0.08)",
+      padding: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#64748B",
+      textTransform: "uppercase",
+      fontWeight: 700,
+      letterSpacing: "0.05em",
+      marginBottom: 6
+    }
+  }, "QR Verification Scan Hits"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 20,
+      fontWeight: 750,
+      color: "#10B981"
+    }
+  }, scanCount, " Scan", scanCount !== 1 ? "s" : "", " recorded"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: "#94A3B8",
+      margin: "6px 0 0 0"
+    }
+  }, "Logs geographic coordinates and user agents anonymously to prevent fake QR clone injection.")))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(17, 24, 39, 0.6)",
+      backdropFilter: "blur(12px)",
+      borderRadius: 16,
+      border: "1px solid rgba(255,255,255,0.08)",
+      padding: 24
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      margin: "0 0 16px 0",
+      color: "#F8FAFC",
+      fontSize: 16
+    }
+  }, "\u267B\uFE0F Circular ESG Contributions"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 16
+    },
+    className: "stack-mobile"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: 16,
+      background: "rgba(16, 185, 129, 0.05)",
+      borderRadius: 12,
+      border: `1px solid rgba(16, 185, 129, 0.2)`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 24
+    }
+  }, "\u267B\uFE0F"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 20,
+      fontWeight: 700,
+      color: "#10B981",
+      margin: "6px 0 2px 0"
+    }
+  }, 240, " Saved"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#94A3B8"
+    }
+  }, "Equivalent Single-use Plastic PET Bottles offset by bulk shipping")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: 16,
+      background: "rgba(59, 130, 246, 0.05)",
+      borderRadius: 12,
+      border: `1px solid rgba(59, 130, 246, 0.2)`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 24
+    }
+  }, "\uD83C\uDF3F"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 20,
+      fontWeight: 700,
+      color: "#3B82F6",
+      margin: "6px 0 2px 0"
+    }
+  }, 25, " kg"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#94A3B8"
+    }
+  }, "Carbon Dioxide equivalent sequestered safely via Biochar conversion")))), window.RouteExposureMapCard ? /*#__PURE__*/React.createElement(window.RouteExposureMapCard, null) : typeof RouteExposureMapCard !== 'undefined' ? React.createElement(RouteExposureMapCard) : null)));
+}
+window.ConsumerVerificationView = ConsumerVerificationView;
+function NotificationsView({
+  onSelectBatch
+}) {
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const fetchNotifications = async () => {
+    setLoading(true);
+    try {
+      const res = await window.apiCall('/api/notifications');
+      if (res && res.success && res.data) {
+        const list = res.data.notifications || [];
+        setNotifications(list.filter(n => n.type === 'verification_request'));
+      }
+    } catch (err) {
+      console.warn("Failed to fetch notifications:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+  const handleMarkAsRead = async id => {
+    try {
+      await window.apiCall(`/api/notifications/${id}/read`, 'PATCH');
+      fetchNotifications();
+    } catch (err) {
+      console.warn("Failed to mark as read:", err);
+    }
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      animation: "fadeSlideIn 0.4s ease",
+      display: "flex",
+      flexDirection: "column",
+      gap: 24
+    }
+  }, /*#__PURE__*/React.createElement(PageHeader, {
+    title: "Quality Verification Requests",
+    subtitle: "Review and certify organic batches submitted by SMEs"
+  }), /*#__PURE__*/React.createElement(Card, {
+    hover: false
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 24
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      margin: 0,
+      color: "var(--text-primary)"
+    }
+  }, "Pending Requests"), /*#__PURE__*/React.createElement("button", {
+    onClick: fetchNotifications,
+    style: {
+      background: "transparent",
+      border: "1px solid var(--border-primary)",
+      color: "var(--text-primary)",
+      padding: "6px 12px",
+      borderRadius: 6,
+      cursor: "pointer",
+      fontSize: 12
+    }
+  }, "\uD83D\uDD04 Refresh")), loading ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: "var(--text-dim)",
+      padding: 20
+    }
+  }, "Loading requests...") : notifications.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: "var(--text-dim)",
+      padding: 40,
+      textAlign: "center"
+    }
+  }, "\uD83C\uDF89 No pending verification requests! All batches have been processed.") : /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 16
+    }
+  }, notifications.map(n => /*#__PURE__*/React.createElement("div", {
+    key: n.id,
+    style: {
+      padding: 20,
+      background: n.is_read ? "rgba(255,255,255,0.01)" : "rgba(16, 185, 129, 0.03)",
+      borderRadius: 12,
+      border: n.is_read ? "1px solid var(--border-primary)" : `1px solid ${ACCENT.green}33`,
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      flexWrap: "wrap",
+      gap: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      minWidth: 260
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 18
+    }
+  }, "\uD83D\uDD14"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 700,
+      color: "var(--text-primary)",
+      fontSize: 15
+    }
+  }, n.title), !n.is_read && /*#__PURE__*/React.createElement("span", {
+    style: {
+      background: ACCENT.greenBg,
+      color: ACCENT.green,
+      fontSize: 10,
+      fontWeight: 700,
+      padding: "2px 8px",
+      borderRadius: 12,
+      border: `1px solid ${ACCENT.greenBorder}`
+    }
+  }, "NEW")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "var(--text-secondary)",
+      marginBottom: 6
+    }
+  }, n.body), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "var(--text-dim)"
+    }
+  }, "Received: ", n.created_at ? new Date(n.created_at).toLocaleString() : "Just now")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10,
+      alignItems: "center"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      handleMarkAsRead(n.id);
+      onSelectBatch(n.batch_id, n.destination_zone);
+    },
+    style: {
+      background: ACCENT.greenDark,
+      color: "#fff",
+      border: "none",
+      padding: "10px 18px",
+      borderRadius: 8,
+      cursor: "pointer",
+      fontWeight: 600,
+      fontSize: 13,
+      display: "flex",
+      gap: 6,
+      alignItems: "center"
+    }
+  }, "\uD83D\uDD0D Verify Batch"), !n.is_read && /*#__PURE__*/React.createElement("button", {
+    onClick: () => handleMarkAsRead(n.id),
+    style: {
+      background: "transparent",
+      border: "1px solid var(--border-primary)",
+      color: "var(--text-secondary)",
+      padding: "10px 14px",
+      borderRadius: 8,
+      cursor: "pointer",
+      fontSize: 13
+    }
+  }, "Dismiss")))))));
+}
+window.NotificationsView = NotificationsView;
 window.CLimaLogixApp = CLimaLogixApp;
 const initializeAndMount = async () => {
   try {

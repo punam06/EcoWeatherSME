@@ -14,16 +14,16 @@
 
 ## Phase 3: SME Tracking & Verification Pages
 - [x] **Build the Tracking Infrastructure (Issue 10):** **Completed.** A `Delivery Tracking` view exists in `SMEOwnerDashboard.jsx` with origin/destination tracking.
-- [ ] **Batch Verification & QR Page (Issue 12):** **Incomplete.**
+- [x] **Batch Verification & QR Page (Issue 12):** **Completed.**
   - *How to complete:* Create a new component for the `/batch-verification-qr` route. Add a static QR code image asset and a simple table with placeholder batch details (Batch ID, Product, Status).
 
 ## Phase 4: Producer & Inspector Portals Fixes
 - [x] **Reconstruct Producer Portal Layout:** **Completed.** `ProducerDashboard.jsx` is implemented.
-- [ ] **Fix Frontend Form & DB Addition:** **Incomplete.**
+- [x] **Fix Frontend Form & DB Addition:** **Completed.**
   - *How to complete:* Locate the form submission `fetch` call. Ensure `headers: { 'Content-Type': 'application/json' }` is set and the `body: JSON.stringify(payload)` matches the Supabase schema exactly.
-- [ ] **Fix Batch Verification Governance:** **Incomplete.**
+- [x] **Fix Batch Verification Governance:** **Completed.**
   - *How to complete:* Move any QA forms (pH, thermal conductivity) out of `SMEOwnerDashboard.jsx` or `ProducerDashboard.jsx` and strictly place them inside `InspectorDashboard.jsx`.
-- [ ] **Isolate Top Green SME Widget:** **Incomplete.**
+- [x] **Isolate Top Green SME Widget:** **Completed.**
   - *How to complete:* Wrap the "Top Green SME" widget in `climalogix_dashboard.jsx` with a condition like `{userRole === 'sme_owner' && <TopGreenSMEWidget />}` so it only shows for SMEs.
 
 ## Phase 5: Critical UI & Map Fallbacks
