@@ -96,6 +96,9 @@ function AgentPanel({ setTab }) {
       console.log("[AgentPanel] Restoring existing session:", sessionStorage.getItem('climalogix_agent_panel_session_id'));
       return;
     }
+    const currentUserStr = localStorage.getItem('climaLogix_user');
+    const currentUser = currentUserStr ? JSON.parse(currentUserStr) : null;
+    const authToken = localStorage.getItem('climaLogix_token') || localStorage.getItem('climalogix_token');
     try {
       const response = await fetch(`${BACKEND_URL}/api/ai/chat/start`, {
         method: 'POST',
@@ -117,6 +120,7 @@ function AgentPanel({ setTab }) {
   // Close Session
   const endSession = async () => {
     if (!sessionId) return;
+    const authToken = localStorage.getItem('climaLogix_token') || localStorage.getItem('climalogix_token');
     try {
       await fetch(`${BACKEND_URL}/api/ai/chat/end`, {
         method: 'DELETE',
@@ -151,9 +155,13 @@ function AgentPanel({ setTab }) {
     if (endpoint === 'receipt' && window.APIClient?.confirmOrderReceipt) {
       return window.APIClient.confirmOrderReceipt(orderId, payload);
     }
+    const token = localStorage.getItem('climaLogix_token') || localStorage.getItem('climalogix_token');
     const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}/${endpoint}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
       body: JSON.stringify(payload),
     });
     const data = await res.json();
@@ -235,10 +243,9 @@ function AgentPanel({ setTab }) {
         effectiveLang = langData.language;
         if (window.EcoLang) window.EcoLang.setLanguage(effectiveLang);
       }
-    } catch (e) {
-      console.warn('Language detection failed:', e);
-    }
-
+    const currentUserStr = localStorage.getItem('climaLogix_user');
+    const currentUser = currentUserStr ? JSON.parse(currentUserStr) : null;
+    const authToken = localStorage.getItem('climaLogix_token') || localStorage.getItem('climalogix_token');
     try {
       const response = await fetch(`${BACKEND_URL}/api/agent/message`, {
         method: 'POST',

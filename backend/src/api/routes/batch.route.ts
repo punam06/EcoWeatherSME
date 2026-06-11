@@ -113,7 +113,7 @@ router.get('/:id', authenticateJWT, async (req: Request, res: Response) => {
 });
 
 // POST /api/batches
-router.post('/', authenticateJWT, requireRoles('sme', 'sme_owner', 'buyer'), async (req: Request, res: Response) => {
+router.post('/', authenticateJWT, requireRoles('processor', 'producer', 'sme', 'sme_owner', 'buyer'), async (req: Request, res: Response) => {
   try {
     const parsed = CreateBatchSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -126,9 +126,11 @@ router.post('/', authenticateJWT, requireRoles('sme', 'sme_owner', 'buyer'), asy
       weight_kg, 
       packaging_type, 
       destination_zone, 
-      processor_id,
       batch_number
     } = parsed.data;
+
+    const user = (req as any).user;
+    const userId = user?.id || 'demo-processor-id';
 
     const displayBatchId = batch_number || `BCH-${Date.now().toString().slice(-6)}`;
     const weightNum = weight_kg ?? 100;
@@ -143,7 +145,7 @@ router.post('/', authenticateJWT, requireRoles('sme', 'sme_owner', 'buyer'), asy
       destination_zone: destination_zone || 'Old Dhaka',
       status: 'pending' as const,
       trust_score: 0,
-      processor_id: processor_id || 'demo-processor-id'
+      processor_id: userId
     };
 
     if (isSupabaseConfigured()) {
@@ -156,7 +158,8 @@ router.post('/', authenticateJWT, requireRoles('sme', 'sme_owner', 'buyer'), asy
             product_name: batchData.product_name,
             feedstock_type: batchData.feedstock_type,
             trust_score: batchData.trust_score,
-            processor_id: processor_id || undefined,
+            processor_id: userId,
+            producer_id: userId, // Set both for schema/provenance compatibility
             weight_kg: batchData.weight_kg,
             packaging_type: batchData.packaging_type,
             destination_zone: batchData.destination_zone,
@@ -172,8 +175,12 @@ router.post('/', authenticateJWT, requireRoles('sme', 'sme_owner', 'buyer'), asy
           return;
         }
         console.warn('Supabase batch creation failed, using fallback:', error);
-      } catch (err) {
+        res.status(400).json({ success: false, error: error?.message || 'Supabase insertion failed' });
+        return;
+      } catch (err: any) {
         console.warn('Supabase batch creation threw, using fallback:', err);
+        res.status(500).json({ success: false, error: err?.message || 'Internal Supabase database error' });
+        return;
       }
     }
 
