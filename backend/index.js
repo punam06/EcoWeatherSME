@@ -9,6 +9,18 @@ try { dns.setDefaultResultOrder('ipv4first'); } catch (e) { /* node < 18.6 */ }
 const dotenv = require('dotenv');
 dotenv.config();
 dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
+
+// Last-resort JWT secret fallback. If neither JWT_ACCESS_SECRET nor
+// JWT_SECRET is configured anywhere (Render env, backend/.env, root .env),
+// generate an ephemeral secret so the server still boots. Login tokens
+// signed with this secret will be invalidated on the next restart, but
+// the rest of the app keeps working. Logs a loud warning on boot.
+if (!process.env.JWT_SECRET) {
+  process.env.JWT_SECRET = require('crypto').randomBytes(64).toString('hex');
+  // eslint-disable-next-line no-console
+  console.warn('[auth] JWT_SECRET not configured — generated an ephemeral secret. ' +
+    'Set JWT_SECRET in Render dashboard or backend/.env for stable tokens.');
+}
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
