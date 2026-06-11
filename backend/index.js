@@ -1,4 +1,10 @@
 const path = require('path');
+// CRITICAL: Force IPv4-first DNS resolution BEFORE any network code runs.
+// Render free instances lack reliable IPv6 outbound — without this, Node
+// can pick Supabase's IPv6 pooler address and the request dies with
+// `connect ENETUNREACH <IPv6>:5432`. Must be the first statement.
+const dns = require('dns');
+try { dns.setDefaultResultOrder('ipv4first'); } catch (e) { /* node < 18.6 */ }
 // Always load .env — Render dashboard vars override these automatically
 const dotenv = require('dotenv');
 dotenv.config();

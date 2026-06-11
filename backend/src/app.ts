@@ -9,6 +9,13 @@
  * ═══════════════════════════════════════════════════════════════
  */
 
+// CRITICAL: Force IPv4-first DNS resolution BEFORE any network code runs.
+// Render free instances lack reliable IPv6 outbound — without this, Node
+// can pick Supabase's IPv6 pooler address and the request dies with
+// `connect ENETUNREACH <IPv6>:5432`. Must be the first executable code.
+import dns from 'dns';
+try { dns.setDefaultResultOrder('ipv4first'); } catch (_e) { /* node < 18.6 */ }
+
 import path from 'path';
 import fetch from 'node-fetch';
 import { z } from 'zod';
