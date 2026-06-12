@@ -967,8 +967,14 @@ app.use((_req: Request, res: Response) => {
 
 startSessionPruningInterval();
 
-if (require.main === module || process.argv[1]?.endsWith('app.ts') || process.argv[1]?.endsWith('app.js')) {
-  app.listen(PORT, () => {
+// IMPORTANT: Always start the HTTP server on require.
+// The Render entry shim (backend/index.js) boots us via `require('./dist/app.js')`,
+// so `require.main === module` is false (index.js is the real entry). The
+// previous argv-based guard failed under that flow and the process exited
+// silently with no listener, causing "Application exited early" on Render.
+// Requiring this module is documented (see backend/index.js header) to be
+// equivalent to running `node dist/app.js` — both must bind $PORT.
+app.listen(PORT, () => {
     console.log('\n╔══════════════════════════════════════════════════════════╗');
     console.log('║       ClimaLogix AI — ClimateShield Backend v2.0          ║');
     console.log('╚══════════════════════════════════════════════════════════╝');
@@ -988,6 +994,5 @@ if (require.main === module || process.argv[1]?.endsWith('app.ts') || process.ar
     console.log(`🔑  Groq AI:               ${process.env.GROQ_API_KEY ? '✅ Key set' : '⚠️  GROQ_API_KEY missing'}`);
     console.log('\n');
   });
-}
 
 export default app;
