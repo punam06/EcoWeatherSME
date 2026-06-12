@@ -12967,6 +12967,10 @@ function CLimaLogixApp() {
   const [showAuthOverlay, setShowAuthOverlay] = useState(false);
   const [authOverlayMode, setAuthOverlayMode] = useState("login");
   const [loginWelcome, setLoginWelcome] = useState(null); // { name, role, label }
+  // activeTab is the single source of truth for the currently visible top-level
+  // section. We default to "dashboard" and let getDefaultTabForRole() re-target
+  // it once the user (and their role) finishes loading.
+  const [activeTab, setActiveTab] = useState("dashboard");
 
   // Returns the first (default) tab id for a given role
   const getDefaultTabForRole = role => {
@@ -12989,30 +12993,21 @@ function CLimaLogixApp() {
     return labels[role] || "Member";
   };
   useEffect(() => {
-    const hydrateFromLocalJwt = () => {
+    const hydrateTokenOnly = () => {
       // Custom JWT (backend /api/auth/login) — token in climaLogix_token,
-      // user object in climaLogix_user. Use these to survive a reload or a
-      // null-firing onAuthStateChange from Supabase.
+      // user object in climaLogix_user. We only surface the token globally
+      // (so api-integration.js can send it on /api/* calls) but we do NOT
+      // promote the cached user into currentUser. The user must complete a
+      // fresh sign-in through the AuthPanel overlay each session so the
+      // hero landing page → login → role-based dashboard flow is preserved.
       const storedToken = localStorage.getItem("climaLogix_token");
-      if (!storedToken) return false;
+      if (!storedToken) return;
       window.SUPABASE_SESSION_TOKEN = storedToken;
-      try {
-        const raw = localStorage.getItem("climaLogix_user");
-        if (raw) {
-          const cachedUser = JSON.parse(raw);
-          if (cachedUser && (cachedUser.id || cachedUser.email)) {
-            setCurrentUser(prev => prev || cachedUser);
-            return true;
-          }
-        }
-      } catch (e) {
-        // ignore JSON parse errors
-      }
-      return false;
     };
     if (!window.supabaseClient) {
-      // No Supabase client — fall back entirely to the local JWT cache.
-      hydrateFromLocalJwt();
+      // No Supabase client — keep the cached token around for API calls,
+      // but leave currentUser null so the hero landing page renders.
+      hydrateTokenOnly();
       setAuthLoading(false);
       return;
     }
@@ -13025,13 +13020,15 @@ function CLimaLogixApp() {
         setCurrentUser(session.user);
         window.SUPABASE_SESSION_TOKEN = session.access_token;
       } else {
-        // Fallback: hydrate from a custom JWT cached in localStorage.
-        hydrateFromLocalJwt();
+        // No active Supabase session — show the hero landing page. We
+        // intentionally do NOT auto-login from the cached custom JWT so
+        // users always see the landing → login → role-dashboard funnel.
+        hydrateTokenOnly();
       }
       setAuthLoading(false);
     }).catch(() => {
-      // If Supabase is unreachable but we still have a cached JWT, use it.
-      hydrateFromLocalJwt();
+      // If Supabase is unreachable, fall back to the same hero-page state.
+      hydrateTokenOnly();
       setAuthLoading(false);
     });
     const {
@@ -13043,18 +13040,12 @@ function CLimaLogixApp() {
         setCurrentUser(session.user);
         window.SUPABASE_SESSION_TOKEN = session.access_token;
       } else {
-        // Only null out currentUser if we have NO cached custom JWT.
-        // Otherwise the listener races with onAuthSuccess and bounces the
-        // user back to the hero landing page.
-        const storedToken = localStorage.getItem("climaLogix_token");
-        if (storedToken) {
-          window.SUPABASE_SESSION_TOKEN = storedToken;
-          hydrateFromLocalJwt();
-        } else {
-          setCurrentUser(null);
-          window.SUPABASE_SESSION_TOKEN = null;
-          setLoginWelcome(null);
-        }
+        // Session ended (sign-out or token expiry) — always drop back to
+        // the hero landing page. A 401-driven auth-expired event will
+        // additionally open the AuthPanel overlay so the user can re-auth.
+        setCurrentUser(null);
+        window.SUPABASE_SESSION_TOKEN = localStorage.getItem("climaLogix_token") || null;
+        setLoginWelcome(null);
       }
       setAuthLoading(false);
     });
@@ -13606,20 +13597,33 @@ function CLimaLogixApp() {
     d: "M21 12a9 9 0 11-6.219-8.56"
   })), /*#__PURE__*/React.createElement("span", null, "LOADING DASHBOARD..."));
   if (loading) return /*#__PURE__*/React.createElement(LoadingSpinner, null);
-  const MainDashboardLayout = () => /*#__PURE__*/React.createElement("div", {
-    style: {
-      ...themeVars,
-      background: "var(--bg-primary)",
-      minHeight: "100vh",
-      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-      color: "var(--text-primary)",
-      padding: 0,
-      transition: "background 0.5s cubic-bezier(0.4,0,0.2,1), color 0.4s ease"
-    }
-  }, /*#__PURE__*/React.createElement("link", {
-    href: "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap",
-    rel: "stylesheet"
-  }), /*#__PURE__*/React.createElement("style", null, `
+  const MainDashboardLayout = () => {
+    // Mobile-friendly nav drawer (slides in from the left on small screens).
+    const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+    // UI language toggle (en / bn). Synced with the global EcoLang manager
+    // if it is exposed on window — mirrors Producer/SMEOwner dashboards.
+    const [lang, setLang] = useState("en");
+    useEffect(() => {
+      if (window.EcoLang) {
+        setLang(window.EcoLang.getCurrentLanguage());
+        const unsubscribe = window.EcoLang.onLanguageChange(newLang => setLang(newLang));
+        return () => unsubscribe();
+      }
+    }, []);
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        ...themeVars,
+        background: "var(--bg-primary)",
+        minHeight: "100vh",
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        color: "var(--text-primary)",
+        padding: 0,
+        transition: "background 0.5s cubic-bezier(0.4,0,0.2,1), color 0.4s ease"
+      }
+    }, /*#__PURE__*/React.createElement("link", {
+      href: "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap",
+      rel: "stylesheet"
+    }), /*#__PURE__*/React.createElement("style", null, `
         @keyframes fadeSlideIn {
           from { opacity: 0; transform: translateY(8px); }
           to { opacity: 1; transform: translateY(0); }
@@ -13690,751 +13694,752 @@ function CLimaLogixApp() {
         }
         .welcome-toast-dismiss:hover { color: #EF4444; }
       `), loginWelcome && /*#__PURE__*/React.createElement("div", {
-    className: "welcome-toast"
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
-      flexShrink: 0,
-      background: "rgba(16,185,129,0.12)",
-      border: "1px solid rgba(16,185,129,0.25)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: 18
-    }
-  }, loginWelcome.role === "admin" || loginWelcome.role === "inspector" ? "🔍" : loginWelcome.role === "processor" || loginWelcome.role === "manufacturer" ? "📦" : "🌿"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1,
-      minWidth: 0
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontFamily: "Inter",
-      fontSize: 13,
-      fontWeight: 600,
-      color: "#10B981",
-      marginBottom: 3
-    }
-  }, "Welcome back, ", loginWelcome.name, "!"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontFamily: "Inter",
-      fontSize: 12,
-      color: "#9CA3AF",
-      lineHeight: 1.4
-    }
-  }, "Signed in as ", /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: "#F9FAFB",
-      fontWeight: 500
-    }
-  }, loginWelcome.label), ". Routed to your personalized dashboard.")), /*#__PURE__*/React.createElement("button", {
-    className: "welcome-toast-dismiss",
-    onClick: () => setLoginWelcome(null),
-    "aria-label": "Dismiss"
-  }, "\xD7")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: "fixed",
-      top: 0,
-      left: 0,
-      width: "100%",
-      height: "100%",
-      backgroundColor: "rgba(0, 0, 0, 0.55)",
-      backdropFilter: "blur(6px)",
-      WebkitBackdropFilter: "blur(6px)",
-      zIndex: 100,
-      opacity: isDrawerOpen ? 1 : 0,
-      pointerEvents: isDrawerOpen ? "all" : "none",
-      transition: "opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
-    },
-    onClick: () => setIsDrawerOpen(false)
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: "absolute",
-      top: 0,
-      left: 0,
-      width: 320,
-      height: "100%",
-      background: "var(--bg-header)",
-      borderRight: "1px solid var(--border-primary)",
-      boxShadow: "4px 0 24px rgba(0, 0, 0, 0.4)",
-      display: "flex",
-      flexDirection: "column",
-      transform: isDrawerOpen ? "translateX(0)" : "translateX(-100%)",
-      transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
-    },
-    onClick: e => e.stopPropagation()
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: "24px",
-      borderBottom: "1px solid var(--border-primary)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 10
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 20
-    }
-  }, "\uD83C\uDF31"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 700,
-      fontSize: 16,
-      color: "var(--text-primary)"
-    }
-  }, "Navigation Menu")), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setIsDrawerOpen(false),
-    style: {
-      background: "transparent",
-      border: "none",
-      color: "var(--text-secondary)",
-      fontSize: 20,
-      cursor: "pointer"
-    }
-  }, "\u2715")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1,
-      overflowY: "auto",
-      padding: "20px 16px",
-      display: "flex",
-      flexDirection: "column",
-      gap: 6
-    }
-  }, activeTabs.map(t => {
-    const layerMeta = LAYER_META[t.layer || "L0"] || LAYER_META.L0;
-    const isActive = activeTab === t.id;
-    return /*#__PURE__*/React.createElement("button", {
-      key: t.id,
-      onClick: () => {
-        setActiveTab(t.id);
+      className: "welcome-toast"
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        flexShrink: 0,
+        background: "rgba(16,185,129,0.12)",
+        border: "1px solid rgba(16,185,129,0.25)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 18
+      }
+    }, loginWelcome.role === "admin" || loginWelcome.role === "inspector" ? "🔍" : loginWelcome.role === "processor" || loginWelcome.role === "manufacturer" ? "📦" : "🌿"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        minWidth: 0
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontFamily: "Inter",
+        fontSize: 13,
+        fontWeight: 600,
+        color: "#10B981",
+        marginBottom: 3
+      }
+    }, "Welcome back, ", loginWelcome.name, "!"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontFamily: "Inter",
+        fontSize: 12,
+        color: "#9CA3AF",
+        lineHeight: 1.4
+      }
+    }, "Signed in as ", /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: "#F9FAFB",
+        fontWeight: 500
+      }
+    }, loginWelcome.label), ". Routed to your personalized dashboard.")), /*#__PURE__*/React.createElement("button", {
+      className: "welcome-toast-dismiss",
+      onClick: () => setLoginWelcome(null),
+      "aria-label": "Dismiss"
+    }, "\xD7")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: "100%",
+        height: "100%",
+        backgroundColor: "rgba(0, 0, 0, 0.55)",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
+        zIndex: 100,
+        opacity: isDrawerOpen ? 1 : 0,
+        pointerEvents: isDrawerOpen ? "all" : "none",
+        transition: "opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
+      },
+      onClick: () => setIsDrawerOpen(false)
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        width: 320,
+        height: "100%",
+        background: "var(--bg-header)",
+        borderRight: "1px solid var(--border-primary)",
+        boxShadow: "4px 0 24px rgba(0, 0, 0, 0.4)",
+        display: "flex",
+        flexDirection: "column",
+        transform: isDrawerOpen ? "translateX(0)" : "translateX(-100%)",
+        transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
+      },
+      onClick: e => e.stopPropagation()
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: "24px",
+        borderBottom: "1px solid var(--border-primary)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 20
+      }
+    }, "\uD83C\uDF31"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 700,
+        fontSize: 16,
+        color: "var(--text-primary)"
+      }
+    }, "Navigation Menu")), /*#__PURE__*/React.createElement("button", {
+      onClick: () => setIsDrawerOpen(false),
+      style: {
+        background: "transparent",
+        border: "none",
+        color: "var(--text-secondary)",
+        fontSize: 20,
+        cursor: "pointer"
+      }
+    }, "\u2715")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        overflowY: "auto",
+        padding: "20px 16px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 6
+      }
+    }, activeTabs.map(t => {
+      const layerMeta = LAYER_META[t.layer || "L0"] || LAYER_META.L0;
+      const isActive = activeTab === t.id;
+      return /*#__PURE__*/React.createElement("button", {
+        key: t.id,
+        onClick: () => {
+          setActiveTab(t.id);
+          setIsDrawerOpen(false);
+        },
+        title: `${layerMeta.name} layer`,
+        style: {
+          padding: "12px 16px",
+          border: "none",
+          background: isActive ? layerMeta.bg : "transparent",
+          color: isActive ? layerMeta.color : "var(--text-secondary)",
+          cursor: "pointer",
+          borderRadius: "8px",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          textAlign: "left",
+          fontWeight: isActive ? 600 : 400,
+          transition: "all 0.2s",
+          borderLeft: isActive ? `3px solid ${layerMeta.color}` : "3px solid transparent"
+        },
+        onMouseEnter: e => {
+          if (!isActive) e.currentTarget.style.background = "var(--bg-input)";
+        },
+        onMouseLeave: e => {
+          if (!isActive) e.currentTarget.style.background = "transparent";
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 16
+        }
+      }, t.icon), /*#__PURE__*/React.createElement("div", {
+        style: {
+          flex: 1,
+          fontSize: 13,
+          letterSpacing: "0.02em"
+        }
+      }, t.label), t.layer && t.layer !== "L0" && t.layer !== "LX" && /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 8,
+          padding: "2px 6px",
+          borderRadius: 4,
+          background: layerMeta.bg,
+          color: layerMeta.color,
+          border: `1px solid ${layerMeta.border}`,
+          letterSpacing: "0.08em",
+          fontWeight: 700
+        }
+      }, t.layer));
+    })), /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: "16px",
+        borderTop: "1px solid var(--border-primary)",
+        background: "rgba(0,0,0,0.1)"
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: async () => {
+        if (window.supabaseClient) {
+          await window.supabaseClient.auth.signOut();
+        } else {
+          setCurrentUser(null);
+          setLoginWelcome(null);
+        }
         setIsDrawerOpen(false);
       },
-      title: `${layerMeta.name} layer`,
       style: {
-        padding: "12px 16px",
+        width: "100%",
+        padding: "10px 16px",
         border: "none",
-        background: isActive ? layerMeta.bg : "transparent",
-        color: isActive ? layerMeta.color : "var(--text-secondary)",
-        cursor: "pointer",
+        background: "rgba(239, 68, 68, 0.1)",
+        color: "#EF4444",
         borderRadius: "8px",
+        cursor: "pointer",
         display: "flex",
         alignItems: "center",
         gap: 12,
-        textAlign: "left",
-        fontWeight: isActive ? 600 : 400,
-        transition: "all 0.2s",
-        borderLeft: isActive ? `3px solid ${layerMeta.color}` : "3px solid transparent"
+        fontSize: "13px",
+        fontWeight: 600,
+        transition: "all 0.2s"
       },
       onMouseEnter: e => {
-        if (!isActive) e.currentTarget.style.background = "var(--bg-input)";
+        e.currentTarget.style.background = "rgba(239, 68, 68, 0.2)";
       },
       onMouseLeave: e => {
-        if (!isActive) e.currentTarget.style.background = "transparent";
+        e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)";
       }
+    }, /*#__PURE__*/React.createElement("span", null, "\uD83D\uDEAA"), /*#__PURE__*/React.createElement("span", null, "Sign Out"))))), /*#__PURE__*/React.createElement("header", {
+      style: {
+        borderBottom: "1px solid var(--border-primary)",
+        padding: "14px 28px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        background: "var(--bg-header)",
+        backdropFilter: "var(--backdrop-blur)",
+        WebkitBackdropFilter: "var(--backdrop-blur)",
+        position: "sticky",
+        top: 0,
+        zIndex: 50,
+        backgroundImage: `linear-gradient(to right, ${ACCENT.green}08, transparent 50%)`
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 14
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setIsDrawerOpen(true),
+      style: {
+        background: "var(--bg-input)",
+        border: "1px solid var(--border-primary)",
+        color: "var(--text-primary)",
+        padding: "8px 12px",
+        borderRadius: "8px",
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        fontSize: 14,
+        fontWeight: 600,
+        marginRight: 8,
+        transition: "all 0.2s"
+      },
+      onMouseEnter: e => e.currentTarget.style.borderColor = ACCENT.green,
+      onMouseLeave: e => e.currentTarget.style.borderColor = "var(--border-primary)"
     }, /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 16
       }
-    }, t.icon), /*#__PURE__*/React.createElement("div", {
+    }, "\u2630"), " Menu"), /*#__PURE__*/React.createElement("div", {
       style: {
-        flex: 1,
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        background: `linear-gradient(135deg, ${ACCENT.greenLight}, ${ACCENT.greenDark})`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 18,
+        animation: "pulseGlow 3s ease-in-out infinite"
+      }
+    }, "\uD83C\uDF31"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 15,
+        fontWeight: 700,
+        color: "var(--text-primary)",
+        letterSpacing: "-0.02em"
+      }
+    }, "CLimaLogix AI"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9,
+        color: "var(--text-dim)",
+        letterSpacing: "0.14em",
+        fontWeight: 500
+      }
+    }, "CLIMATESHIELD \xB7 SME DASHBOARD")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginLeft: 24,
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
         fontSize: 13,
+        color: "var(--text-secondary)"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 18
+      }
+    }, "\u2B50"), /*#__PURE__*/React.createElement("select", {
+      value: selectedSme,
+      onChange: e => {
+        const val = e.target.value;
+        setSelectedSme(val);
+        if (val === "custom_sme") {
+          setTab("configurator");
+        } else {
+          setTab("dashboard");
+        }
+      },
+      style: {
+        background: "transparent",
+        color: "var(--text-primary)",
+        border: "none",
+        outline: "none",
+        cursor: "pointer",
+        fontSize: 14,
+        fontWeight: 500
+      }
+    }, /*#__PURE__*/React.createElement("option", {
+      value: "green_refineries"
+    }, "Green Refineries Ltd. (SME)"), /*#__PURE__*/React.createElement("option", {
+      value: "agro_eco"
+    }, "Agro Eco SME"), /*#__PURE__*/React.createElement("option", {
+      value: "custom_sme"
+    }, "\uD83D\uDEE0\uFE0F ", customSmeName || "Custom SME", " (Configurator)")))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 16
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+        padding: "8px 14px",
+        borderRadius: 10,
+        background: "var(--bg-input)",
+        border: "1px solid var(--border-primary)",
+        fontSize: 12,
+        color: "var(--text-secondary)",
         letterSpacing: "0.02em"
       }
-    }, t.label), t.layer && t.layer !== "L0" && t.layer !== "LX" && /*#__PURE__*/React.createElement("span", {
+    }, /*#__PURE__*/React.createElement("span", {
       style: {
-        fontSize: 8,
+        fontWeight: 700,
+        color: ACCENT.green
+      }
+    }, activeZone.toUpperCase(), " \xB7 ZONE SCORE"), /*#__PURE__*/React.createElement("span", {
+      title: `Base Weather: ${liveWeather?.temp ?? 38}°C · wind ${liveWeather?.windSpeed ?? 12} km/h · source: ${liveWeather?.source ?? "fallback"} · ${liveWeather?.label ?? "n/a"}`
+    }, "\uD83C\uDF21 ", /*#__PURE__*/React.createElement("strong", {
+      style: {
+        color: "var(--text-primary)",
+        fontFamily: "'JetBrains Mono', monospace"
+      }
+    }, liveWeather?.temp ?? 38, "\xB0C"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        marginLeft: 8,
+        fontSize: 12,
+        color: "var(--text-secondary)"
+      }
+    }, "Humidity: ", liveWeather?.humidity ?? 82, "% \xB7 Heat Index: ", liveWeather?.heatIndex ?? 44, "\xB0C \xB7 ", liveWeather?.description ?? "Partly Cloudy"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        marginLeft: 6,
+        opacity: 0.75,
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 11,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4
+      }
+    }, "\uD83D\uDCCD", /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "relative",
+        display: "inline-block"
+      }
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      placeholder: "Search Thana...",
+      value: thanaSearch,
+      onFocus: () => setSuggestionsOpen(true),
+      onBlur: () => setTimeout(() => setSuggestionsOpen(false), 250),
+      onChange: e => {
+        setThanaSearch(e.target.value);
+        setSuggestionsOpen(true);
+      },
+      onKeyDown: e => {
+        if (e.key === 'Enter') {
+          const matched = thanas.find(t => t.toLowerCase() === thanaSearch.toLowerCase());
+          if (matched) {
+            setActiveZone(matched);
+            setThanaSearch(matched);
+            setSuggestionsOpen(false);
+          }
+        }
+      },
+      style: {
+        background: "rgba(255, 255, 255, 0.05)",
+        border: "1px solid var(--border-primary)",
+        color: "var(--text-primary)",
+        fontWeight: 600,
+        outline: "none",
+        fontSize: 11,
         padding: "2px 6px",
         borderRadius: 4,
-        background: layerMeta.bg,
-        color: layerMeta.color,
-        border: `1px solid ${layerMeta.border}`,
+        marginLeft: 4,
+        width: "120px"
+      }
+    }), suggestionsOpen && /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "absolute",
+        top: "100%",
+        left: 4,
+        right: 0,
+        background: "var(--bg-card)",
+        border: "1px solid var(--border-primary)",
+        borderRadius: 4,
+        zIndex: 9999,
+        maxHeight: "150px",
+        overflowY: "auto",
+        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.5)"
+      }
+    }, thanas.filter(t => t.toLowerCase().includes(thanaSearch.toLowerCase())).map(t => /*#__PURE__*/React.createElement("div", {
+      key: t,
+      onMouseDown: () => {
+        setActiveZone(t);
+        setThanaSearch(t);
+        setSuggestionsOpen(false);
+      },
+      style: {
+        padding: "6px 8px",
+        cursor: "pointer",
+        fontSize: 11,
+        color: "var(--text-primary)",
+        borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+        textAlign: "left"
+      },
+      onMouseEnter: e => e.target.style.background = "rgba(16, 185, 129, 0.2)",
+      onMouseLeave: e => e.target.style.background = "transparent"
+    }, t)), thanas.filter(t => t.toLowerCase().includes(thanaSearch.toLowerCase())).length === 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: "6px 8px",
+        fontSize: 11,
+        color: "var(--text-dim)",
+        textAlign: "left"
+      }
+    }, "No match"))))), /*#__PURE__*/React.createElement("span", {
+      style: {
+        width: 1,
+        height: 12,
+        background: "var(--border-primary)"
+      }
+    }), /*#__PURE__*/React.createElement("span", null, "Gen. Trust: ", /*#__PURE__*/React.createElement("strong", {
+      style: {
+        color: "var(--text-primary)",
+        fontFamily: "'JetBrains Mono', monospace"
+      }
+    }, trustScore)), /*#__PURE__*/React.createElement("span", {
+      style: {
+        width: 1,
+        height: 12,
+        background: "var(--border-primary)"
+      }
+    }), /*#__PURE__*/React.createElement("span", null, "Gen. DVS: ", /*#__PURE__*/React.createElement("strong", {
+      style: {
+        color: genDvs >= 75 ? ACCENT.green : genDvs >= 55 ? ACCENT.amber : ACCENT.red,
+        fontFamily: "'JetBrains Mono', monospace"
+      }
+    }, genDvs)), /*#__PURE__*/React.createElement("span", {
+      style: {
+        padding: "2px 7px",
+        borderRadius: 999,
+        fontSize: 9,
+        fontWeight: 800,
         letterSpacing: "0.08em",
-        fontWeight: 700
+        background: liveWeather?.source === "live-device" || liveWeather?.source === "live-zone" ? "rgba(16,185,129,0.15)" : "rgba(245,158,11,0.15)",
+        color: liveWeather?.source === "live-device" || liveWeather?.source === "live-zone" ? ACCENT.green : ACCENT.amber,
+        border: `1px solid ${liveWeather?.source === "live-device" || liveWeather?.source === "live-zone" ? ACCENT.green : ACCENT.amber}`
       }
-    }, t.layer));
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: "16px",
-      borderTop: "1px solid var(--border-primary)",
-      background: "rgba(0,0,0,0.1)"
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: async () => {
-      if (window.supabaseClient) {
-        await window.supabaseClient.auth.signOut();
-      } else {
-        setCurrentUser(null);
-        setLoginWelcome(null);
+    }, liveWeather?.source === "live-device" ? "● LIVE · GPS" : liveWeather?.source === "live-zone" ? "● LIVE · ZONE" : liveWeather?.source === "fetching" ? "… SYNC" : "◌ EST")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 10
       }
-      setIsDrawerOpen(false);
-    },
-    style: {
-      width: "100%",
-      padding: "10px 16px",
-      border: "none",
-      background: "rgba(239, 68, 68, 0.1)",
-      color: "#EF4444",
-      borderRadius: "8px",
-      cursor: "pointer",
-      display: "flex",
-      alignItems: "center",
-      gap: 12,
-      fontSize: "13px",
-      fontWeight: 600,
-      transition: "all 0.2s"
-    },
-    onMouseEnter: e => {
-      e.currentTarget.style.background = "rgba(239, 68, 68, 0.2)";
-    },
-    onMouseLeave: e => {
-      e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)";
-    }
-  }, /*#__PURE__*/React.createElement("span", null, "\uD83D\uDEAA"), /*#__PURE__*/React.createElement("span", null, "Sign Out"))))), /*#__PURE__*/React.createElement("header", {
-    style: {
-      borderBottom: "1px solid var(--border-primary)",
-      padding: "14px 28px",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      background: "var(--bg-header)",
-      backdropFilter: "var(--backdrop-blur)",
-      WebkitBackdropFilter: "var(--backdrop-blur)",
-      position: "sticky",
-      top: 0,
-      zIndex: 50,
-      backgroundImage: `linear-gradient(to right, ${ACCENT.green}08, transparent 50%)`
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 14
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => setIsDrawerOpen(true),
-    style: {
-      background: "var(--bg-input)",
-      border: "1px solid var(--border-primary)",
-      color: "var(--text-primary)",
-      padding: "8px 12px",
-      borderRadius: "8px",
-      cursor: "pointer",
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      fontSize: 14,
-      fontWeight: 600,
-      marginRight: 8,
-      transition: "all 0.2s"
-    },
-    onMouseEnter: e => e.currentTarget.style.borderColor = ACCENT.green,
-    onMouseLeave: e => e.currentTarget.style.borderColor = "var(--border-primary)"
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 16
-    }
-  }, "\u2630"), " Menu"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
-      background: `linear-gradient(135deg, ${ACCENT.greenLight}, ${ACCENT.greenDark})`,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: 18,
-      animation: "pulseGlow 3s ease-in-out infinite"
-    }
-  }, "\uD83C\uDF31"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 15,
-      fontWeight: 700,
-      color: "var(--text-primary)",
-      letterSpacing: "-0.02em"
-    }
-  }, "CLimaLogix AI"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 9,
-      color: "var(--text-dim)",
-      letterSpacing: "0.14em",
-      fontWeight: 500
-    }
-  }, "CLIMATESHIELD \xB7 SME DASHBOARD")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginLeft: 24,
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      fontSize: 13,
-      color: "var(--text-secondary)"
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 18
-    }
-  }, "\u2B50"), /*#__PURE__*/React.createElement("select", {
-    value: selectedSme,
-    onChange: e => {
-      const val = e.target.value;
-      setSelectedSme(val);
-      if (val === "custom_sme") {
-        setTab("configurator");
-      } else {
-        setTab("dashboard");
+    }, /*#__PURE__*/React.createElement(ScoreGauge, {
+      value: trustScore,
+      label: "Trust",
+      size: 76
+    }), /*#__PURE__*/React.createElement(ScoreGauge, {
+      value: genDvs,
+      label: "Gen. DVS",
+      size: 76
+    })), /*#__PURE__*/React.createElement(ThemeToggle, {
+      theme: theme,
+      onToggle: () => setTheme(t => t === "dark" ? "light" : "dark")
+    }))), /*#__PURE__*/React.createElement("main", {
+      style: {
+        padding: "32px 48px",
+        width: "100%",
+        margin: "0 auto"
       }
-    },
-    style: {
-      background: "transparent",
-      color: "var(--text-primary)",
-      border: "none",
-      outline: "none",
-      cursor: "pointer",
-      fontSize: 14,
-      fontWeight: 500
-    }
-  }, /*#__PURE__*/React.createElement("option", {
-    value: "green_refineries"
-  }, "Green Refineries Ltd. (SME)"), /*#__PURE__*/React.createElement("option", {
-    value: "agro_eco"
-  }, "Agro Eco SME"), /*#__PURE__*/React.createElement("option", {
-    value: "custom_sme"
-  }, "\uD83D\uDEE0\uFE0F ", customSmeName || "Custom SME", " (Configurator)")))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 16
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 14,
-      padding: "8px 14px",
-      borderRadius: 10,
-      background: "var(--bg-input)",
-      border: "1px solid var(--border-primary)",
-      fontSize: 12,
-      color: "var(--text-secondary)",
-      letterSpacing: "0.02em"
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontWeight: 700,
-      color: ACCENT.green
-    }
-  }, activeZone.toUpperCase(), " \xB7 ZONE SCORE"), /*#__PURE__*/React.createElement("span", {
-    title: `Base Weather: ${liveWeather?.temp ?? 38}°C · wind ${liveWeather?.windSpeed ?? 12} km/h · source: ${liveWeather?.source ?? "fallback"} · ${liveWeather?.label ?? "n/a"}`
-  }, "\uD83C\uDF21 ", /*#__PURE__*/React.createElement("strong", {
-    style: {
-      color: "var(--text-primary)",
-      fontFamily: "'JetBrains Mono', monospace"
-    }
-  }, liveWeather?.temp ?? 38, "\xB0C"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      marginLeft: 8,
-      fontSize: 12,
-      color: "var(--text-secondary)"
-    }
-  }, "Humidity: ", liveWeather?.humidity ?? 82, "% \xB7 Heat Index: ", liveWeather?.heatIndex ?? 44, "\xB0C \xB7 ", liveWeather?.description ?? "Partly Cloudy"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      marginLeft: 6,
-      opacity: 0.75,
-      fontFamily: "'JetBrains Mono', monospace",
-      fontSize: 11,
-      display: "inline-flex",
-      alignItems: "center",
-      gap: 4
-    }
-  }, "\uD83D\uDCCD", /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: "relative",
-      display: "inline-block"
-    }
-  }, /*#__PURE__*/React.createElement("input", {
-    type: "text",
-    placeholder: "Search Thana...",
-    value: thanaSearch,
-    onFocus: () => setSuggestionsOpen(true),
-    onBlur: () => setTimeout(() => setSuggestionsOpen(false), 250),
-    onChange: e => {
-      setThanaSearch(e.target.value);
-      setSuggestionsOpen(true);
-    },
-    onKeyDown: e => {
-      if (e.key === 'Enter') {
-        const matched = thanas.find(t => t.toLowerCase() === thanaSearch.toLowerCase());
-        if (matched) {
-          setActiveZone(matched);
-          setThanaSearch(matched);
-          setSuggestionsOpen(false);
-        }
+    }, activeTab === "dashboard" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(DashboardView, {
+      onNewBatch: () => {
+        setTab("batches");
+        setIsRegisteringBatch(true);
       }
-    },
-    style: {
-      background: "rgba(255, 255, 255, 0.05)",
-      border: "1px solid var(--border-primary)",
-      color: "var(--text-primary)",
-      fontWeight: 600,
-      outline: "none",
-      fontSize: 11,
-      padding: "2px 6px",
-      borderRadius: 4,
-      marginLeft: 4,
-      width: "120px"
-    }
-  }), suggestionsOpen && /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: "absolute",
-      top: "100%",
-      left: 4,
-      right: 0,
-      background: "var(--bg-card)",
-      border: "1px solid var(--border-primary)",
-      borderRadius: 4,
-      zIndex: 9999,
-      maxHeight: "150px",
-      overflowY: "auto",
-      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.5)"
-    }
-  }, thanas.filter(t => t.toLowerCase().includes(thanaSearch.toLowerCase())).map(t => /*#__PURE__*/React.createElement("div", {
-    key: t,
-    onMouseDown: () => {
-      setActiveZone(t);
-      setThanaSearch(t);
-      setSuggestionsOpen(false);
-    },
-    style: {
-      padding: "6px 8px",
-      cursor: "pointer",
-      fontSize: 11,
-      color: "var(--text-primary)",
-      borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
-      textAlign: "left"
-    },
-    onMouseEnter: e => e.target.style.background = "rgba(16, 185, 129, 0.2)",
-    onMouseLeave: e => e.target.style.background = "transparent"
-  }, t)), thanas.filter(t => t.toLowerCase().includes(thanaSearch.toLowerCase())).length === 0 && /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: "6px 8px",
-      fontSize: 11,
-      color: "var(--text-dim)",
-      textAlign: "left"
-    }
-  }, "No match"))))), /*#__PURE__*/React.createElement("span", {
-    style: {
-      width: 1,
-      height: 12,
-      background: "var(--border-primary)"
-    }
-  }), /*#__PURE__*/React.createElement("span", null, "Gen. Trust: ", /*#__PURE__*/React.createElement("strong", {
-    style: {
-      color: "var(--text-primary)",
-      fontFamily: "'JetBrains Mono', monospace"
-    }
-  }, trustScore)), /*#__PURE__*/React.createElement("span", {
-    style: {
-      width: 1,
-      height: 12,
-      background: "var(--border-primary)"
-    }
-  }), /*#__PURE__*/React.createElement("span", null, "Gen. DVS: ", /*#__PURE__*/React.createElement("strong", {
-    style: {
-      color: genDvs >= 75 ? ACCENT.green : genDvs >= 55 ? ACCENT.amber : ACCENT.red,
-      fontFamily: "'JetBrains Mono', monospace"
-    }
-  }, genDvs)), /*#__PURE__*/React.createElement("span", {
-    style: {
-      padding: "2px 7px",
-      borderRadius: 999,
-      fontSize: 9,
-      fontWeight: 800,
-      letterSpacing: "0.08em",
-      background: liveWeather?.source === "live-device" || liveWeather?.source === "live-zone" ? "rgba(16,185,129,0.15)" : "rgba(245,158,11,0.15)",
-      color: liveWeather?.source === "live-device" || liveWeather?.source === "live-zone" ? ACCENT.green : ACCENT.amber,
-      border: `1px solid ${liveWeather?.source === "live-device" || liveWeather?.source === "live-zone" ? ACCENT.green : ACCENT.amber}`
-    }
-  }, liveWeather?.source === "live-device" ? "● LIVE · GPS" : liveWeather?.source === "live-zone" ? "● LIVE · ZONE" : liveWeather?.source === "fetching" ? "… SYNC" : "◌ EST")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 10
-    }
-  }, /*#__PURE__*/React.createElement(ScoreGauge, {
-    value: trustScore,
-    label: "Trust",
-    size: 76
-  }), /*#__PURE__*/React.createElement(ScoreGauge, {
-    value: genDvs,
-    label: "Gen. DVS",
-    size: 76
-  })), /*#__PURE__*/React.createElement(ThemeToggle, {
-    theme: theme,
-    onToggle: () => setTheme(t => t === "dark" ? "light" : "dark")
-  }))), /*#__PURE__*/React.createElement("main", {
-    style: {
-      padding: "32px 48px",
-      width: "100%",
-      margin: "0 auto"
-    }
-  }, activeTab === "dashboard" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(DashboardView, {
-    onNewBatch: () => {
-      setTab("batches");
-      setIsRegisteringBatch(true);
-    }
-  }), userRole === 'sme_owner' && /*#__PURE__*/React.createElement(TopGreenSMEWidget, null)), activeTab === "inventory" && /*#__PURE__*/React.createElement(SMEInventoryTracker, {
-    activeZone: activeZone
-  }), activeTab === "batches" && (isRegisteringBatch ? /*#__PURE__*/React.createElement(RegisterBatch, {
-    onCancel: () => setIsRegisteringBatch(false)
-  }) : /*#__PURE__*/React.createElement(BatchRegistry, {
-    onNewBatch: () => setIsRegisteringBatch(true)
-  })), activeTab === "verification" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: "1fr 1fr",
-      gap: 20,
-      animation: "fadeSlideIn 0.4s ease"
-    }
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionLabel, {
-    icon: "\u2705",
-    text: "Batch Verification"
-  }), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement(BatchVerificationForm, {
-    onResult: setTrustScore,
-    onResultDetail: setTrustScoreResult,
-    prefilledBatchId: verificationBatchId,
-    prefilledDispatchZone: verificationDispatchZone,
-    setPrefilledBatchId: setVerificationBatchId,
-    setPrefilledDispatchZone: setVerificationDispatchZone
-  }))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionLabel, {
-    icon: "\uD83D\uDEE1\uFE0F",
-    text: "Certification Pipeline"
-  }), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      textAlign: "center",
-      padding: "12px 0 24px 0"
-    }
-  }, /*#__PURE__*/React.createElement(ScoreGauge, {
-    value: trustScore,
-    label: "Global Trust Score",
-    size: 160
-  })), trustScoreResult && /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      justifyContent: "center",
-      gap: 8,
-      marginTop: 4,
-      marginBottom: 14,
-      flexWrap: "wrap"
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 11,
-      fontWeight: 700,
-      padding: "4px 10px",
-      borderRadius: 6,
-      background: trustScoreResult.isViable ? ACCENT.greenBg : "rgba(239,68,68,0.12)",
-      color: trustScoreResult.isViable ? ACCENT.green : ACCENT.red,
-      border: `1px solid ${trustScoreResult.isViable ? ACCENT.greenBorder : "rgba(239,68,68,0.3)"}`,
-      letterSpacing: "0.05em"
-    }
-  }, "GRADE ", trustScoreResult.grade, " \xB7 ", trustScoreResult.isViable ? "VIABLE" : "NOT VIABLE"), trustScoreResult.category && trustScoreResult.category !== 'unknown' && /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      padding: "4px 8px",
-      borderRadius: 6,
-      background: "var(--bg-input)",
-      color: "var(--text-secondary)",
-      border: "1px solid var(--border-primary)",
-      fontFamily: "'JetBrains Mono', monospace"
-    }
-  }, String(trustScoreResult.category).replace(/_/g, ' ')), trustScoreResult.reference && /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 9,
-      padding: "4px 8px",
-      borderRadius: 6,
-      background: "var(--bg-input)",
-      color: "var(--text-dim)",
-      border: "1px solid var(--border-primary)",
-      fontFamily: "'JetBrains Mono', monospace"
-    }
-  }, "ref: ", trustScoreResult.reference)), trustScoreResult && trustScoreResult.breakdown && /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: 8,
-      padding: "12px",
-      borderRadius: 8,
-      background: "var(--bg-input)",
-      border: "1px solid var(--border-primary)"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 10,
-      color: "var(--text-dim)",
-      marginBottom: 8,
-      letterSpacing: "0.08em",
-      fontWeight: 600
-    }
-  }, "SUB-SCORE BREAKDOWN"), [{
-    key: "ph",
-    label: "pH",
-    v: trustScoreResult.breakdown.ph
-  }, {
-    key: "ec",
-    label: "EC",
-    v: trustScoreResult.breakdown.ec
-  }, {
-    key: "temp",
-    label: "Temp",
-    v: trustScoreResult.breakdown.temp
-  }, {
-    key: "ratio",
-    label: "EM-1 Ratio",
-    v: trustScoreResult.breakdown.ratio
-  }, {
-    key: "days",
-    label: "Ferment D.",
-    v: trustScoreResult.breakdown.days
-  }].map(row => /*#__PURE__*/React.createElement("div", {
-    key: row.key,
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      marginBottom: 6
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 80,
-      fontSize: 10,
-      color: "var(--text-secondary)",
-      fontFamily: "'JetBrains Mono', monospace"
-    }
-  }, row.label), /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1,
-      height: 6,
-      borderRadius: 3,
-      background: "var(--border-primary)",
-      overflow: "hidden"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: `${Math.max(0, Math.min(100, row.v || 0))}%`,
-      height: "100%",
-      background: (row.v || 0) >= 70 ? ACCENT.green : (row.v || 0) >= 50 ? ACCENT.amber : ACCENT.red,
-      transition: "width 0.4s ease"
-    }
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 36,
-      fontSize: 10,
-      color: "var(--text-primary)",
-      fontFamily: "'JetBrains Mono', monospace",
-      textAlign: "right"
-    }
-  }, Math.round(row.v || 0))))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: "var(--text-dim)",
-      lineHeight: 1.6,
-      textAlign: "center",
-      marginTop: 12
-    }
-  }, "Adjust batch parameters on the left to verify a batch. A score of 60+ is required for BARI certification and cryptographic signing.")))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: 20
-    }
-  }, /*#__PURE__*/React.createElement(SectionLabel, {
-    icon: "\uD83E\uDEAA",
-    text: "Verify a Claim"
-  }), /*#__PURE__*/React.createElement(Card, null, safeComponent("ClaimVerifier", {
-    onSelectBatch: id => setVerificationBatchId(id)
-  })))), activeTab === "bi" && /*#__PURE__*/React.createElement(BusinessIntelligenceView, {
-    trustScore: trustScore,
-    dvs: dvs,
-    setDvs: setDvs,
-    activeZone: activeZone,
-    setActiveZone: setActiveZone,
-    liveWeather: liveWeather,
-    detectGpsLocation: detectGpsLocation,
-    gpsError: gpsError
-  }), activeTab === "tracking" && safeComponent("DeliveryTrackingView", {
-    lang
-  }), activeTab === "batch-qr" && safeComponent("BatchVerificationQR", {}), activeTab === "delivery" && safeComponent("DeliveryView", {
-    userRole,
-    onUpdateTrustScore: setTrustScore
-  }), activeTab === "notifications" && safeComponent("NotificationsView", {
-    onSelectBatch: (id, zone) => {
-      setVerificationBatchId(id);
-      setVerificationDispatchZone(zone);
-      setActiveTab("verification");
-    }
-  }), activeTab === "settings" && safeComponent("SettingsView", {}), activeTab === "marketplace" && /*#__PURE__*/React.createElement(MarketplaceView, {
-    products: productsList,
-    isLoading: isLoadingProducts,
-    marketplaceSubTab: marketplaceSubTab,
-    setMarketplaceSubTab: setMarketplaceSubTab
-  }), activeTab === "chatbot" && /*#__PURE__*/React.createElement(ChatbotView, {
-    setTab: setTab,
-    products: productsList,
-    setVerificationBatchId: setVerificationBatchId,
-    setVerificationDispatchZone: setVerificationDispatchZone,
-    setMarketplaceSubTab: setMarketplaceSubTab
-  }), activeTab === "configurator" && selectedSme === "custom_sme" && /*#__PURE__*/React.createElement(CustomSmeView, {
-    products: productsList,
-    setProducts: setProductsList,
-    customSmeName: customSmeName,
-    setCustomSmeName: setCustomSmeName
-  }), activeTab === "docs" && /*#__PURE__*/React.createElement(SystemDocsView, {
-    productsList: productsList,
-    liveWeather: liveWeather
-  })), /*#__PURE__*/React.createElement("footer", {
-    style: {
-      borderTop: "1px solid var(--border-primary)",
-      padding: "12px 28px",
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      background: "var(--bg-header)",
-      backdropFilter: "var(--backdrop-blur)",
-      WebkitBackdropFilter: "var(--backdrop-blur)"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 9,
-      color: "var(--text-dim)",
-      letterSpacing: "0.1em",
-      fontWeight: 500
-    }
-  }, "CLIMALOGIX AI CLIMATESHIELD \xB7 INFINITY AI BUILDFEST 2026 \xB7 TEAM GLIDERS \xB7 TRACK 4: E-COMMERCE"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 16,
-      fontSize: 9,
-      color: "var(--text-dim)"
-    }
-  }, /*#__PURE__*/React.createElement("span", null, "Trust Score: ", /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: ACCENT.green,
-      fontFamily: "'JetBrains Mono', monospace"
-    }
-  }, trustScore, "/100")), /*#__PURE__*/React.createElement("span", null, "DVS: ", /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: dvs >= 75 ? ACCENT.green : dvs >= 55 ? ACCENT.amber : ACCENT.red,
-      fontFamily: "'JetBrains Mono', monospace"
-    }
-  }, dvs, "/100")))), /*#__PURE__*/React.createElement(AgentPanel, {
-    setTab: setTab,
-    products: productsList,
-    setVerificationBatchId: setVerificationBatchId,
-    setVerificationDispatchZone: setVerificationDispatchZone,
-    setMarketplaceSubTab: setMarketplaceSubTab
-  }));
+    }), userRole === 'sme_owner' && /*#__PURE__*/React.createElement(TopGreenSMEWidget, null)), activeTab === "inventory" && /*#__PURE__*/React.createElement(SMEInventoryTracker, {
+      activeZone: activeZone
+    }), activeTab === "batches" && (isRegisteringBatch ? /*#__PURE__*/React.createElement(RegisterBatch, {
+      onCancel: () => setIsRegisteringBatch(false)
+    }) : /*#__PURE__*/React.createElement(BatchRegistry, {
+      onNewBatch: () => setIsRegisteringBatch(true)
+    })), activeTab === "verification" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 20,
+        animation: "fadeSlideIn 0.4s ease"
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionLabel, {
+      icon: "\u2705",
+      text: "Batch Verification"
+    }), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement(BatchVerificationForm, {
+      onResult: setTrustScore,
+      onResultDetail: setTrustScoreResult,
+      prefilledBatchId: verificationBatchId,
+      prefilledDispatchZone: verificationDispatchZone,
+      setPrefilledBatchId: setVerificationBatchId,
+      setPrefilledDispatchZone: setVerificationDispatchZone
+    }))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(SectionLabel, {
+      icon: "\uD83D\uDEE1\uFE0F",
+      text: "Certification Pipeline"
+    }), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        textAlign: "center",
+        padding: "12px 0 24px 0"
+      }
+    }, /*#__PURE__*/React.createElement(ScoreGauge, {
+      value: trustScore,
+      label: "Global Trust Score",
+      size: 160
+    })), trustScoreResult && /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "center",
+        gap: 8,
+        marginTop: 4,
+        marginBottom: 14,
+        flexWrap: "wrap"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        fontWeight: 700,
+        padding: "4px 10px",
+        borderRadius: 6,
+        background: trustScoreResult.isViable ? ACCENT.greenBg : "rgba(239,68,68,0.12)",
+        color: trustScoreResult.isViable ? ACCENT.green : ACCENT.red,
+        border: `1px solid ${trustScoreResult.isViable ? ACCENT.greenBorder : "rgba(239,68,68,0.3)"}`,
+        letterSpacing: "0.05em"
+      }
+    }, "GRADE ", trustScoreResult.grade, " \xB7 ", trustScoreResult.isViable ? "VIABLE" : "NOT VIABLE"), trustScoreResult.category && trustScoreResult.category !== 'unknown' && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        padding: "4px 8px",
+        borderRadius: 6,
+        background: "var(--bg-input)",
+        color: "var(--text-secondary)",
+        border: "1px solid var(--border-primary)",
+        fontFamily: "'JetBrains Mono', monospace"
+      }
+    }, String(trustScoreResult.category).replace(/_/g, ' ')), trustScoreResult.reference && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        padding: "4px 8px",
+        borderRadius: 6,
+        background: "var(--bg-input)",
+        color: "var(--text-dim)",
+        border: "1px solid var(--border-primary)",
+        fontFamily: "'JetBrains Mono', monospace"
+      }
+    }, "ref: ", trustScoreResult.reference)), trustScoreResult && trustScoreResult.breakdown && /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 8,
+        padding: "12px",
+        borderRadius: 8,
+        background: "var(--bg-input)",
+        border: "1px solid var(--border-primary)"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: "var(--text-dim)",
+        marginBottom: 8,
+        letterSpacing: "0.08em",
+        fontWeight: 600
+      }
+    }, "SUB-SCORE BREAKDOWN"), [{
+      key: "ph",
+      label: "pH",
+      v: trustScoreResult.breakdown.ph
+    }, {
+      key: "ec",
+      label: "EC",
+      v: trustScoreResult.breakdown.ec
+    }, {
+      key: "temp",
+      label: "Temp",
+      v: trustScoreResult.breakdown.temp
+    }, {
+      key: "ratio",
+      label: "EM-1 Ratio",
+      v: trustScoreResult.breakdown.ratio
+    }, {
+      key: "days",
+      label: "Ferment D.",
+      v: trustScoreResult.breakdown.days
+    }].map(row => /*#__PURE__*/React.createElement("div", {
+      key: row.key,
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        marginBottom: 6
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 80,
+        fontSize: 10,
+        color: "var(--text-secondary)",
+        fontFamily: "'JetBrains Mono', monospace"
+      }
+    }, row.label), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        height: 6,
+        borderRadius: 3,
+        background: "var(--border-primary)",
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: `${Math.max(0, Math.min(100, row.v || 0))}%`,
+        height: "100%",
+        background: (row.v || 0) >= 70 ? ACCENT.green : (row.v || 0) >= 50 ? ACCENT.amber : ACCENT.red,
+        transition: "width 0.4s ease"
+      }
+    })), /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 36,
+        fontSize: 10,
+        color: "var(--text-primary)",
+        fontFamily: "'JetBrains Mono', monospace",
+        textAlign: "right"
+      }
+    }, Math.round(row.v || 0))))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "var(--text-dim)",
+        lineHeight: 1.6,
+        textAlign: "center",
+        marginTop: 12
+      }
+    }, "Adjust batch parameters on the left to verify a batch. A score of 60+ is required for BARI certification and cryptographic signing.")))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 20
+      }
+    }, /*#__PURE__*/React.createElement(SectionLabel, {
+      icon: "\uD83E\uDEAA",
+      text: "Verify a Claim"
+    }), /*#__PURE__*/React.createElement(Card, null, safeComponent("ClaimVerifier", {
+      onSelectBatch: id => setVerificationBatchId(id)
+    })))), activeTab === "bi" && /*#__PURE__*/React.createElement(BusinessIntelligenceView, {
+      trustScore: trustScore,
+      dvs: dvs,
+      setDvs: setDvs,
+      activeZone: activeZone,
+      setActiveZone: setActiveZone,
+      liveWeather: liveWeather,
+      detectGpsLocation: detectGpsLocation,
+      gpsError: gpsError
+    }), activeTab === "tracking" && safeComponent("DeliveryTrackingView", {
+      lang
+    }), activeTab === "batch-qr" && safeComponent("BatchVerificationQR", {}), activeTab === "delivery" && safeComponent("DeliveryView", {
+      userRole,
+      onUpdateTrustScore: setTrustScore
+    }), activeTab === "notifications" && safeComponent("NotificationsView", {
+      onSelectBatch: (id, zone) => {
+        setVerificationBatchId(id);
+        setVerificationDispatchZone(zone);
+        setActiveTab("verification");
+      }
+    }), activeTab === "settings" && safeComponent("SettingsView", {}), activeTab === "marketplace" && /*#__PURE__*/React.createElement(MarketplaceView, {
+      products: productsList,
+      isLoading: isLoadingProducts,
+      marketplaceSubTab: marketplaceSubTab,
+      setMarketplaceSubTab: setMarketplaceSubTab
+    }), activeTab === "chatbot" && /*#__PURE__*/React.createElement(ChatbotView, {
+      setTab: setTab,
+      products: productsList,
+      setVerificationBatchId: setVerificationBatchId,
+      setVerificationDispatchZone: setVerificationDispatchZone,
+      setMarketplaceSubTab: setMarketplaceSubTab
+    }), activeTab === "configurator" && selectedSme === "custom_sme" && /*#__PURE__*/React.createElement(CustomSmeView, {
+      products: productsList,
+      setProducts: setProductsList,
+      customSmeName: customSmeName,
+      setCustomSmeName: setCustomSmeName
+    }), activeTab === "docs" && /*#__PURE__*/React.createElement(SystemDocsView, {
+      productsList: productsList,
+      liveWeather: liveWeather
+    })), /*#__PURE__*/React.createElement("footer", {
+      style: {
+        borderTop: "1px solid var(--border-primary)",
+        padding: "12px 28px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        background: "var(--bg-header)",
+        backdropFilter: "var(--backdrop-blur)",
+        WebkitBackdropFilter: "var(--backdrop-blur)"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9,
+        color: "var(--text-dim)",
+        letterSpacing: "0.1em",
+        fontWeight: 500
+      }
+    }, "CLIMALOGIX AI CLIMATESHIELD \xB7 INFINITY AI BUILDFEST 2026 \xB7 TEAM GLIDERS \xB7 TRACK 4: E-COMMERCE"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 16,
+        fontSize: 9,
+        color: "var(--text-dim)"
+      }
+    }, /*#__PURE__*/React.createElement("span", null, "Trust Score: ", /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: ACCENT.green,
+        fontFamily: "'JetBrains Mono', monospace"
+      }
+    }, trustScore, "/100")), /*#__PURE__*/React.createElement("span", null, "DVS: ", /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: dvs >= 75 ? ACCENT.green : dvs >= 55 ? ACCENT.amber : ACCENT.red,
+        fontFamily: "'JetBrains Mono', monospace"
+      }
+    }, dvs, "/100")))), /*#__PURE__*/React.createElement(AgentPanel, {
+      setTab: setTab,
+      products: productsList,
+      setVerificationBatchId: setVerificationBatchId,
+      setVerificationDispatchZone: setVerificationDispatchZone,
+      setMarketplaceSubTab: setMarketplaceSubTab
+    }));
+  };
   if (window.ReactRouterDOM) {
     const {
       Routes,

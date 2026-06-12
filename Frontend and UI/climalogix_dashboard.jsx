@@ -7190,6 +7190,10 @@ function CLimaLogixApp() {
   const [showAuthOverlay, setShowAuthOverlay] = useState(false);
   const [authOverlayMode, setAuthOverlayMode] = useState("login");
   const [loginWelcome, setLoginWelcome] = useState(null); // { name, role, label }
+  // activeTab is the single source of truth for the currently visible top-level
+  // section. We default to "dashboard" and let getDefaultTabForRole() re-target
+  // it once the user (and their role) finishes loading.
+  const [activeTab, setActiveTab] = useState("dashboard");
 
   // Returns the first (default) tab id for a given role
   const getDefaultTabForRole = (role) => {
@@ -7213,31 +7217,22 @@ function CLimaLogixApp() {
   };
 
   useEffect(() => {
-    const hydrateFromLocalJwt = () => {
+    const hydrateTokenOnly = () => {
       // Custom JWT (backend /api/auth/login) — token in climaLogix_token,
-      // user object in climaLogix_user. Use these to survive a reload or a
-      // null-firing onAuthStateChange from Supabase.
+      // user object in climaLogix_user. We only surface the token globally
+      // (so api-integration.js can send it on /api/* calls) but we do NOT
+      // promote the cached user into currentUser. The user must complete a
+      // fresh sign-in through the AuthPanel overlay each session so the
+      // hero landing page → login → role-based dashboard flow is preserved.
       const storedToken = localStorage.getItem("climaLogix_token");
-      if (!storedToken) return false;
+      if (!storedToken) return;
       window.SUPABASE_SESSION_TOKEN = storedToken;
-      try {
-        const raw = localStorage.getItem("climaLogix_user");
-        if (raw) {
-          const cachedUser = JSON.parse(raw);
-          if (cachedUser && (cachedUser.id || cachedUser.email)) {
-            setCurrentUser(prev => prev || cachedUser);
-            return true;
-          }
-        }
-      } catch (e) {
-        // ignore JSON parse errors
-      }
-      return false;
     };
 
     if (!window.supabaseClient) {
-      // No Supabase client — fall back entirely to the local JWT cache.
-      hydrateFromLocalJwt();
+      // No Supabase client — keep the cached token around for API calls,
+      // but leave currentUser null so the hero landing page renders.
+      hydrateTokenOnly();
       setAuthLoading(false);
       return;
     }
@@ -7246,13 +7241,15 @@ function CLimaLogixApp() {
         setCurrentUser(session.user);
         window.SUPABASE_SESSION_TOKEN = session.access_token;
       } else {
-        // Fallback: hydrate from a custom JWT cached in localStorage.
-        hydrateFromLocalJwt();
+        // No active Supabase session — show the hero landing page. We
+        // intentionally do NOT auto-login from the cached custom JWT so
+        // users always see the landing → login → role-dashboard funnel.
+        hydrateTokenOnly();
       }
       setAuthLoading(false);
     }).catch(() => {
-      // If Supabase is unreachable but we still have a cached JWT, use it.
-      hydrateFromLocalJwt();
+      // If Supabase is unreachable, fall back to the same hero-page state.
+      hydrateTokenOnly();
       setAuthLoading(false);
     });
 
@@ -7261,18 +7258,12 @@ function CLimaLogixApp() {
         setCurrentUser(session.user);
         window.SUPABASE_SESSION_TOKEN = session.access_token;
       } else {
-        // Only null out currentUser if we have NO cached custom JWT.
-        // Otherwise the listener races with onAuthSuccess and bounces the
-        // user back to the hero landing page.
-        const storedToken = localStorage.getItem("climaLogix_token");
-        if (storedToken) {
-          window.SUPABASE_SESSION_TOKEN = storedToken;
-          hydrateFromLocalJwt();
-        } else {
-          setCurrentUser(null);
-          window.SUPABASE_SESSION_TOKEN = null;
-          setLoginWelcome(null);
-        }
+        // Session ended (sign-out or token expiry) — always drop back to
+        // the hero landing page. A 401-driven auth-expired event will
+        // additionally open the AuthPanel overlay so the user can re-auth.
+        setCurrentUser(null);
+        window.SUPABASE_SESSION_TOKEN = localStorage.getItem("climaLogix_token") || null;
+        setLoginWelcome(null);
       }
       setAuthLoading(false);
     });
@@ -7681,7 +7672,20 @@ function CLimaLogixApp() {
 
   if (loading) return <LoadingSpinner />;
 
-  const MainDashboardLayout = () => (
+  const MainDashboardLayout = () => {
+    // Mobile-friendly nav drawer (slides in from the left on small screens).
+    const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+    // UI language toggle (en / bn). Synced with the global EcoLang manager
+    // if it is exposed on window — mirrors Producer/SMEOwner dashboards.
+    const [lang, setLang] = useState("en");
+    useEffect(() => {
+      if (window.EcoLang) {
+        setLang(window.EcoLang.getCurrentLanguage());
+        const unsubscribe = window.EcoLang.onLanguageChange((newLang) => setLang(newLang));
+        return () => unsubscribe();
+      }
+    }, []);
+    return (
     <div style={{
       ...themeVars,
       background: "var(--bg-primary)",
@@ -8333,7 +8337,8 @@ function CLimaLogixApp() {
         setMarketplaceSubTab={setMarketplaceSubTab}
       />
     </div>
-  );
+    );
+  };
 
   if (window.ReactRouterDOM) {
     const { Routes, Route } = window.ReactRouterDOM;

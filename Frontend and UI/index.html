@@ -143,6 +143,11 @@
     <script src="./ThreeScene.compiled.js"></script>
     
     <!-- React Router v6 UMD (history v5 is bundled internally by this build) -->
+    <!-- @remix-run/router MUST load before react-router-dom; BrowserRouter reads
+         n.createBrowserHistory off window.RemixRouter, which is undefined if this
+         script is missing — causing the "Cannot read properties of undefined
+         (reading 'createBrowserHistory')" runtime crash. -->
+    <script crossorigin src="https://unpkg.com/@remix-run/router@1.0.5/dist/router.umd.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-router@6.4.5/dist/umd/react-router.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-router-dom@6.4.5/dist/umd/react-router-dom.production.min.js"></script>
     <script>
@@ -165,6 +170,13 @@
             if (window.ReactRouterDOM[n] !== undefined && window[n] === undefined) {
               window[n] = window.ReactRouterDOM[n];
             }
+          }
+          // Defensive: react-router-dom@6.4.5 BrowserRouter reads
+          // n.createBrowserHistory off the @remix-run/router UMD global.
+          // If the CDN script is blocked or loaded out of order, surface a
+          // loud error instead of silently crashing React.
+          if (typeof window.RemixRouter === "undefined" || !window.RemixRouter || typeof window.RemixRouter.createBrowserHistory !== "function") {
+            console.error("[ClimateShield] window.RemixRouter is missing — @remix-run/router UMD failed to load. BrowserRouter will crash with: Cannot read properties of undefined (reading 'createBrowserHistory').");
           }
           return true;
         }
