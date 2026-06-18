@@ -10,9 +10,11 @@ interface CacheEntry {
 }
 const weatherCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const CACHE_MAX = 100;
 
-router.get('/:city', async (req: Request, res: Response) => {
-  const { city } = req.params;
+router.get('/:city', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { city } = req.params;
   const lang = (req.query.lang as 'bn' | 'en') || 'en';
   const cacheKey = `${city.toLowerCase()}:${lang}`;
 
@@ -50,6 +52,10 @@ router.get('/:city', async (req: Request, res: Response) => {
       data: payload,
       timestamp: Date.now(),
     });
+    if (weatherCache.size > CACHE_MAX) {
+      const oldestKey = weatherCache.keys().next().value;
+      if (oldestKey) weatherCache.delete(oldestKey);
+    }
     return res.json({
       success: true,
       source: 'live',
@@ -72,20 +78,24 @@ router.get('/:city', async (req: Request, res: Response) => {
   
   // TODO: Replace with real sensor/IoT data feed
   const fallbackPayload = {
-    temperature: 32, // Deterministic fallback for Dhaka climate
-    feelsLike: 34,
+    temperature: Math.round(temp), // Use computed diurnal estimate
+    feelsLike: Math.round(temp + 2),
     description: lang === 'bn' ? 'আংশিক মেঘলা (অনুমান নির্ভর)' : 'Partly cloudy (Estimated fallback)',
     humidity: 75,
     windSpeed: wind,
     city: city,
   };
 
-  return res.json({
-    success: true,
-    source: 'fallback',
-    errorDetails: result.description,
-    data: fallbackPayload,
-  });
+    return res.json({
+      success: true,
+      source: 'fallback',
+      errorDetails: result.description,
+      data: fallbackPayload,
+    });
+  } catch (err) {
+    console.error('[WeatherRoute] Unexpected error:', err);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
 });
 
 export default router;

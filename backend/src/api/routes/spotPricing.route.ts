@@ -37,7 +37,7 @@ router.get('/:batchId', authenticateJWT, async (req: Request, res: Response, nex
 
     // ── 1. Validate Batch ID ───────────────────────────────────
     if (!batchId || typeof batchId !== 'string' || batchId.trim().length === 0 || batchId.length > 100) {
-      res.status(400).json({ error: 'Valid batchId parameter is required (max 100 characters)' });
+      res.status(400).json({ success: false, error: 'Valid batchId parameter is required (max 100 characters)' });
       return;
     }
 
@@ -65,7 +65,7 @@ router.get('/:batchId', authenticateJWT, async (req: Request, res: Response, nex
     }
 
     if (!batch) {
-      res.status(404).json({ error: 'Batch not found' });
+      res.status(404).json({ success: false, error: 'Batch not found' });
       return;
     }
 
@@ -141,7 +141,7 @@ router.get('/:batchId', authenticateJWT, async (req: Request, res: Response, nex
     res.status(200).json(pricingResponse);
   } catch (error) {
     console.error('[SpotPricingRoute] Internal Error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 

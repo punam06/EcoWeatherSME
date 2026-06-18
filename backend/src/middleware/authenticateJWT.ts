@@ -22,7 +22,11 @@ function getSupabase(): SupabaseClient | null {
  * Returns the user object on success, or null on failure.
  */
 function getJwtSecret(): string {
-  return process.env.JWT_SECRET || 'climalogix-dev-secret-change-in-production';
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET environment variable is not set');
+  }
+  return secret;
 }
 
 async function resolveUser(token: string): Promise<Record<string, unknown> | null> {

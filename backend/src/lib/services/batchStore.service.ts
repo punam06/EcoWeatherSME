@@ -42,6 +42,7 @@ const INITIAL_BATCHES: Batch[] = [
 ];
 
 let batches: Batch[] = [...INITIAL_BATCHES];
+const BATCHES_MAX = 500;
 
 /**
  * Returns all batches in the in-memory database.
@@ -63,6 +64,9 @@ export function addBatch(batch: Omit<Batch, 'id' | 'created_at'> & { id?: string
     created_at: _now.toISOString()
   };
   batches.unshift(newBatch); // Prepends to keep it as the first item in lists
+  if (batches.length > BATCHES_MAX) {
+    batches.length = BATCHES_MAX;
+  }
   return newBatch;
 }
 

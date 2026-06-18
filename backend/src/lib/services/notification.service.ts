@@ -38,6 +38,7 @@ export interface NotificationRow {
 }
 
 const localNotifications: NotificationRow[] = [];
+const LOCAL_NOTIFICATIONS_MAX = 500;
 
 export function getLocalNotifications(userId?: string): NotificationRow[] {
   if (!userId) return [...localNotifications];
@@ -54,6 +55,9 @@ export function addLocalNotification(
     is_read: false,
   };
   localNotifications.unshift(newNotif);
+  if (localNotifications.length > LOCAL_NOTIFICATIONS_MAX) {
+    localNotifications.length = LOCAL_NOTIFICATIONS_MAX;
+  }
   if (newNotif.user_id) publishNotification(newNotif.user_id, newNotif);
   return newNotif;
 }
@@ -96,6 +100,9 @@ export async function createNotification(
 
   if (allowMemoryFallback() && !isSupabaseConfigured()) {
     localNotifications.unshift(row);
+    if (localNotifications.length > LOCAL_NOTIFICATIONS_MAX) {
+      localNotifications.length = LOCAL_NOTIFICATIONS_MAX;
+    }
     publishNotification(userId, row);
     return row;
   }
@@ -132,6 +139,9 @@ export async function createNotification(
 
   if (allowMemoryFallback()) {
     localNotifications.unshift(row);
+    if (localNotifications.length > LOCAL_NOTIFICATIONS_MAX) {
+      localNotifications.length = LOCAL_NOTIFICATIONS_MAX;
+    }
     publishNotification(userId, row);
     return row;
   }

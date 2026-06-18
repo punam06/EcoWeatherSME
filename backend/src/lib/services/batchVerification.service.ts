@@ -99,16 +99,38 @@ function isUuid(value: unknown): boolean {
 const MANUFACTURER_ROLES = new Set(['processor', 'producer', 'sme', 'sme_owner']);
 
 function batchOwnerId(batch: AnyRecord): string | undefined {
-  const id = batch.manufacturer_id || batch.processor_id || batch.producer_id;
+  // Resolve the primary ownership column. sme_owner_id is the column an
+  // sme_owner role user actually claims against (see qrProvenance.service.ts
+  // and the RLS policy in supabase/migrations/014_batch_rls_select_policies.sql).
+  const id =
+    batch.manufacturer_id ||
+    batch.processor_id ||
+    batch.producer_id ||
+    (roleScopedOwnership(batch) ? batch.sme_owner_id : undefined);
   return typeof id === 'string' ? id : undefined;
+}
+
+// Helper: prefer sme_owner_id when the access context is an sme_owner.
+// Kept as a separate function so the main path stays readable.
+function roleScopedOwnership(batch: AnyRecord): boolean {
+  return Boolean(batch.sme_owner_id);
+}
+
+function batchMatchesUser(batch: AnyRecord, userId: string, role: string): boolean {
+  // An sme_owner claims batches via sme_owner_id, not manufacturer_id.
+  if (role === 'sme_owner') {
+    return batch.sme_owner_id === userId || batchOwnerId(batch) === userId;
+  }
+  return batchOwnerId(batch) === userId;
 }
 
 export function canAccessBatch(batch: AnyRecord, userId?: string, role?: string): boolean {
   if (!userId) return false;
   if (role === 'admin' || role === 'inspector') return true;
+  if (batchMatchesUser(batch, userId, role || '')) return true;
   const owner = batchOwnerId(batch);
   if (!owner) return role !== undefined && MANUFACTURER_ROLES.has(role);
-  return owner === userId;
+  return false;
 }
 
 async function resolveManufacturerDisplayName(manufacturerId?: string): Promise<string | null> {
@@ -565,7 +587,9 @@ export async function listBatches(query: AnyRecord, access?: { userId?: string; 
   if (useMemory()) {
     let rows = [...memory.batches];
     if (access?.userId && access.role && MANUFACTURER_ROLES.has(access.role)) {
-      rows = rows.filter((b) => batchOwnerId(b) === access.userId);
+      const userId = access.userId;
+      const role = access.role;
+      rows = rows.filter((b) => batchMatchesUser(b, userId, role));
     }
     if (status) rows = rows.filter((b) => b.status === status);
     if (category) rows = rows.filter((b) => (b.category || b.product_type) === category);
@@ -582,11 +606,16 @@ export async function listBatches(query: AnyRecord, access?: { userId?: string; 
     .order('created_at', { ascending: false })
     .range(from, to);
   if (access?.userId && access.role && MANUFACTURER_ROLES.has(access.role)) {
-    if (await hasColumn('batches', 'manufacturer_id')) {
-      dbQuery = dbQuery.eq('manufacturer_id', access.userId);
-    } else if (await hasColumn('batches', 'processor_id')) {
-      dbQuery = dbQuery.eq('processor_id', access.userId);
-    }
+    // Build an OR filter across all ownership columns. RLS already restricts
+    // the user to rows they can see; this just narrows the listing to the
+    // ones they own in any capacity (manufacturer_id, processor_id,
+    // producer_id, OR sme_owner_id for sme_owner role).
+    const filters: string[] = [];
+    if (await hasColumn('batches', 'manufacturer_id')) filters.push(`manufacturer_id.eq.${access.userId}`);
+    if (await hasColumn('batches', 'processor_id'))    filters.push(`processor_id.eq.${access.userId}`);
+    if (await hasColumn('batches', 'producer_id'))     filters.push(`producer_id.eq.${access.userId}`);
+    if (await hasColumn('batches', 'sme_owner_id'))    filters.push(`sme_owner_id.eq.${access.userId}`);
+    if (filters.length > 0) dbQuery = dbQuery.or(filters.join(','));
   }
   if (status && ['pending', 'active', 'certified', 'dispatched', 'delivered', 'created', 'inspected', 'in_transit', 'sme_inventory', 'sold'].includes(status)) {
     dbQuery = dbQuery.eq('status', status);

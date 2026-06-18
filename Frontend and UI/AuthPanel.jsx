@@ -48,19 +48,21 @@ function AuthPanel({ onClose, onAuthSuccess, initialMode }) {
   // AFTER a fresh login, racing with the post-login onAuthSuccess handler
   // and bouncing the user back to the hero landing page.
   //
-  // The module-level guard ensures this cleanup runs at most once per
+  // The useEffect ensures this cleanup runs at most once per
   // page-load, so subsequent logins within the same SPA session are not
   // clobbered by a phantom signOut.
-  if (!window.__climalogixAuthPanelMounted) {
-    window.__climalogixAuthPanelMounted = true;
-    try {
-      localStorage.removeItem("climaLogix_token");
-    } catch (e) { /* ignore */ }
-    window.SUPABASE_SESSION_TOKEN = null;
-    if (window.supabaseClient) {
-      window.supabaseClient.auth.signOut().catch(() => {});
+  useEffect(() => {
+    if (!window.__climalogixAuthPanelMounted) {
+      window.__climalogixAuthPanelMounted = true;
+      try {
+        localStorage.removeItem("climaLogix_token");
+      } catch (e) { /* ignore */ }
+      window.SUPABASE_SESSION_TOKEN = null;
+      if (window.supabaseClient) {
+        window.supabaseClient.auth.signOut().catch(() => {});
+      }
     }
-  }
+  }, []);
 
   // Three.js Scene Setup (Unchanged)
   useEffect(() => {

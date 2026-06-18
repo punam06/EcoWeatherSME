@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { getSupabaseClient } from '../../lib/supabase';
 import { authenticateJWT } from '../../middleware/authenticateJWT';
+import { DHAKA_ZONES } from '../../lib/services/merm.service';
 
 const router = Router();
 
@@ -54,7 +55,6 @@ router.put('/', authenticateJWT, async (req: Request, res: Response) => {
       return;
     }
     if (pref_zone) {
-      const { DHAKA_ZONES } = require('../../lib/services/merm.service');
       if (typeof pref_zone !== 'string' || !DHAKA_ZONES[pref_zone]) {
         res.status(400).json({ success: false, message: 'Invalid input.' });
         return;

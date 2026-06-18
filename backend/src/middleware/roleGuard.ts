@@ -10,7 +10,7 @@
  *   router.post('/certify', authenticateJWT, requireRoles('processor'), handler);
  *   router.get('/admin/report', authenticateJWT, requireRoles('admin', 'processor'), handler);
  *
- * Development note: In NODE_ENV=development the guard is a no-op
+ * Development note: In NODE_ENV=test the guard is a no-op
  * so local testing does not require a real JWT token.
  * ═══════════════════════════════════════════════════════════════
  */

@@ -135,7 +135,7 @@ router.patch(
 
       if (!isSupabaseConfigured()) {
         const { markAllLocalNotificationsAsRead } = require('../../lib/services/notification.service');
-        markAllLocalNotificationsAsRead();
+        markAllLocalNotificationsAsRead(userId);
         res.json({ success: true, data: { message: 'All notifications marked as read' } });
         return;
       }
@@ -215,9 +215,19 @@ router.patch(
   },
 );
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ── POST /api/notifications/webhook-email ─────────────────────────────────────
 router.post(
   '/webhook-email',
+  authenticateJWT,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { record } = req.body;
@@ -285,7 +295,7 @@ router.post(
 
       // 3. Select Color Theme and Header Title
       let accentColor = '#10B981'; // Green
-      const titleHeader = title || 'ClimaLogix AI Notification';
+      const titleHeader = escapeHtml(title || 'ClimaLogix AI Notification');
       if (type === 'verification_request' || type === 'temp_alert') {
         accentColor = '#EF4444'; // Red
       } else if (type === 'order_update') {
@@ -302,7 +312,7 @@ router.post(
             
             <div style="background: rgba(255, 255, 255, 0.02); border-left: 4px solid ${accentColor}; padding: 20px; border-radius: 8px; margin-bottom: 28px;">
               <h3 style="color: ${accentColor}; margin: 0 0 10px 0; font-size: 18px;">${titleHeader}</h3>
-              <p style="color: #E5E7EB; font-size: 15px; line-height: 1.6; margin: 0;">${body || ''}</p>
+              <p style="color: #E5E7EB; font-size: 15px; line-height: 1.6; margin: 0;">${escapeHtml(body || '')}</p>
             </div>
 
             <div style="text-align: center; margin-bottom: 24px;">
@@ -346,6 +356,15 @@ router.post(
         res.status(400).json({ success: false, error: 'batchId is required' });
         return;
       }
+
+      // Check for duplicate verification request
+      const { getLocalNotifications } = require('../../lib/services/notification.service');
+      const existing = getLocalNotifications(getUserId(req));
+      const duplicate = existing.find((n: any) => n.type === 'verification_request' && n.batch_id === batchId);
+      if (duplicate) {
+        res.status(409).json({ success: false, error: 'Verification request already submitted for this batch' });
+        return;
+      }
       
       const title = 'New Verification Request';
       const body = `SME Owner has submitted Batch ${batchId} for Quality & Trust Verification.`;
@@ -353,7 +372,7 @@ router.post(
       // 1. Add locally
       const { addLocalNotification } = require('../../lib/services/notification.service');
       addLocalNotification({
-        user_id: 'demo-inspector-id',
+        user_id: getUserId(req) || 'system',
         type: 'verification_request',
         title,
         body,

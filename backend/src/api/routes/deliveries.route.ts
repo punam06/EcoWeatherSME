@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { getSupabaseClient } from '../../lib/supabase';
+import { getSupabaseClient, isSupabaseConfigured } from '../../lib/supabase';
 import { authenticateJWT } from '../../middleware/authenticateJWT';
 
 const router = Router();
@@ -12,25 +12,41 @@ const MOCK_DELIVERIES = [
 
 router.get('/', authenticateJWT, async (req: Request, res: Response) => {
   try {
+    if (!isSupabaseConfigured()) {
+      res.json({ success: true, data: MOCK_DELIVERIES, isMock: true });
+      return;
+    }
+
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.from('deliveries').select('*');
     
-    if (error || !data || data.length === 0) {
-      // Fallback to mock data if the table is empty or missing
-      res.json({ success: true, data: MOCK_DELIVERIES });
+    if (error) {
+      console.warn('[Deliveries] Query error, returning mock data:', error.message);
+      res.json({ success: true, data: MOCK_DELIVERIES, isMock: true });
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      res.json({ success: true, data: MOCK_DELIVERIES, isMock: true });
       return;
     }
     
     res.json({ success: true, data });
   } catch (err) {
     console.error('[Deliveries] Server error:', err);
-    res.json({ success: true, data: MOCK_DELIVERIES }); // Graceful fallback
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });
 
 router.put('/:id/acknowledge', authenticateJWT, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
+    if (!isSupabaseConfigured()) {
+      res.json({ success: true, message: 'Mock acknowledged', isMock: true });
+      return;
+    }
+
     const supabase = getSupabaseClient();
     
     const { error } = await supabase
@@ -39,8 +55,8 @@ router.put('/:id/acknowledge', authenticateJWT, async (req: Request, res: Respon
       .eq('id', id);
 
     if (error) {
-      console.warn('[Deliveries] Acknowledge error or no real table:', error);
-      res.json({ success: true, message: 'Mock acknowledged' });
+      console.warn('[Deliveries] Acknowledge error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
       return;
     }
 
@@ -54,6 +70,12 @@ router.put('/:id/acknowledge', authenticateJWT, async (req: Request, res: Respon
 router.put('/:id/optimize', authenticateJWT, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
+    if (!isSupabaseConfigured()) {
+      res.json({ success: true, message: 'Mock optimized', isMock: true });
+      return;
+    }
+
     const supabase = getSupabaseClient();
     
     const { error } = await supabase
@@ -62,8 +84,8 @@ router.put('/:id/optimize', authenticateJWT, async (req: Request, res: Response)
       .eq('id', id);
 
     if (error) {
-      console.warn('[Deliveries] Optimize error or no real table:', error);
-      res.json({ success: true, message: 'Mock optimized' });
+      console.warn('[Deliveries] Optimize error:', error.message);
+      res.status(500).json({ success: false, error: error.message });
       return;
     }
 

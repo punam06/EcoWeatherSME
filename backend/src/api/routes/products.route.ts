@@ -1,9 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { getSupabaseClient } from '../../lib/supabase';
+import { authenticateJWT } from '../../middleware/authenticateJWT';
 
 const router = Router();
 
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', authenticateJWT, async (_req: Request, res: Response) => {
   try {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.from('products').select('*');

@@ -1,0 +1,38 @@
+SUPABASE_URL = https://pdeskdcdyhbldwfgbowz.supabase.co
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. List all users with role = sme_owner
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Found 1 sme_owner user(s):
+  - id=118a57f4-68ac-41c0-ab10-81d717c75aea
+      email=azihad783@gmail.com  name=Zihad SME Owner  created=2026-06-10T05:49:07.531496+00:00
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. List the 5 demo batches with their ownership columns
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ✓ column 'processor_id' exists (0 rows)
+  ✓ column 'producer_id' exists (0 rows)
+  ✓ column 'sme_owner_id' exists (0 rows)
+  ✗ column 'manufacturer_id' missing → 400 column batches.manufacturer_id does not exist
+  ✓ column 'status' exists (0 rows)
+  ✓ column 'trust_score' exists (0 rows)
+  ✓ column 'qr_code_url' exists (0 rows)
+
+  Unified view of 0 demo batch(es):
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. Does the batches table actually have these columns?
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Present: id, batch_number, processor_id, producer_id, sme_owner_id, status, trust_score, qr_code_url, created_at
+  Missing: manufacturer_id, category
+
+(Skipping section 4/5: need at least 1 sme_owner user and 1 demo batch)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. RLS policies on batches
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  pg_policies probe failed: 404 {
+  "code": "PGRST205",
+  "details": null,
+  "hint": "Perhaps you meant the table 'public.products'",
+  "message": "Could not find the table 'public.pg_policies' in the schema cache"
+}
